@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#121513">
+<title>피아노 블록 퍼즐</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header class="hud">
+    <button class="hud-btn" id="btn-pause" type="button" aria-label="일시정지"><span></span><span></span></button>
+    <div class="hud-score">
+      <span class="hud-title" id="hud-title"></span>
+      <span class="hud-value" id="hud-score">0</span>
+    </div>
+    <div class="hud-combo" id="hud-combo"><span>콤보</span><b id="hud-combo-n">0</b></div>
+    <div class="hud-progress"><i id="hud-progress"></i></div>
+  </header>
+
+  <div class="stage" id="stage"><canvas id="board"></canvas></div>
+
+  <section class="screen menu" id="menu">
+    <div class="menu-inner">
+      <div class="hero" aria-hidden="true">
+        <div class="hero-keys"></div>
+        <div class="hero-roll">
+          <i class="n" style="--r:2;--c:1;--l:2"></i>
+          <i class="n" style="--r:5;--c:3;--l:1"></i>
+          <i class="n" style="--r:3;--c:5;--l:3"></i>
+          <i class="n" style="--r:6;--c:8;--l:2"></i>
+          <i class="n" style="--r:1;--c:9;--l:2"></i>
+          <i class="b" style="--r:2;--c:1;--l:2;--k:#f6c344"></i>
+          <i class="b" style="--r:5;--c:3;--l:1;--k:#3cc1f0"></i>
+          <i class="b" style="--r:3;--c:5;--l:3;--k:#a35ee0"></i>
+          <i class="ph"></i>
+        </div>
+      </div>
+
+      <h1>피아노<br>블록 퍼즐</h1>
+      <p class="tagline">흘러오는 노트 위에 블록을 놓아 곡을 연주하세요.</p>
+
+      <ul class="rules">
+        <li><span class="chip good"></span><span>초록 노트를 덮으면 재생선을 지날 때 그 음이 울려요. 칸당 +100</span></li>
+        <li><span class="chip bad"></span><span>빈칸을 덮으면 칸당 −50, 회색 블록으로 남아요</span></li>
+        <li><span class="chip gold"></span><span>빈칸 없이 딱 맞추면 콤보, 한 마디를 다 채우면 +500</span></li>
+      </ul>
+
+      <div class="speed" role="radiogroup" aria-label="속도">
+        <span class="speed-label">속도</span>
+        <button type="button" role="radio" data-speed="0.75">느리게</button>
+        <button type="button" role="radio" data-speed="1">보통</button>
+      </div>
+
+      <ol class="songs" id="song-list"></ol>
+    </div>
+  </section>
+
+  <section class="screen modal" id="pause" hidden>
+    <div class="sheet">
+      <h2>일시정지</h2>
+      <div class="actions">
+        <button type="button" class="btn primary" id="btn-resume">계속하기</button>
+        <button type="button" class="btn" id="btn-restart">처음부터</button>
+        <button type="button" class="btn ghost" id="btn-quit">곡 선택</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen modal" id="result" hidden>
+    <div class="sheet">
+      <p class="result-song" id="result-song"></p>
+      <div class="stars" id="result-stars">
+        <svg class="star" viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg>
+        <svg class="star" viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg>
+        <svg class="star" viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg>
+      </div>
+      <p class="verdict" id="result-verdict"></p>
+      <p class="result-score"><span id="result-score">0</span><b class="badge" id="result-best" hidden>최고 기록</b></p>
+      <dl class="stats">
+        <div><dt>정확도</dt><dd id="result-accuracy">0%</dd></div>
+        <div><dt>퍼펙트</dt><dd id="result-perfects">0</dd></div>
+        <div><dt>최대 콤보</dt><dd id="result-combo">0</dd></div>
+        <div><dt>완성한 마디</dt><dd id="result-bars">0</dd></div>
+        <div><dt>빈칸 블록</dt><dd id="result-wrong">0</dd></div>
+      </dl>
+      <div class="actions">
+        <button type="button" class="btn primary" id="btn-again">다시 하기</button>
+        <button type="button" class="btn ghost" id="btn-songs">곡 선택</button>
+      </div>
+    </div>
+  </section>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
