@@ -1,0 +1,716 @@
+<title>별빛 멜로디</title>
+<meta name="description" content="음표 퍼즐을 풀어 여주인공의 노래를 완성하는 도트 퍼즐 게임">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Gowun+Dodum&display=swap">
+<style>
+/* Layout: one-column phone stage. Heroine scene on top (big for story, small during play), song strip, then the note board. */
+:root {
+  --night: #15123a;      /* page ground: rooftop night sky */
+  --night-2: #221c57;    /* raised panels */
+  --slot: #2c2766;       /* empty puzzle cell */
+  --slot-line: #3d3785;
+  --ink: #f4effe;        /* main text */
+  --ink-dim: #aaa3d6;    /* secondary text, clues done */
+  --pink: #ff8fc8;       /* accent: Ria's hair */
+  --gold: #ffd45e;       /* star, given notes, ratings */
+  --err: #ff5b78;
+  --pixel: "DotGothic16", "Gowun Dodum", ui-monospace, monospace;
+  --body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --cell: 34px;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: var(--night); color: var(--ink); font-family: var(--body); font-size: 15px; -webkit-tap-highlight-color: transparent; }
+button { font: inherit; color: inherit; }
+button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+#app { max-width: 460px; margin: 0 auto; padding-inline: 16px; padding-block: 10px 20px; display: flex; flex-direction: column; gap: 10px; }
+
+.top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.brand { font-family: var(--pixel); font-size: 13px; letter-spacing: .12em; color: var(--pink); white-space: nowrap; }
+.brand b { color: var(--gold); font-weight: 400; }
+.meta { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink-dim); min-width: 0; }
+#stageLabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.icon-btn { background: var(--night-2); border: 1px solid var(--slot-line); border-radius: 6px; padding: 4px 9px; font-size: 13px; cursor: pointer; white-space: nowrap; flex: none; }
+
+/* Scene */
+.scene { position: relative; border-radius: 10px; overflow: hidden; overflow: clip; border: 1px solid var(--slot-line); background: linear-gradient(180deg, #0f0c2c 0%, #2a1f62 70%, #3a2370 100%); display: grid; transition: min-height .35s ease; }
+.scene canvas.sky { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+.scene .spot { position: absolute; left: 50%; bottom: -40%; width: 120%; height: 120%; transform: translateX(-50%); background: radial-gradient(closest-side, rgba(255,143,200,.22), rgba(255,143,200,0)); pointer-events: none; }
+.scene[data-size="big"] { grid-template-columns: 1fr; justify-items: center; padding-block: 14px 12px; padding-inline: 12px; gap: 10px; }
+.scene[data-size="small"] { grid-template-columns: auto 1fr; align-items: end; padding-block: 8px 10px; padding-inline: 10px; gap: 10px; }
+#heroine { position: relative; image-rendering: pixelated; display: block; transition: width .35s ease, height .35s ease; }
+#heroine.bob { transform: translateY(calc(var(--px, 3px) * -1)); }
+
+.talk { position: relative; align-self: stretch; display: flex; flex-direction: column; gap: 6px; min-width: 0; background: rgba(21, 18, 58, .95); border: 2px solid var(--ink); border-radius: 4px; box-shadow: 3px 3px 0 #0b0920; padding: 10px 12px; width: 100%; }
+.scene[data-size="small"] .talk { align-self: end; padding: 8px 10px; }
+.talk .who { position: absolute; top: -11px; left: 10px; background: var(--pink); color: #2a0d24; font-family: var(--pixel); font-size: 12px; padding: 1px 8px; border-radius: 3px; }
+.talk p { margin: 4px 0 0; line-height: 1.55; font-size: 15px; min-height: 3.1em; word-break: keep-all; }
+.scene[data-size="small"] .talk p { font-size: 14px; min-height: 0; }
+.talk .act { display: flex; justify-content: flex-end; gap: 8px; }
+.act button { font-family: var(--pixel); font-size: 14px; background: var(--gold); color: #2b1b00; border: 0; border-radius: 4px; padding: 7px 14px; box-shadow: 0 3px 0 #b8892a; cursor: pointer; }
+.act button.ghost { background: transparent; color: var(--ink); box-shadow: none; border: 1px solid var(--slot-line); }
+.act button:active { transform: translateY(2px); box-shadow: 0 1px 0 #b8892a; }
+
+/* Song strip */
+.song { display: flex; align-items: center; gap: 8px; }
+.song .label { font-family: var(--pixel); font-size: 11px; letter-spacing: .1em; color: var(--ink-dim); white-space: nowrap; }
+.bars { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; flex: 1; min-width: 0; }
+.bar { position: relative; background: var(--night-2); border: 1px solid var(--slot-line); border-radius: 4px; padding: 3px; cursor: pointer; display: grid; gap: 2px; }
+.bar canvas { width: 100%; aspect-ratio: 8 / 6; image-rendering: pixelated; display: block; }
+.bar .n { font-family: var(--pixel); font-size: 10px; color: var(--ink-dim); display: flex; justify-content: space-between; }
+.bar .n i { font-style: normal; color: var(--gold); letter-spacing: -1px; }
+.bar[aria-current="true"] { border-color: var(--pink); }
+.bar.playing { box-shadow: 0 0 0 2px var(--gold); }
+.bar:disabled { cursor: default; opacity: .45; }
+
+/* Board */
+.board-wrap { background: var(--night-2); border: 1px solid var(--slot-line); border-radius: 10px; padding: 8px 8px 12px; overflow-x: auto; }
+.board-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 0 4px 4px; font-size: 13px; color: var(--ink-dim); }
+.board-head b { color: var(--ink); font-weight: 400; }
+.board-head .miss { font-family: var(--pixel); font-variant-numeric: tabular-nums; }
+.board { --lab: 34px; display: grid; grid-template-columns: var(--lab) auto repeat(8, var(--cell)); gap: 3px; justify-content: center; touch-action: none; user-select: none; -webkit-user-select: none; }
+.board .cc { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; font-family: var(--pixel); font-size: 13px; line-height: 1.15; padding-bottom: 3px; font-variant-numeric: tabular-nums; }
+.board .rc { display: flex; justify-content: flex-end; align-items: center; gap: 5px; font-family: var(--pixel); font-size: 13px; padding-right: 4px; font-variant-numeric: tabular-nums; }
+.board .done { color: var(--ink-dim); opacity: .45; }
+.board .lab { display: flex; align-items: center; justify-content: center; font-size: 12px; border-radius: 4px; color: #1b1440; background: var(--c); font-weight: 700; letter-spacing: -.04em; }
+.board .lab.long { font-size: 10px; }
+.cell { width: var(--cell); height: var(--cell); background: var(--slot); border-radius: 3px; position: relative; box-shadow: inset 0 0 0 1px var(--slot-line); }
+.cell.beat { background: #322c72; }
+.cell.ph { background: #3e3790; }
+.cell.on { background: var(--c); box-shadow: inset 3px 3px 0 rgba(255,255,255,.45), inset -3px -3px 0 rgba(0,0,0,.25); }
+.cell.on.hit { filter: brightness(1.35); }
+.cell.given::after { content: ""; position: absolute; right: 3px; top: 3px; width: 8px; height: 8px; background: rgba(27, 20, 64, .6); clip-path: polygon(50% 0, 63% 37%, 100% 50%, 63% 63%, 50% 100%, 37% 63%, 0 50%, 37% 37%); }
+.cell.x::before, .cell.err::before { content: "×"; position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--pixel); font-size: 18px; color: var(--ink-dim); }
+.cell.err::before { color: var(--err); }
+.cell.err { box-shadow: inset 0 0 0 2px var(--err); }
+.cell.pop { animation: pop .22s ease-out; }
+@keyframes pop { 0% { transform: scale(.7); } 70% { transform: scale(1.12); } 100% { transform: scale(1); } }
+.board.locked { pointer-events: none; }
+
+.controls { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.seg { display: inline-flex; background: var(--night-2); border: 1px solid var(--slot-line); border-radius: 6px; padding: 3px; gap: 3px; }
+.seg button { border: 0; background: transparent; padding: 7px 12px; border-radius: 4px; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.seg button[aria-pressed="true"] { background: var(--pink); color: #2a0d24; }
+.sw { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+.sw.fill { background: currentColor; }
+.sw.mark { font-family: var(--pixel); line-height: 12px; text-align: center; }
+.hint { font-size: 12px; color: var(--ink-dim); }
+
+.toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 14px); transform: translate(-50%, -160%); visibility: hidden; background: var(--gold); color: #2b1b00; font-family: var(--pixel); padding: 8px 16px; border-radius: 6px; box-shadow: 0 4px 0 #b8892a; transition: transform .3s ease; z-index: 5; white-space: nowrap; }
+.toast.show { transform: translate(-50%, 0); visibility: visible; }
+
+[hidden] { display: none !important; }
+@media (max-width: 380px) { .board .rc, .board .cc { font-size: 12px; } .brand { letter-spacing: .06em; } }
+@media (prefers-reduced-motion: reduce) { #heroine, .scene, .toast { transition: none; } #heroine.bob { transform: none; } .cell.pop { animation: none; } }
+</style>
+
+<div id="app">
+  <header class="top">
+    <div class="brand">★ STARLIGHT <b>MELODY</b></div>
+    <div class="meta">
+      <span id="stageLabel">옥상 라이브 D-3</span>
+      <button class="icon-btn" id="muteBtn" type="button" aria-pressed="false">소리 켬</button>
+    </div>
+  </header>
+
+  <section class="scene" id="scene" data-size="big" aria-label="리아">
+    <canvas class="sky" id="sky" aria-hidden="true"></canvas>
+    <div class="spot" aria-hidden="true"></div>
+    <canvas id="heroine" width="64" height="72" role="img" aria-label="헤드폰을 쓴 분홍 트윈테일 소녀 리아"></canvas>
+    <div class="talk">
+      <span class="who">리아</span>
+      <p id="line" aria-live="polite"></p>
+      <div class="act" id="act"></div>
+    </div>
+  </section>
+
+  <section class="song" aria-label="곡 진행">
+    <span class="label">곡 완성도</span>
+    <div class="bars" id="bars"></div>
+  </section>
+
+  <section class="board-wrap" id="boardWrap" hidden>
+    <div class="board-head"><span id="boardTitle"></span><span class="miss" id="miss"></span></div>
+    <div class="board" id="board" aria-label="음표 퍼즐판"></div>
+  </section>
+
+  <div class="controls" id="controls" hidden>
+    <div class="seg" role="group" aria-label="칸 누를 때 동작">
+      <button type="button" id="toolFill" aria-pressed="true"><span class="sw fill" style="color:var(--pink)"></span>음표 칠하기</button>
+      <button type="button" id="toolMark" aria-pressed="false"><span class="sw mark">×</span>빈칸 표시</button>
+    </div>
+    <button class="icon-btn" type="button" id="playBtn">⏸ 멈춤</button>
+  </div>
+  <p class="hint" id="hint" hidden>칸을 누른 채로 끌면 한 줄을 이어서 칠할 수 있어요. 별이 있는 칸은 처음부터 알려 준 음이에요.</p>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+// Procedural pixel-art portrait. drawHeroine(expr) -> {w, h, px: array of '#rrggbb' | null}
+(function (root) {
+const W = 64, H = 72, CX = 32;
+const COL = {
+  line: '#3a1d3f',
+  skin: '#ffe6d8', skinS: '#f7bfae', skinD: '#c98478',
+  hair: '#ff9cc9', hairS: '#e76aa8', hairD: '#a83d79', hairH: '#ffd6ea',
+  cloth: '#f6f3ff', clothS: '#cfc8ee', clothD: '#7e74b8',
+  navy: '#34407e', navyS: '#262f61', navyD: '#1a1f44',
+  red: '#ff5b78', redS: '#d63a5c',
+  phone: '#4a4e6e', phoneS: '#33364f', phoneH: '#7b80a6',
+  cup: '#62dcff', cupS: '#2fa6d6', led: '#ff7ab8',
+  tie: '#ffd45e', tieS: '#e6a92e',
+  eyeL: '#2b1f4a', irisA: '#2e4fa3', irisB: '#4b8fe8', irisC: '#9be6ff', pupil: '#1a1846', hi: '#ffffff', scl: '#fbf8ff',
+  blush: '#ff9fb4', mouth: '#b93a58', tongue: '#ff8a9c', sweat: '#9fe3ff'
+};
+const R = { tails: 1, back: 2, body: 3, collar: 4, ribbon: 5, neck: 6, face: 7, band: 8, cup: 9, bangs: 10, tie: 11 };
+const PAL = {
+  1: ['hair', 'hairS', 'hairD'], 2: ['hair', 'hairS', 'hairD'], 3: ['cloth', 'clothS', 'clothD'], 4: ['navy', 'navyS', 'navyD'],
+  5: ['red', 'redS', 'line'], 6: ['skin', 'skinS', 'skinD'], 7: ['skin', 'skinS', 'skinD'], 8: ['phone', 'phoneS', 'line'],
+  9: ['cup', 'cupS', 'line'], 10: ['hair', 'hairS', 'hairD'], 11: ['tie', 'tieS', 'line']
+};
+const ell = (x, y, cx, cy, rx, ry) => ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1;
+// face: round skull + soft pointed jaw
+const face = (x, y) => { if (y < 32) return ell(x, y, CX, 32, 14, 15); if (y > 51) return false; const t = (y - 32) / 19; return Math.abs(x - CX) <= 14 * Math.pow(Math.max(0, 1 - Math.pow(t, 3)), 0.6); };
+const skull = (x, y) => ell(x, y, CX, 30, 17.5, 17);
+// bang strands: [topX, tipX, tipY, halfWidthTop]
+const STRANDS = [[14, 15, 54, 3.6], [17, 18, 45, 3.4], [21, 22, 34, 3.4], [25, 25, 35, 3], [29, 30, 31, 3], [33, 33, 37, 2.8], [37, 39, 32, 3], [42, 42, 35, 3.4], [47, 46, 45, 3.4], [50, 49, 54, 3.6]];
+function strand(x, y, s) { const [tx, px, py, hw] = s, top = 16; if (y < top || y > py) return false; const t = (y - top) / (py - top); const cx = tx + (px - tx) * t; const w = hw * Math.pow(1 - t, 0.8); return Math.abs(x - cx) <= w; }
+const bangs = (x, y) => (skull(x, y) && y < 25) || STRANDS.some(s => strand(x, y, s) && (skull(x, y) || y > 28));
+const back = (x, y) => (ell(x, y, CX, 31, 19.5, 19)) || (y >= 31 && y <= 56 && Math.abs(x - CX) <= 18.5 - Math.max(0, y - 40) * 0.25);
+function tails(x, y) { const top = 18, bot = 70; if (y < top || y > bot) return false; const t = (y - top) / (bot - top);
+  for (const side of [-1, 1]) { const cx = CX + side * (21 + 3.5 * Math.sin(t * Math.PI * 0.9)); const hw = 5.6 * (1 - t) ** 0.65 + 0.9; if (Math.abs(x - cx) <= hw) return true; } return false; }
+const tie = (x, y) => [-1, 1].some(s => ell(x, y, CX + s * 21.5, 20, 3.2, 2.6));
+const neck = (x, y) => y >= 46 && y <= 57 && Math.abs(x - CX) <= 4;
+const body = (x, y) => y >= 55 && Math.abs(x - CX) <= Math.min(23, 7 + (y - 55) * 2.4 + Math.min(6, Math.max(0, y - 57) * 1.5));
+const collar = (x, y) => body(x, y) && y <= 66 && !(Math.abs(x - CX) <= Math.max(0, 6 - (y - 55) * 0.8) && y < 63) && Math.abs(x - CX) <= 8 + (y - 55) * 1.5;
+const ribbon = (x, y) => (ell(x, y, CX - 3.5, 62, 3.5, 2.3) || ell(x, y, CX + 3.5, 62, 3.5, 2.3) || (Math.abs(x - CX) <= 1 && y >= 61 && y <= 63)) || ([[-1, 0], [1, 0]].some(([s]) => Math.abs(x - (CX + s * 2.5 + s * (y - 64) * 0.5)) <= 1 && y >= 64 && y <= 68));
+const band = (x, y) => { const d = Math.hypot(x - CX, (y - 31) * 1.02); return d >= 19 && d <= 21.2 && y < 28; };
+const cup = (x, y) => [-1, 1].some(s => ell(x, y, CX + s * 19.5, 32, 3.6, 5.6));
+const LAYERS = [[R.tails, tails], [R.back, back], [R.body, body], [R.collar, collar], [R.ribbon, ribbon], [R.neck, neck], [R.face, face], [R.bangs, bangs], [R.band, band], [R.cup, cup], [R.tie, tie]];
+
+const EYE = { // left eye (outer corner on the left); mirrored for the right eye
+  open: ['..LLLLL.', '.LLLLLLL', 'LLaaaaaL', 'Lawwaa.L', 'Lawpp a.'.replace(' ', 'p'), 'Labppb.L', 'Labbbb.L', '.bccccb.', '.bccccb.', '..LLLL..'],
+  happy: ['........', '........', '........', '..LLLL..', '.L....L.', 'L......L', '........', '........', '........', '........'],
+  oops: ['........', '........', 'LL......', '..LLL...', '.....LL.', '..LLL...', 'LL......', '........', '........', '........'],
+  closed: ['........', '........', '........', '........', '........', '........', 'LLLLLLLL', '.L....L.', '........', '........']
+};
+const ECOL = { L: 'eyeL', a: 'irisA', b: 'irisB', c: 'irisC', p: 'pupil', w: 'hi', '.': null, s: 'scl' };
+const MOUTH = { idle: ['L..L', '.LL.'], smile: ['LLLLL', '.LmL.', '..L..'].map(r => r), sing: ['.LL.', 'LmmL', 'LttL', '.LL.'], oops: ['L.L.L', '.L.L.'], o: ['.L.', 'LmL', '.L.'] };
+const MCOL = { L: 'mouth', m: 'mouth', t: 'tongue', '.': null };
+
+function drawHeroine(opt) {
+  opt = opt || {}; const eye = opt.eye || 'open', mouth = opt.mouth || 'idle';
+  const reg = new Array(W * H).fill(0);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) for (const [id, f] of LAYERS) if (f(x + 0.5, y + 0.5)) reg[y * W + x] = id;
+  const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? 0 : reg[y * W + x];
+  const px = new Array(W * H).fill(null);
+  const order = id => LAYERS.findIndex(l => l[0] === id);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const id = at(x, y);
+    if (!id) { if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => at(x + dx, y + dy))) px[y * W + x] = COL.line; continue; }
+    const [b, s, d] = PAL[id]; let c = b;
+    const behind = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const n = at(x + dx, y + dy); return n && n !== id && order(n) < order(id) && !(id === R.neck && n === R.body) && !(id === R.ribbon) && !(id === R.collar && n === R.body); });
+    if (id === R.face || id === R.neck) { if (at(x, y - 1) === R.bangs || at(x, y - 2) === R.bangs || (id === R.neck && y < 51) || x > CX + 10) c = s; }
+    if (id === R.bangs) { if (at(x, y + 1) !== R.bangs || at(x, y + 2) !== R.bangs) c = s; const d2 = Math.hypot(x + 0.5 - CX, (y + 0.5 - 30) * 1.1); if (d2 > 11 && d2 < 13.2 && y < 25 && y > 14 && (x % 7) !== 3) c = COL.hairH; }
+    if (id === R.back && (y > 46 || Math.abs(x - CX) > 15)) c = s;
+    if (id === R.body && (x > CX + 14 || y > 69)) c = s; if (id === R.collar && (y === 65)) c = COL.cloth;
+    if (id === R.cup && x % 64 && ell(x + 0.5, y + 0.5, CX + (x > CX ? 19.5 : -19.5), 32, 1.6, 3)) c = s;
+    if (id === R.band && y < 13) c = COL.phoneH;
+    if (behind && id === R.bangs && at(x, y + 1) !== R.face) { px[y * W + x] = COL.hairS; continue; }
+    if (id === R.tails) { const t = (y - 18) / 52, side = x < CX ? -1 : 1, tc = CX + side * (21 + 3.5 * Math.sin(t * Math.PI * 0.9)), hw = 5.6 * (1 - t) ** 0.65 + 0.9, rel = (x + 0.5 - tc) / hw * side;
+      c = rel > 0.45 ? s : (rel > -0.35 && rel < -0.05 && y > 24 && y % 9 < 6) ? COL.hairH : (y > 56 ? s : b); }
+    px[y * W + x] = behind ? COL[d] : COL[c] || c;
+  }
+  const put = (x, y, key, map) => { const k = map[key]; if (k) px[y * W + x] = COL[k]; };
+  const E = EYE[eye];
+  E.forEach((row, j) => [...row].forEach((ch, i) => { put(19 + i, 35 + j, ch, ECOL); put(44 - i, 35 + j, ch, ECOL); }));
+  if (eye === 'open') { // sclera on inner side
+    for (let j = 3; j < 7; j++) { px[(35 + j) * W + 26] = COL.scl; px[(35 + j) * W + 37] = COL.scl; } }
+  // blush
+  for (const bx of [20, 40]) for (let i = 0; i < 3; i++) px[46 * W + bx + i * 2] = COL.blush;
+  const M = MOUTH[mouth], mx = CX - Math.floor(M[0].length / 2), my = 47 - (M.length > 2 ? 1 : 0);
+  M.forEach((row, j) => [...row].forEach((ch, i) => put(mx + i, my + j, ch, MCOL)));
+  if (opt.sweat) [[52, 20], [51, 21], [52, 21], [53, 21], [51, 22], [52, 22], [53, 22], [52, 23]].forEach(([x, y]) => px[y * W + x] = COL.sweat);
+  return { w: W, h: H, px };
+}
+root.drawHeroine = drawHeroine;
+})(typeof window !== 'undefined' ? window : module.exports);
+
+</script>
+<script>
+const STAGES = [
+ {
+  "id": "s1",
+  "title": "첫 소절",
+  "root": 48,
+  "pad": [
+   60,
+   64,
+   67
+  ],
+  "lanes": [
+   "G",
+   "E",
+   "C",
+   "K"
+  ],
+  "pattern": {
+   "G": "....xx..",
+   "E": "..x...x.",
+   "C": "x.......",
+   "K": "x...x..."
+  },
+  "givens": [
+   "E6",
+   "E2"
+  ],
+  "intro": [
+   "악보가 비에 젖어서 음표가 다 번져 버렸어. 별이 찍힌 칸은 내가 기억하는 음이야.",
+   "왼쪽 숫자는 그 가로줄에, 위쪽 숫자는 그 세로줄에 이어서 칠해진 칸 수야. '1 1'이면 떨어진 한 칸이 두 번!",
+   "맞는 칸을 누르면 소리가 나. 틀려도 괜찮으니까 차근차근 채워 줘!"
+  ],
+  "clear": "들려? 이게 첫 소절이야! 도, 미, 솔… 반짝반짝하지?"
+ },
+ {
+  "id": "s2",
+  "title": "두근두근",
+  "root": 45,
+  "pad": [
+   57,
+   60,
+   64
+  ],
+  "lanes": [
+   "A",
+   "G",
+   "E",
+   "D",
+   "S",
+   "K"
+  ],
+  "pattern": {
+   "A": "xx......",
+   "G": "..x.....",
+   "E": "....xx..",
+   "D": "......x.",
+   "S": "..x...x.",
+   "K": "x...x.x."
+  },
+  "givens": [
+   "A0",
+   "S2"
+  ],
+  "intro": [
+   "두 번째 소절은 두근두근해지는 부분이야.",
+   "스네어가 들어와서 박자가 또렷해질 거야!"
+  ],
+  "clear": "좋아, 심장이 같이 뛰기 시작했어!"
+ },
+ {
+  "id": "s3",
+  "title": "그녀의 목소리",
+  "root": 41,
+  "pad": [
+   53,
+   57,
+   60
+  ],
+  "lanes": [
+   "A",
+   "G",
+   "C",
+   "B",
+   "H",
+   "S",
+   "K"
+  ],
+  "pattern": {
+   "A": "..xx..x.",
+   "G": "....x...",
+   "C": "x......x",
+   "B": "x..x..x.",
+   "H": "x.x.x.x.",
+   "S": "..x...x.",
+   "K": "x..x.x.."
+  },
+  "givens": [
+   "C7",
+   "A2",
+   "B6"
+  ],
+  "intro": [
+   "여기서부터 베이스랑 하이햇이 들어와.",
+   "소리가 꽉 차기 시작하면 나도 모르게 웃게 돼."
+  ],
+  "clear": "이 부분 부를 때가 제일 좋아!"
+ },
+ {
+  "id": "s4",
+  "title": "고조",
+  "root": 43,
+  "pad": [
+   55,
+   59,
+   62
+  ],
+  "lanes": [
+   "A",
+   "G",
+   "E",
+   "D",
+   "B",
+   "H",
+   "S",
+   "K"
+  ],
+  "pattern": {
+   "A": "..x.....",
+   "G": "xx..x...",
+   "E": ".....x..",
+   "D": "......x.",
+   "B": "x.x.x.x.",
+   "H": "xxxxxxxx",
+   "S": "..x...xx",
+   "K": "x..xx..."
+  },
+  "givens": [
+   "E5",
+   "A2"
+  ],
+  "intro": [
+   "클라이맥스 바로 앞이야. 하이햇이 쉬지 않고 달려!",
+   "칸이 많아졌으니까 숫자가 큰 줄부터 찾아봐."
+  ],
+  "clear": "다음이 마지막 소절이야… 떨린다."
+ },
+ {
+  "id": "s5",
+  "title": "별빛 멜로디",
+  "root": 48,
+  "pad": [
+   60,
+   64,
+   67
+  ],
+  "lanes": [
+   "A",
+   "G",
+   "E",
+   "D",
+   "C",
+   "B",
+   "S",
+   "K"
+  ],
+  "pattern": {
+   "A": "..x.....",
+   "G": ".x.x....",
+   "E": "x...x...",
+   "D": ".....x..",
+   "C": "......x.",
+   "B": "x..x.xx.",
+   "S": "..x...xx",
+   "K": "x..x.xx."
+  },
+  "givens": [
+   "E4",
+   "G1",
+   "D5",
+   "A2"
+  ],
+  "intro": [
+   "마지막 소절. 곡 제목은 '별빛 멜로디'야.",
+   "다 채우면 처음부터 끝까지 같이 들어 보자!"
+  ],
+  "clear": "다 됐어…! 우리 곡이 완성됐어!"
+ }
+];
+const LANES = {
+  A: { name: '라', c: '#ff8fc8', midi: 81 }, G: { name: '솔', c: '#ffb35c', midi: 79 }, E: { name: '미', c: '#ffe066', midi: 76 },
+  D: { name: '레', c: '#7fe3ad', midi: 74 }, C: { name: '도', c: '#6ccbff', midi: 72 },
+  B: { name: '베이스', c: '#b597ff' }, H: { name: '하이햇', c: '#d9def2' }, S: { name: '스네어', c: '#9ef0ff' }, K: { name: '킥', c: '#ff7d7d' }
+};
+const MELODY = new Set(['A', 'G', 'E', 'D', 'C']);
+const W = 8, BPM = 112, STEP = 60 / BPM / 2;
+const OOPS = ['앗, 그 음은 아닌 것 같아!', '음이 살짝 엇나갔어~', '흠, 숫자를 다시 볼까?'];
+const $ = id => document.getElementById(id);
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- progress ---------- */
+const store = {
+  load() { try { return JSON.parse(localStorage.getItem('starlight-melody') || 'null'); } catch (e) { return null; } },
+  save(d) { try { localStorage.setItem('starlight-melody', JSON.stringify(d)); } catch (e) {} }
+};
+const saved = store.load() || {};
+const P = { unlocked: saved.unlocked || 0, stars: saved.stars || [0, 0, 0, 0, 0] };
+const persist = () => store.save(P);
+window.claude?.hot?.snapshot?.(() => ({ progress: P }));
+
+/* ---------- game state ---------- */
+const G = { mode: 'title', stage: 0, cells: null, sol: null, misses: 0, tool: 'fill', playing: false, muted: false, songBar: 0 };
+STAGES.forEach(s => { s.sol = s.lanes.map(l => [...s.pattern[l]].map(c => c === 'x')); });
+const clueOf = line => { const r = []; let n = 0; line.forEach(v => { if (v) n++; else if (n) { r.push(n); n = 0; } }); if (n) r.push(n); return r.length ? r : [0]; };
+
+/* ---------- heroine ---------- */
+const hc = $('heroine'), hx = hc.getContext('2d');
+const faceCache = {};
+const expr = { base: 'idle', temp: null, tempUntil: 0, sing: 0, blink: 0, nextBlink: performance.now() + 2500 };
+function face(key) {
+  if (faceCache[key]) return faceCache[key];
+  const o = { idle: {}, happy: { eye: 'happy', mouth: 'smile' }, sing: { mouth: 'sing' }, oops: { eye: 'oops', mouth: 'oops', sweat: true }, blink: { eye: 'closed' }, singHappy: { eye: 'happy', mouth: 'sing' } }[key];
+  const d = drawHeroine(o), img = hx.createImageData(d.w, d.h);
+  d.px.forEach((c, i) => { if (!c) return; img.data[i * 4] = parseInt(c.slice(1, 3), 16); img.data[i * 4 + 1] = parseInt(c.slice(3, 5), 16); img.data[i * 4 + 2] = parseInt(c.slice(5, 7), 16); img.data[i * 4 + 3] = 255; });
+  return (faceCache[key] = img);
+}
+let lastFace = '';
+function renderHeroine(now) {
+  let k = expr.base;
+  if (expr.temp && now < expr.tempUntil) k = expr.temp; else expr.temp = null;
+  if (!expr.temp && now < expr.sing) k = k === 'happy' ? 'singHappy' : 'sing';
+  if (k === 'idle' && now > expr.nextBlink) { expr.blink = now + 130; expr.nextBlink = now + 2600 + Math.random() * 2600; }
+  if (k === 'idle' && now < expr.blink) k = 'blink';
+  if (k !== lastFace) { hx.clearRect(0, 0, 64, 72); hx.putImageData(face(k), 0, 0); lastFace = k; }
+}
+function sizeHeroine() {
+  const big = $('scene').dataset.size === 'big';
+  const avail = $('scene').clientWidth - 24;
+  const k = big ? Math.max(3, Math.min(5, Math.floor(Math.min(avail, 330) / 64))) : 2;
+  hc.style.width = 64 * k + 'px'; hc.style.height = 72 * k + 'px'; hc.style.setProperty('--px', k + 'px');
+  sizeSky();
+}
+
+/* ---------- sky ---------- */
+const sky = $('sky'), sx = sky.getContext('2d'); let stars = [];
+function sizeSky() {
+  const r = $('scene').getBoundingClientRect(); sky.width = Math.max(1, Math.round(r.width / 3)); sky.height = Math.max(1, Math.round(r.height / 3));
+  stars = Array.from({ length: Math.round(sky.width * sky.height / 140) }, () => ({ x: Math.random() * sky.width | 0, y: Math.random() * sky.height * 0.75 | 0, p: Math.random() * 6.28, big: Math.random() < .12 }));
+}
+const floaters = [];
+function drawSky(now) {
+  sx.clearRect(0, 0, sky.width, sky.height);
+  for (const s of stars) { const a = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(now / 700 + s.p)); sx.fillStyle = `rgba(255,240,250,${a.toFixed(2)})`; sx.fillRect(s.x, s.y, 1, 1); if (s.big && a > .8) { sx.fillRect(s.x - 1, s.y, 3, 1); sx.fillRect(s.x, s.y - 1, 1, 3); } }
+  for (let i = floaters.length - 1; i >= 0; i--) { const f = floaters[i], t = (now - f.t0) / 1600; if (t > 1) { floaters.splice(i, 1); continue; }
+    sx.globalAlpha = 1 - t; sx.fillStyle = f.c; const x = Math.round(f.x + Math.sin(t * 6) * 2), y = Math.round(f.y - t * 22);
+    sx.fillRect(x, y, 2, 2); sx.fillRect(x + 1, y - 5, 1, 5); sx.fillRect(x + 2, y - 5, 2, 1); sx.globalAlpha = 1; }
+}
+function spawnNote(c) { if (reduceMotion || floaters.length > 14) return; floaters.push({ x: 6 + Math.random() * (sky.width - 12), y: sky.height - 6, c, t0: performance.now() }); }
+
+/* ---------- audio ---------- */
+let ac = null, master = null, noise = null;
+function initAudio() {
+  if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+  ac = new AC(); master = ac.createGain(); master.gain.value = G.muted ? 0 : 0.55;
+  const comp = ac.createDynamicsCompressor(); master.connect(comp); comp.connect(ac.destination);
+  noise = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate); const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  setInterval(tick, 25);
+}
+const hz = m => 440 * Math.pow(2, (m - 69) / 12);
+function env(g, t, peak, a, len) { g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + len); }
+function voice(lane, t, stage, vel = 1) {
+  if (!ac) return; const out = ac.createGain(); out.connect(master);
+  if (MELODY.has(lane)) {
+    const o = ac.createOscillator(), f = ac.createBiquadFilter(); o.type = 'square'; o.frequency.value = hz(LANES[lane].midi); f.type = 'lowpass'; f.frequency.value = 3200;
+    o.connect(f); f.connect(out); env(out, t, 0.13 * vel, 0.006, STEP * 1.6); o.start(t); o.stop(t + STEP * 1.7);
+  } else if (lane === 'B') {
+    const o = ac.createOscillator(), f = ac.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.value = hz(stage.root); f.type = 'lowpass'; f.frequency.value = 900; f.Q.value = 5;
+    o.connect(f); f.connect(out); env(out, t, 0.32 * vel, 0.008, STEP * 0.95); o.start(t); o.stop(t + STEP);
+  } else if (lane === 'K') {
+    const o = ac.createOscillator(); o.frequency.setValueAtTime(170, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.13); o.connect(out); env(out, t, 0.9 * vel, 0.003, 0.28); o.start(t); o.stop(t + 0.3);
+  } else {
+    const n = ac.createBufferSource(), f = ac.createBiquadFilter(); n.buffer = noise; n.connect(f); f.connect(out);
+    if (lane === 'S') { f.type = 'bandpass'; f.frequency.value = 1900; f.Q.value = 0.7; env(out, t, 0.42 * vel, 0.002, 0.17);
+      const o = ac.createOscillator(), og = ac.createGain(); o.type = 'triangle'; o.frequency.value = 190; o.connect(og); og.connect(master); env(og, t, 0.22 * vel, 0.002, 0.08); o.start(t); o.stop(t + 0.1);
+    } else { f.type = 'highpass'; f.frequency.value = 7600; env(out, t, 0.14 * vel, 0.001, 0.05); }
+    n.start(t); n.stop(t + 0.2);
+  }
+}
+function pad(t, stage) {
+  stage.pad.forEach(m => { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'triangle'; o.frequency.value = hz(m); o.connect(g); g.connect(master);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.045, t + 0.25); g.gain.setValueAtTime(0.045, t + STEP * 6.5); g.gain.exponentialRampToValueAtTime(0.0001, t + STEP * 8); o.start(t); o.stop(t + STEP * 8.1); });
+}
+function sfx(kind) {
+  if (!ac) return; const t = ac.currentTime + 0.01, out = ac.createGain(); out.connect(master);
+  const o = ac.createOscillator(); o.type = 'square'; o.connect(out);
+  if (kind === 'err') { o.frequency.setValueAtTime(220, t); o.frequency.linearRampToValueAtTime(150, t + 0.18); env(out, t, 0.12, 0.005, 0.22); o.start(t); o.stop(t + 0.25); }
+  else if (kind === 'mark') { o.frequency.value = 1200; env(out, t, 0.04, 0.002, 0.04); o.start(t); o.stop(t + 0.05); }
+  else if (kind === 'clear') { [72, 76, 79, 84].forEach((m, i) => { const oo = ac.createOscillator(), gg = ac.createGain(); oo.type = 'square'; oo.frequency.value = hz(m); oo.connect(gg); gg.connect(master); env(gg, t + i * 0.09, 0.1, 0.005, 0.35); oo.start(t + i * 0.09); oo.stop(t + i * 0.09 + 0.4); }); o.disconnect(); }
+}
+
+/* ---------- sequencer ---------- */
+let nextT = 0, step = 0; const visQ = [];
+function startLoop() { initAudio(); if (!ac) return; visQ.length = 0; G.playing = true; step = 0; nextT = ac.currentTime + 0.08; $('playBtn').textContent = '⏸ 멈춤'; }
+function stopLoop() { G.playing = false; $('playBtn').textContent = '▶ 재생'; setPlayhead(-1); }
+function tick() {
+  if (!G.playing || !ac) return;
+  while (nextT < ac.currentTime + 0.12) {
+    const song = G.mode === 'song', idx = song ? G.songBar : G.stage, st = STAGES[idx];
+    const full = song || P.stars[idx] > 0 && G.mode === 'clear';
+    if (step === 0 && full) pad(nextT, st);
+    let mel = false;
+    st.lanes.forEach((l, y) => { const on = full ? st.sol[y][step] : G.cells && G.cells[y][step] === 'on'; if (on) { voice(l, nextT, st); if (MELODY.has(l)) mel = true; } });
+    visQ.push({ t: nextT, step, bar: idx, mel });
+    nextT += STEP; step = (step + 1) % W;
+    if (step === 0 && song) { G.songBar++; if (G.songBar >= STAGES.length) { G.songBar = 0; visQ.push({ t: nextT, end: true }); } }
+  }
+}
+function setPlayhead(x) {
+  document.querySelectorAll('.cell.ph').forEach(c => c.classList.remove('ph'));
+  document.querySelectorAll('.cell.hit').forEach(c => c.classList.remove('hit'));
+  if (x < 0) return; document.querySelectorAll(`.cell[data-x="${x}"]`).forEach(c => { c.classList.add('ph'); if (c.classList.contains('on')) c.classList.add('hit'); });
+}
+function frame(now) {
+  if (ac) while (visQ.length && visQ[0].t <= ac.currentTime) {
+    const v = visQ.shift();
+    if (v.end) { onSongEnd(); continue; }
+    if (G.mode === 'song' && v.step === 0) { if (G.boardStage !== v.bar) buildBoard(v.bar, true); markPlayingBar(v.bar); }
+    if (!G.playing) continue;
+    setPlayhead(v.step);
+    if (v.mel) { expr.sing = now + STEP * 900; const st = STAGES[v.bar]; st.lanes.forEach((l, y) => { if (MELODY.has(l) && st.sol[y][v.step]) spawnNote(LANES[l].c); }); }
+    if (v.step % 2 === 0 && !reduceMotion) { hc.classList.add('bob'); setTimeout(() => hc.classList.remove('bob'), 110); }
+  }
+  renderHeroine(now); drawSky(now);
+  requestAnimationFrame(frame);
+}
+
+/* ---------- board ---------- */
+function buildBoard(i, solved) {
+  const st = STAGES[i], b = $('board'); G.boardStage = i;
+  if (!solved) { G.cells = st.sol.map(r => r.map(() => '')); st.givens.forEach(g => { const y = st.lanes.indexOf(g[0]), x = +g.slice(1); G.cells[y][x] = 'on'; }); }
+  const cells = solved ? st.sol.map(r => r.map(v => v ? 'on' : '')) : G.cells;
+  b.innerHTML = ''; b.classList.toggle('locked', !!solved);
+  b.append(div(''), div(''));
+  for (let x = 0; x < W; x++) { const c = div('cc'); c.dataset.col = x; c.innerHTML = clueOf(st.sol.map(r => r[x])).join('<br>'); b.append(c); }
+  st.lanes.forEach((l, y) => {
+    const lab = div('lab' + (LANES[l].name.length > 1 ? ' long' : '')); lab.textContent = LANES[l].name; lab.style.setProperty('--c', LANES[l].c); b.append(lab);
+    const rc = div('rc'); rc.dataset.row = y; rc.innerHTML = clueOf(st.sol[y]).map(n => `<span>${n}</span>`).join(''); b.append(rc);
+    for (let x = 0; x < W; x++) { const c = div('cell' + (x % 2 === 0 ? ' beat' : '')); c.dataset.x = x; c.dataset.y = y; c.style.setProperty('--c', LANES[l].c);
+      const s = cells[y][x]; if (s) c.classList.add(s); if (!solved && st.givens.includes(l + x)) c.classList.add('given'); b.append(c); }
+  });
+  if (!solved) for (let y = 0; y < st.lanes.length; y++) checkLine('row', y); if (!solved) for (let x = 0; x < W; x++) checkLine('col', x);
+  if (solved) { document.querySelectorAll('.board .rc, .board .cc').forEach(e => e.classList.add('done')); }
+  $('boardTitle').innerHTML = `<b>${i + 1}소절</b> · ${st.title}`; fitBoard();
+}
+const div = cls => { const d = document.createElement('div'); if (cls) d.className = cls; return d; };
+const cellEl = (x, y) => $('board').querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+function setCell(x, y, s) { G.cells[y][x] = s; const c = cellEl(x, y); c.classList.remove('on', 'x', 'err'); if (s) c.classList.add(s); if (s === 'on') { c.classList.remove('pop'); void c.offsetWidth; c.classList.add('pop'); } }
+function checkLine(kind, i) {
+  const st = STAGES[G.stage], H = st.lanes.length;
+  const pts = kind === 'row' ? [...Array(W)].map((_, x) => [x, i]) : [...Array(H)].map((_, y) => [i, y]);
+  const done = pts.every(([x, y]) => !st.sol[y][x] || G.cells[y][x] === 'on');
+  if (done) { pts.forEach(([x, y]) => { if (!G.cells[y][x]) setCell(x, y, 'x'); }); $('board').querySelector(kind === 'row' ? `.rc[data-row="${i}"]` : `.cc[data-col="${i}"]`).classList.add('done'); }
+}
+function act(x, y, action) {
+  const st = STAGES[G.stage], s = G.cells[y][x];
+  if (action === 'fill' && !s) {
+    if (st.sol[y][x]) { setCell(x, y, 'on'); if (ac) voice(st.lanes[y], ac.currentTime + 0.005, st, 0.9); if (MELODY.has(st.lanes[y])) { expr.sing = performance.now() + 220; spawnNote(LANES[st.lanes[y]].c); } checkLine('row', y); checkLine('col', x); checkClear(); return true; }
+    setCell(x, y, 'err'); G.misses++; updateMiss(); sfx('err'); expr.temp = 'oops'; expr.tempUntil = performance.now() + 1300; say(OOPS[G.misses % OOPS.length], true); return false;
+  }
+  if (action === 'mark' && !s) { setCell(x, y, 'x'); sfx('mark'); return true; }
+  if (action === 'unmark' && s === 'x') { setCell(x, y, ''); return true; }
+  return true;
+}
+let drag = null;
+$('board').addEventListener('pointerdown', e => {
+  const c = e.target.closest('.cell'); if (!c || G.mode !== 'play') return; initAudio(); e.preventDefault();
+  const x = +c.dataset.x, y = +c.dataset.y, s = G.cells[y][x];
+  const action = G.tool === 'fill' ? (s ? null : 'fill') : (s === 'x' ? 'unmark' : s ? null : 'mark'); if (!action) return;
+  drag = { x0: x, y0: y, axis: null, action, seen: new Set([x + ',' + y]) };
+  try { $('board').setPointerCapture(e.pointerId); } catch (_) {}
+  if (!act(x, y, action)) drag = null;
+});
+$('board').addEventListener('pointermove', e => {
+  if (!drag) return; const el = document.elementFromPoint(e.clientX, e.clientY); const c = el && el.closest && el.closest('.cell'); if (!c) return;
+  let x = +c.dataset.x, y = +c.dataset.y;
+  if (!drag.axis) { if (x !== drag.x0) drag.axis = 'row'; else if (y !== drag.y0) drag.axis = 'col'; else return; }
+  if (drag.axis === 'row') y = drag.y0; else x = drag.x0;
+  const k = x + ',' + y; if (drag.seen.has(k)) return; drag.seen.add(k);
+  if (G.mode === 'play' && !act(x, y, drag.action)) drag = null;
+});
+['pointerup', 'pointercancel'].forEach(t => $('board').addEventListener(t, () => drag = null));
+
+function checkClear() {
+  const st = STAGES[G.stage];
+  if (!st.sol.every((r, y) => r.every((v, x) => !v || G.cells[y][x] === 'on'))) return;
+  const stars = G.misses === 0 ? 3 : G.misses <= 2 ? 2 : 1;
+  P.stars[G.stage] = Math.max(P.stars[G.stage], stars); P.unlocked = Math.max(P.unlocked, Math.min(STAGES.length - 1, G.stage + 1)); persist();
+  G.mode = 'clear'; $('board').classList.add('locked'); sfx('clear'); expr.base = 'happy'; renderBars();
+  toast(`${G.stage + 1}소절 완성! ` + '★'.repeat(stars) + '☆'.repeat(3 - stars));
+  const last = G.stage === STAGES.length - 1, all = P.stars.every(s => s > 0);
+  say(st.clear, false, last || all ? [['처음부터 듣기', playSong]] : [['다음 소절 ▸', () => openStage(G.stage + 1)]]);
+}
+
+/* ---------- song strip ---------- */
+function renderBars() {
+  const wrap = $('bars'); wrap.innerHTML = '';
+  STAGES.forEach((st, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'bar'; b.disabled = i > P.unlocked; b.setAttribute('aria-label', `${i + 1}소절 ${st.title}` + (P.stars[i] ? ' 완성' : ''));
+    if (G.mode !== 'title' && G.mode !== 'song' && i === G.stage) b.setAttribute('aria-current', 'true');
+    const cv = document.createElement('canvas'); cv.width = 8; cv.height = 6; const x = cv.getContext('2d');
+    if (P.stars[i]) { const order = ['A', 'G', 'E', 'D', 'C'];
+      st.lanes.forEach((l, y) => st.sol[y].forEach((v, sx) => { if (!v) return; x.fillStyle = LANES[l].c; if (MELODY.has(l)) x.fillRect(sx, order.indexOf(l), 1, 1); else x.fillRect(sx, 5, 1, 1); })); }
+    else { x.fillStyle = '#3d3785'; for (let sx = 0; sx < 8; sx += 2) x.fillRect(sx, 3, 1, 1); }
+    const n = div('n'); n.innerHTML = `<span>${i + 1}</span><i>${'★'.repeat(P.stars[i])}</i>`;
+    b.append(cv, n); b.addEventListener('click', () => { if (G.mode === 'song') return; initAudio(); openStage(i); }); wrap.append(b);
+  });
+}
+function markPlayingBar(i) { document.querySelectorAll('.bar').forEach((b, k) => b.classList.toggle('playing', k === i)); }
+
+/* ---------- dialogue ---------- */
+let typeTimer = null;
+function say(text, quick, actions) {
+  const p = $('line'); clearInterval(typeTimer);
+  if (reduceMotion || quick) p.textContent = text;
+  else { let i = 0; p.textContent = ''; typeTimer = setInterval(() => { i += 1; p.textContent = text.slice(0, i); if (i >= text.length) clearInterval(typeTimer); }, 28); }
+  if (actions) { const a = $('act'); a.innerHTML = ''; actions.forEach(([label, fn, ghost]) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; if (ghost) b.className = 'ghost'; b.addEventListener('click', () => { initAudio(); fn(); }); a.append(b); }); }
+}
+function talk(lines, done, lastLabel = '시작 ▸') { let i = 0; const next = () => { if (i >= lines.length) return done(); const last = i === lines.length - 1; say(lines[i++], false, [[last ? lastLabel : '다음 ▸', next]]); }; next(); }
+function setScene(size) { $('scene').dataset.size = size; sizeHeroine(); }
+function showPlayUI(on) { ['boardWrap', 'controls', 'hint'].forEach(id => $(id).hidden = !on); if (on) fitBoard(); }
+function fitBoard() {
+  const b = $('board'), wrap = $('boardWrap'); if (wrap.hidden) return;
+  const inner = wrap.clientWidth - 18, narrow = inner < 330, lab = narrow ? 30 : 34, gap = narrow ? 2 : 3;
+  const rcW = Math.max(0, ...[...b.querySelectorAll('.rc')].map(e => e.scrollWidth));
+  const cell = Math.max(22, Math.min(40, Math.floor((inner - lab - rcW - gap * 9) / 8)));
+  b.style.setProperty('--cell', cell + 'px'); b.style.setProperty('--lab', lab + 'px'); b.style.gap = gap + 'px';
+}
+function updateMiss() { $('miss').textContent = G.mode === 'song' ? '' : '실수 ' + G.misses; }
+function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 2200); }
+
+/* ---------- flow ---------- */
+function openStage(i) {
+  G.stage = i; G.mode = 'intro'; G.misses = 0; updateMiss(); stopLoop(); markPlayingBar(-1);
+  const st = STAGES[i]; $('stageLabel').textContent = `${i + 1}소절 · ${st.title}`; expr.base = 'idle';
+  setScene('big'); showPlayUI(false); $('act').innerHTML = ''; renderBars();
+  talk(st.intro, () => { G.mode = 'play'; setScene('small'); buildBoard(i); showPlayUI(true); $('hint').hidden = i > 0; say('같이 채워 보자! 지금 채운 음이 계속 반복해서 들릴 거야.', true, []); startLoop(); });
+}
+function playSong() {
+  G.mode = 'song'; G.songBar = 0; expr.base = 'happy'; setScene('big'); showPlayUI(false); $('boardWrap').hidden = false; $('stageLabel').textContent = '별빛 멜로디 · 전곡';
+  buildBoard(0, true); updateMiss(); renderBars(); say('처음부터 끝까지, 우리 노래야. 들어 줘!', false, [['멈추기', () => { stopLoop(); onSongEnd(); }, true]]); startLoop();
+}
+function onSongEnd() {
+  if (G.mode !== 'song') return; stopLoop(); markPlayingBar(-1); G.mode = 'ending';
+  talk(['고마워. 네 덕분에 노래를 되찾았어.', '주말 라이브, 맨 앞줄에 자리 맡아 둘게!'], () => say('언제든 다시 들으러 와!', true, [['다시 듣기', playSong], ['소절 고르기', () => openStage(P.unlocked), true]]), '다음 ▸');
+}
+function title() {
+  G.mode = 'title'; setScene('big'); showPlayUI(false); renderBars();
+  const anyDone = P.stars.some(s => s > 0);
+  say('와 줬구나! 나는 리아. 이번 주말 옥상 라이브에서 부를 곡이 있는데… 악보 복원을 도와줄래?', false,
+    anyDone ? [['이어 하기', () => openStage(P.unlocked)], ['처음부터', () => openStage(0), true]] : [['시작하기', () => openStage(0)]]);
+}
+
+$('toolFill').addEventListener('click', () => setTool('fill'));
+$('toolMark').addEventListener('click', () => setTool('mark'));
+function setTool(t) { G.tool = t; $('toolFill').setAttribute('aria-pressed', t === 'fill'); $('toolMark').setAttribute('aria-pressed', t === 'mark'); }
+$('playBtn').addEventListener('click', () => G.playing ? stopLoop() : startLoop());
+$('muteBtn').addEventListener('click', () => { G.muted = !G.muted; $('muteBtn').textContent = G.muted ? '소리 끔' : '소리 켬'; $('muteBtn').setAttribute('aria-pressed', G.muted); if (master) master.gain.value = G.muted ? 0 : 0.55; });
+document.addEventListener('visibilitychange', () => { if (document.hidden && G.playing && G.mode !== 'song') stopLoop(); });
+addEventListener('resize', () => { sizeHeroine(); fitBoard(); });
+
+function boot(data) { if (data && data.progress) Object.assign(P, data.progress); title(); sizeHeroine(); requestAnimationFrame(frame); }
+hc.addEventListener('transitionend', sizeSky);
+window.claude?.hot?.ready ? window.claude.hot.ready(boot) : boot(window.claude?.hot?.data ?? {});
+</script>
