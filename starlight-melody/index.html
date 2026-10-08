@@ -87,6 +87,9 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
 .cell.err::before { color: var(--err); }
 .cell.err { box-shadow: inset 0 0 0 2px var(--err); }
 .cell.pop { animation: pop .22s ease-out; }
+.cell.glow { z-index: 1; box-shadow: 0 0 0 3px var(--gold), 0 0 14px rgba(255, 212, 94, .75); animation: glow 1s ease-in-out infinite; }
+@keyframes glow { 50% { box-shadow: 0 0 0 3px var(--gold), 0 0 3px rgba(255, 212, 94, .2); } }
+.board .rc.focus, .board .cc.focus { color: var(--gold); opacity: 1; font-size: 15px; }
 @keyframes pop { 0% { transform: scale(.7); } 70% { transform: scale(1.12); } 100% { transform: scale(1); } }
 .board.locked { pointer-events: none; }
 
@@ -97,14 +100,26 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
 .sw { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
 .sw.fill { background: currentColor; }
 .sw.mark { font-family: var(--pixel); line-height: 12px; text-align: center; }
-.hint { font-size: 12px; color: var(--ink-dim); }
+.hint { font-size: 12px; color: var(--ink-dim); margin: 0; }
+.controls .icon-btn { padding: 9px 14px; font-size: 14px; }
+.controls .icon-btn.primary { background: var(--gold); color: #2b1b00; border-color: var(--gold); box-shadow: 0 3px 0 #b8892a; }
+.help { position: fixed; inset: 0; z-index: 6; background: rgba(8, 6, 26, .72); display: grid; place-items: center; padding: 16px; }
+.help-card { background: var(--night-2); border: 2px solid var(--ink); border-radius: 6px; box-shadow: 4px 4px 0 #0b0920; max-width: 380px; width: 100%; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.help-card h2 { margin: 0; font-family: var(--pixel); font-weight: 400; font-size: 18px; color: var(--pink); }
+.help-card ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; line-height: 1.5; font-size: 14px; }
+.help-card b { color: var(--gold); font-weight: 400; }
+.help-card .act { display: flex; justify-content: flex-end; }
+.ex { display: flex; align-items: center; gap: 3px; margin-top: 6px; }
+.ex .exc { font-family: var(--pixel); min-width: 34px; text-align: right; padding-right: 6px; }
+.ex i { width: 22px; height: 22px; border-radius: 3px; background: var(--slot); box-shadow: inset 0 0 0 1px var(--slot-line); }
+.ex i.f { background: var(--pink); box-shadow: inset 2px 2px 0 rgba(255,255,255,.45), inset -2px -2px 0 rgba(0,0,0,.25); }
 
 .toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 14px); transform: translate(-50%, -160%); visibility: hidden; background: var(--gold); color: #2b1b00; font-family: var(--pixel); padding: 8px 16px; border-radius: 6px; box-shadow: 0 4px 0 #b8892a; transition: transform .3s ease; z-index: 5; white-space: nowrap; }
 .toast.show { transform: translate(-50%, 0); visibility: visible; }
 
 [hidden] { display: none !important; }
 @media (max-width: 380px) { .board .rc, .board .cc { font-size: 12px; } .brand { letter-spacing: .06em; } }
-@media (prefers-reduced-motion: reduce) { #heroine, .scene, .toast { transition: none; } #heroine.bob { transform: none; } .cell.pop { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #heroine, .scene, .toast { transition: none; } #heroine.bob { transform: none; } .cell.pop, .cell.glow { animation: none; } }
 </style>
 
 <div id="app">
@@ -138,15 +153,28 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
   </section>
 
   <div class="controls" id="controls" hidden>
-    <div class="seg" role="group" aria-label="칸 누를 때 동작">
-      <button type="button" id="toolFill" aria-pressed="true"><span class="sw fill" style="color:var(--pink)"></span>음표 칠하기</button>
-      <button type="button" id="toolMark" aria-pressed="false"><span class="sw mark">×</span>빈칸 표시</button>
-    </div>
+    <button class="icon-btn primary" type="button" id="hintBtn">힌트</button>
+    <button class="icon-btn" type="button" id="helpBtn">푸는 방법</button>
     <button class="icon-btn" type="button" id="playBtn">⏸ 멈춤</button>
   </div>
-  <p class="hint" id="hint" hidden>칸을 누른 채로 끌면 한 줄을 이어서 칠할 수 있어요. 별이 있는 칸은 처음부터 알려 준 음이에요.</p>
+  <p class="hint" id="hint" hidden>칸을 누르면 음표가 칠해져요. 틀린 칸은 ×만 표시되니 부담 없이 눌러 보세요.</p>
 </div>
 <div class="toast" id="toast" role="status"></div>
+<div class="help" id="help" hidden role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div class="help-card">
+    <h2 id="helpTitle">푸는 방법</h2>
+    <ol>
+      <li>줄 옆의 숫자는 <b>이어서 칠할 칸 수</b>예요.
+        <div class="ex" aria-hidden="true"><span class="exc">2</span><i></i><i class="f"></i><i class="f"></i><i></i><i></i></div></li>
+      <li>숫자가 두 개 이상이면 <b>사이에 빈칸이 한 칸 이상</b> 있어요.
+        <div class="ex" aria-hidden="true"><span class="exc">1 2</span><i class="f"></i><i></i><i></i><i class="f"></i><i class="f"></i></div></li>
+      <li>왼쪽 숫자는 가로줄, 위쪽 숫자는 세로줄 이야기예요. 0이면 그 줄은 전부 빈칸이에요.</li>
+      <li>맞는 칸을 누르면 그 음이 울리고, 틀리면 ×가 표시돼요. 줄이 다 맞으면 남은 칸은 자동으로 ×가 돼요.</li>
+      <li>막히면 <b>힌트</b>를 누르세요. 맞는 칸 하나가 반짝여요.</li>
+    </ol>
+    <div class="act"><button type="button" id="helpClose">알겠어</button></div>
+  </div>
+</div>
 
 <script>
 // Procedural pixel-art portrait. drawHeroine(expr) -> {w, h, px: array of '#rrggbb' | null}
@@ -268,11 +296,35 @@ const STAGES = [
    "E2"
   ],
   "intro": [
-   "악보가 비에 젖어서 음표가 다 번져 버렸어. 별이 찍힌 칸은 내가 기억하는 음이야.",
-   "왼쪽 숫자는 그 가로줄에, 위쪽 숫자는 그 세로줄에 이어서 칠해진 칸 수야. '1 1'이면 떨어진 한 칸이 두 번!",
-   "맞는 칸을 누르면 소리가 나. 틀려도 괜찮으니까 차근차근 채워 줘!"
+   "악보가 비에 젖어서 음표가 번져 버렸어. 별이 찍힌 칸은 내가 기억하는 음이야.",
+   "나머지는 같이 하나씩 채워 보자. 내가 알려 줄게!"
   ],
-  "clear": "들려? 이게 첫 소절이야! 도, 미, 솔… 반짝반짝하지?"
+  "clear": "들려? 이게 첫 소절이야! 위쪽 숫자도 같은 규칙으로 세로줄을 알려 줘.",
+  "guide": [
+   {
+    "say": "왼쪽 숫자를 봐. 솔 줄의 '2'는 이어진 두 칸을 칠하라는 뜻이야. 반짝이는 두 칸을 눌러 봐!",
+    "row": "G",
+    "cells": [
+     "G4",
+     "G5"
+    ]
+   },
+   {
+    "say": "잘했어! 도 줄은 '1'이니까 딱 한 칸. 반짝이는 칸을 눌러 줘.",
+    "row": "C",
+    "cells": [
+     "C0"
+    ]
+   },
+   {
+    "say": "킥 줄의 '1 1'은 한 칸짜리가 떨어져서 두 번 있다는 뜻이야. 마지막 두 칸!",
+    "row": "K",
+    "cells": [
+     "K0",
+     "K4"
+    ]
+   }
+  ]
  },
  {
   "id": "s2",
@@ -304,8 +356,8 @@ const STAGES = [
    "S2"
   ],
   "intro": [
-   "두 번째 소절은 두근두근해지는 부분이야.",
-   "스네어가 들어와서 박자가 또렷해질 거야!"
+   "두 번째 소절은 두근두근해지는 부분이야. 스네어가 들어와서 박자가 또렷해져!",
+   "이번엔 혼자 해 볼래? 숫자가 큰 줄부터 보면 쉬워. 막히면 힌트를 눌러!"
   ],
   "clear": "좋아, 심장이 같이 뛰기 시작했어!"
  },
@@ -596,7 +648,7 @@ function buildBoard(i, solved) {
 }
 const div = cls => { const d = document.createElement('div'); if (cls) d.className = cls; return d; };
 const cellEl = (x, y) => $('board').querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
-function setCell(x, y, s) { G.cells[y][x] = s; const c = cellEl(x, y); c.classList.remove('on', 'x', 'err'); if (s) c.classList.add(s); if (s === 'on') { c.classList.remove('pop'); void c.offsetWidth; c.classList.add('pop'); } }
+function setCell(x, y, s) { G.cells[y][x] = s; const c = cellEl(x, y); c.classList.remove('on', 'x', 'err', 'glow'); if (s) c.classList.add(s); if (s === 'on') { c.classList.remove('pop'); void c.offsetWidth; c.classList.add('pop'); } }
 function checkLine(kind, i) {
   const st = STAGES[G.stage], H = st.lanes.length;
   const pts = kind === 'row' ? [...Array(W)].map((_, x) => [x, i]) : [...Array(H)].map((_, y) => [i, y]);
@@ -606,7 +658,8 @@ function checkLine(kind, i) {
 function act(x, y, action) {
   const st = STAGES[G.stage], s = G.cells[y][x];
   if (action === 'fill' && !s) {
-    if (st.sol[y][x]) { setCell(x, y, 'on'); if (ac) voice(st.lanes[y], ac.currentTime + 0.005, st, 0.9); if (MELODY.has(st.lanes[y])) { expr.sing = performance.now() + 220; spawnNote(LANES[st.lanes[y]].c); } checkLine('row', y); checkLine('col', x); checkClear(); return true; }
+    if (G.guide && !G.guide.steps[G.guide.i].cells.includes(st.lanes[y] + x)) { say('반짝이는 칸을 눌러 줘!', true); return false; }
+    if (st.sol[y][x]) { setCell(x, y, 'on'); if (ac) voice(st.lanes[y], ac.currentTime + 0.005, st, 0.9); if (MELODY.has(st.lanes[y])) { expr.sing = performance.now() + 220; spawnNote(LANES[st.lanes[y]].c); } checkLine('row', y); checkLine('col', x); guideProgress(); checkClear(); return true; }
     setCell(x, y, 'err'); G.misses++; updateMiss(); sfx('err'); expr.temp = 'oops'; expr.tempUntil = performance.now() + 1300; say(OOPS[G.misses % OOPS.length], true); return false;
   }
   if (action === 'mark' && !s) { setCell(x, y, 'x'); sfx('mark'); return true; }
@@ -617,7 +670,7 @@ let drag = null;
 $('board').addEventListener('pointerdown', e => {
   const c = e.target.closest('.cell'); if (!c || G.mode !== 'play') return; initAudio(); e.preventDefault();
   const x = +c.dataset.x, y = +c.dataset.y, s = G.cells[y][x];
-  const action = G.tool === 'fill' ? (s ? null : 'fill') : (s === 'x' ? 'unmark' : s ? null : 'mark'); if (!action) return;
+  const action = s ? null : 'fill'; if (!action) return;
   drag = { x0: x, y0: y, axis: null, action, seen: new Set([x + ',' + y]) };
   try { $('board').setPointerCapture(e.pointerId); } catch (_) {}
   if (!act(x, y, action)) drag = null;
@@ -685,7 +738,8 @@ function openStage(i) {
   G.stage = i; G.mode = 'intro'; G.misses = 0; updateMiss(); stopLoop(); markPlayingBar(-1);
   const st = STAGES[i]; $('stageLabel').textContent = `${i + 1}소절 · ${st.title}`; expr.base = 'idle';
   setScene('big'); showPlayUI(false); $('act').innerHTML = ''; renderBars();
-  talk(st.intro, () => { G.mode = 'play'; setScene('small'); buildBoard(i); showPlayUI(true); $('hint').hidden = i > 0; say('같이 채워 보자! 지금 채운 음이 계속 반복해서 들릴 거야.', true, []); startLoop(); });
+  G.guide = null; talk(st.intro, () => { G.mode = 'play'; setScene('small'); buildBoard(i); showPlayUI(true); startLoop();
+    if (st.guide && !P.stars[i]) { G.guide = { steps: st.guide, i: 0 }; applyGuide(); } else say('채운 음은 계속 반복해서 들려. 숫자가 큰 줄부터 찾아봐!', true, []); });
 }
 function playSong() {
   G.mode = 'song'; G.songBar = 0; expr.base = 'happy'; setScene('big'); showPlayUI(false); $('boardWrap').hidden = false; $('stageLabel').textContent = '별빛 멜로디 · 전곡';
@@ -702,9 +756,40 @@ function title() {
     anyDone ? [['이어 하기', () => openStage(P.unlocked)], ['처음부터', () => openStage(0), true]] : [['시작하기', () => openStage(0)]]);
 }
 
-$('toolFill').addEventListener('click', () => setTool('fill'));
-$('toolMark').addEventListener('click', () => setTool('mark'));
-function setTool(t) { G.tool = t; $('toolFill').setAttribute('aria-pressed', t === 'fill'); $('toolMark').setAttribute('aria-pressed', t === 'mark'); }
+$('hintBtn').addEventListener('click', hint);
+$('helpBtn').addEventListener('click', () => { $('help').hidden = false; $('helpClose').focus(); });
+$('helpClose').addEventListener('click', () => { $('help').hidden = true; $('helpBtn').focus(); });
+$('help').addEventListener('click', e => { if (e.target === $('help')) $('help').hidden = true; });
+addEventListener('keydown', e => { if (e.key === 'Escape') $('help').hidden = true; });
+
+/* ---------- tutorial & hints ---------- */
+function applyGuide() {
+  const st = STAGES[G.stage], step = G.guide.steps[G.guide.i];
+  document.querySelectorAll('.glow, .focus').forEach(e => e.classList.remove('glow', 'focus'));
+  step.cells.forEach(k => { const y = st.lanes.indexOf(k[0]), x = +k.slice(1); if (G.cells[y][x] !== 'on') cellEl(x, y).classList.add('glow'); });
+  $('board').querySelector(`.rc[data-row="${st.lanes.indexOf(step.row)}"]`).classList.add('focus');
+  say(step.say, false, []);
+}
+function guideProgress() {
+  if (!G.guide) return; const st = STAGES[G.stage], step = G.guide.steps[G.guide.i];
+  if (!step.cells.every(k => G.cells[st.lanes.indexOf(k[0])][+k.slice(1)] === 'on')) return;
+  G.guide.i++; document.querySelectorAll('.focus').forEach(e => e.classList.remove('focus'));
+  if (G.guide.i >= G.guide.steps.length) { G.guide = null; return; }
+  setTimeout(() => { if (G.guide && G.mode === 'play') applyGuide(); }, 350);
+}
+function hint() {
+  if (G.mode !== 'play') return; initAudio();
+  if (G.guide) { applyGuide(); return; }
+  const st = STAGES[G.stage], H = st.lanes.length; let best = null;
+  const left = pts => pts.filter(([x, y]) => st.sol[y][x] && G.cells[y][x] !== 'on').length;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (!st.sol[y][x] || G.cells[y][x] === 'on') continue;
+    const score = Math.min(left([...Array(W)].map((_, i) => [i, y])), left([...Array(H)].map((_, j) => [x, j]))) + Math.random() * 0.5;
+    if (!best || score < best.score) best = { x, y, score };
+  }
+  if (!best) return; document.querySelectorAll('.cell.glow').forEach(e => e.classList.remove('glow'));
+  cellEl(best.x, best.y).classList.add('glow'); say('여기 같아! 반짝이는 칸을 눌러 봐.', true);
+}
 $('playBtn').addEventListener('click', () => G.playing ? stopLoop() : startLoop());
 $('muteBtn').addEventListener('click', () => { G.muted = !G.muted; $('muteBtn').textContent = G.muted ? '소리 끔' : '소리 켬'; $('muteBtn').setAttribute('aria-pressed', G.muted); if (master) master.gain.value = G.muted ? 0 : 0.55; });
 document.addEventListener('visibilitychange', () => { if (document.hidden && G.playing && G.mode !== 'song') stopLoop(); });
