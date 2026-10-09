@@ -1387,7 +1387,7 @@ function inviteCall() {
     say('▼ 어떻게 할까?', true, [
       ['좋아, 가자!', () => {
         S.dated = S.week; tire(6); UI.bg = v.place; bgm('date');
-        scene('me', DATE_PLACES[v.place] || [`#주말, ${PLACE_NAME[v.place]}에 갔다.`], () => scene(h, v.yes, () => { like(h, 10); S.likedPlace = S.likedPlace || {}; S.likedPlace[h] = v.place; spend(); }));
+        scene('me', DATE_PLACES[v.place] || [`#주말, ${PLACE_NAME[v.place]}에 갔다.`], () => scene(h, v.yes, () => { like(h, 10); S.likedPlace = S.likedPlace || {}; S.likedPlace[h] = v.place; v.place === 'karaoke' ? karaokeJam(h, spend) : spend(); }));
       }, 'choice'],
       ['이번 주는 어려울 것 같아', () => scene(h, [v.no], () => { like(h, -2); hub(); }), 'choice']]);
   }));
@@ -1474,6 +1474,14 @@ function birthdayJam(h) { // candles first, then a birthday bar made on the spot
   }, '합주 ▸');
 }
 const b0 = h => BIRTHDAYS[h].thanks;
+function karaokeJam(h, done) {
+  const st = makeImprov(S.week < 25 ? 0 : 1); if (!st) return done();
+  scene('me', ['#반주기 대신, 내가 즉석에서 반주를 맞춰 주기로 했다.'], () => {
+    const mine = SONGS.find(x => x.id === SIM[h].song), sg = { id: 'karaoke', improv: true, title: '노래방 즉석 반주', bpm: 108, lead: mine ? mine.lead : 'piano', singer: h, ending: ['…앙코르!'], stages: [Object.assign(st, { id: 'karaoke1', title: '즉석 반주', clear: CAST[h].again })] };
+    const old = SONGS.findIndex(x => x.id === 'karaoke'); if (old >= 0) SONGS.splice(old, 1); SONGS.push(sg); P.songs.karaoke = { unlocked: 0, stars: [0] };
+    selectSong('karaoke'); UI.strip = true; G.after = stars => { like(h, stars === 3 ? 5 : 3); done(); }; openStage(0);
+  }, '반주 ▸');
+}
 function textMessage() { // at most one a week, from someone who likes you a little
   S.texted = S.texted || {};
   const h = HEROINES.find(k => S.met[k] && S.aff[k] >= 20 && (TEXTS[k] || []).some(t => t.week === S.week) && !S.texted[k + S.week]);
@@ -1697,7 +1705,7 @@ function date(h, p) {
   const D = SIM[h].date, tier = (SIM[h].likes && SIM[h].likes[p]) || 'ok', pool = (D && D[tier]) || SIM[h].small;
   if (tier === 'good') { S.likedPlace = S.likedPlace || {}; S.likedPlace[h] = p; }
   const here = SIM[h].places && SIM[h].places[p], extra = here ? [here[Math.floor(Math.random() * here.length)]] : [];
-  scene('me', DATE_PLACES[p] || [`#주말, ${PLACE_NAME[p]}에 갔다.`], () => scene(h, [pool[Math.floor(Math.random() * pool.length)]].concat(extra), () => { like(h, { good: 9, ok: 4, bad: 0 }[tier]); spend(); }));
+  scene('me', DATE_PLACES[p] || [`#주말, ${PLACE_NAME[p]}에 갔다.`], () => scene(h, [pool[Math.floor(Math.random() * pool.length)]].concat(extra), () => { like(h, { good: 9, ok: 4, bad: 0 }[tier]); p === 'karaoke' && tier !== 'bad' ? karaokeJam(h, spend) : spend(); }));
 }
 const LOVE_AT = 80;
 function finishSim(title, key, lines) {
