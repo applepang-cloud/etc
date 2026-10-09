@@ -2856,6 +2856,20 @@ function winterConcert() {
     playSong();
   }, '무대로 ▸');
 }
+function upcoming() { // the next fixed date within three weeks, for planning
+  for (let w = S.week + 1; w <= Math.min(WEEKS, S.week + 3); w++) {
+    const tag = w === FESTIVAL ? '학교 축제' : w === CONCERT ? '겨울 콘서트' : EVENTS[w] ? EVENTS[w].title : null;
+    const bd = HEROINES.find(h => S.met[h] && BIRTHDAYS[h] && BIRTHDAYS[h].week === w);
+    if (tag || bd) return `${w - S.week === 1 ? '다음 주' : (w - S.week) + '주 뒤'}: ${tag || CAST[bd].name + ' 생일'}`;
+  }
+  return '';
+}
+function profile(h) { // her card in the hub: who she is and how far you have come together
+  const sg = SONGS.find(x => x.id === SIM[h].song), sg2 = SIM[h].song2 && SONGS.find(x => x.id === SIM[h].song2), b = BIRTHDAYS[h];
+  const love = b && b.gifts.find(g => g[1] === 'good');
+  setChar(h); expr.base = 'idle'; UI.bg = PLACE_BG[h]; showHub(false); UI.strip = false;
+  say(`${CAST[h].name} · ${SIM[h].grade}\n만나는 곳: ${SIM[h].place}${b ? ` · 생일: ${b.date}` : ''}\n${love && S.bday && S.bday[h] ? `좋아하는 선물: ${love[0]}\n` : ''}${hearts(S.aff[h])} ${level(S.aff[h])} · 대화 ${S.talks[h]}/${SIM[h].talks.length}\n♪ ${sg.title} ${S.bars[h]}/5${sg2 ? ` · ${sg2.title} ${S.bars2[h]}/5` : ''}`, true, [['← 돌아가기', hub, true]]);
+}
 const BUMP = ['#복도 모퉁이에서 누군가와 부딪칠 뻔했다.', '#매점 앞 줄에서 아는 얼굴을 발견했다.', '#하굣길 버스 정류장에서 우연히 마주쳤다.', '#계단을 내려가는데 누가 내 이름을 불렀다.'];
 function encounter(h) { // a chance meeting: free, short, a little affection
   showHub(false); UI.strip = false; expr.base = 'idle'; UI.bg = null;
@@ -3237,7 +3251,8 @@ function drawHub(x, y, w, h) {
   box(x, y, w, h, 10, COL.night2, COL.line);
   const p = 12; let yy = y + p;
   txt(weekLabel(S.week), x + p, yy + 9, font(17, true), COL.gold);
-  txt(S.week < FESTIVAL ? `축제까지 ${FESTIVAL - S.week}주` : S.week === WEEKS ? '마지막 주!' : `종업식까지 ${WEEKS - S.week}주`, x + w - p, yy + 9, font(13), COL.dim, 'right');
+  const next = upcoming();
+  txt(next || (S.week < FESTIVAL ? `축제까지 ${FESTIVAL - S.week}주` : S.week === WEEKS ? '마지막 주!' : `종업식까지 ${WEEKS - S.week}주`), x + w - p, yy + 9, font(13), next ? COL.pink : COL.dim, 'right');
   yy += 24;
   const m = Math.floor((S.week - 1) / 4), pw = (w - 2 * p - 3 * 11) / 12;
   for (let i = 0; i < 12; i++) { box(x + p + i * (pw + 3), yy, pw, 6, 2, i < m ? COL.pink : i === m ? COL.gold : COL.slot); if (i === 7) box(x + p + i * (pw + 3) + pw / 2 - 2, yy - 4, 4, 4, 2, COL.gold); }
@@ -3258,7 +3273,9 @@ function drawHub(x, y, w, h) {
   const gh = Math.max(36, Math.min(52, Math.floor((y + h - p - yy - 12) / 3))), gw = (w - 2 * p - 8) / 2;
   HEROINES.forEach((hh, i) => {
     const gx = x + p + (i % 2) * (gw + 8), gy = yy + Math.floor(i / 2) * (gh + 6), met = S.met[hh], tsz = gh - 4;
-    box(gx, gy, gw, gh, 6, COL.slot);
+    const over = met && ptr && inside({ x: gx, y: gy, w: gw, h: gh }, ptr) && !kbd;
+    box(gx, gy, gw, gh, 6, over ? '#3b3484' : COL.slot);
+    if (met && UI.talk.actions.length >= 6) hit(gx, gy, gw, gh, () => { sfx('click'); profile(hh); }, { key: 'card:' + hh });
     cx.save(); rr(gx + 2, gy + 2, tsz, tsz, 4); cx.clip(); drawPix(thumb(hh, met), gx + 2 + tsz / 2, gy + 2 + tsz + (48 - tsz) / 2, 1); cx.restore();
     const tx = gx + tsz + 8, tw = gw - tsz - 12, ty = gy + gh / 2;
     if (met) {
