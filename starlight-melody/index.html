@@ -272,6 +272,7 @@ const SAMPLE_DATA = {"chip":{"kind":"sus","len":1.2,"base":72.01,"oct":0,"b64":"
 </script>
 <script>
 const SONGS = [
+ {"id": "etude", "title": "연습곡", "bpm": 100, "lead": "piano", "singer": "me", "etude": true, "ending": ["연습곡 열두 소절을 처음부터 끝까지 쳤다.", "…손가락이 조금 단단해진 것 같다."], "stages": [{"id": "e1", "title": "한 음씩", "root": 48, "pad": [60, 64, 67], "lanes": ["E", "C", "K"], "pattern": {"E": "....x.x.", "C": "x.......", "K": "x..x.x.."}, "givens": ["E4"], "intro": [], "clear": "좋아, 손가락이 기억했다."}, {"id": "e2", "title": "두 음 산책", "root": 45, "pad": [57, 60, 64], "lanes": ["G", "E", "K"], "pattern": {"G": ".x..x...", "E": "x.......", "K": "x...xx.."}, "givens": ["G1"], "intro": [], "clear": "좋아, 손가락이 기억했다."}, {"id": "e3", "title": "세 음 계단", "root": 41, "pad": [53, 57, 60], "lanes": ["A", "G", "E", "K"], "pattern": {"A": "xx......", "G": "..x.....", "E": ".....xx.", "K": "x...x..."}, "givens": ["G2", "E6"], "intro": [], "clear": "좋아, 손가락이 기억했다."}, {"id": "e4", "title": "스네어 등장", "root": 43, "pad": [55, 59, 62], "lanes": ["G", "E", "D", "S", "K"], "pattern": {"G": ".....xx.", "E": "....x..x", "D": "..xx....", "S": "..x..xx.", "K": "x..xx..."}, "givens": ["D2", "E7"], "intro": [], "clear": "좋아, 손가락이 기억했다."}, {"id": "e5", "title": "베이스 걸음", "root": 48, "pad": [60, 64, 67], "lanes": ["A", "E", "D", "B", "K"], "pattern": {"A": "......x.", "E": "....x...", "D": "x.......", "B": "x..x..x.", "K": "x...x..."}, "givens": ["A6", "B3"], "intro": [], "clear": "좋아, 손가락이 기억했다."}, {"id": "e6", "title": "여섯 줄", "root": 45, "pad": [57, 60, 64], "lanes": ["G", "E", "C", "B", "S", "K"], "pattern": {"G": "x.......", "E": ".x..x...", "C": "..xx.x.x", "B": "x..x..x.", "S": "..x...xx", "K": "x...xx.."}, "givens": ["E1", "E4"], "intro": [], "clear": "좋아, 손가락이 기억했다."}, {"id": "e7", "title": "하이햇 달리기", "root": 41, "pad": [53, 57, 60], "lanes": ["A", "G", "D", "C", "H", "K"], "pattern": {"A": "......x.", "G": "..x.xx..", "D": ".x......", "C": "x.......", "H": "x.x.x.x.", "K": "x..x.x.."}, "givens": ["D1", "A6"], "intro": [], "clear": "좋아, 손가락이 기억했다."}, {"id": "e8", "title": "되돌이표", "root": 43, "pad": [55, 59, 62], "lanes": ["A", "G", "E", "B", "S", "K"], "pattern": {"A": "..xxx..x", "G": ".x...xx.", "E": "x.......", "B": "x.x.x.x.", "S": "..x...xx", "K": "x..x.x.."}, "givens": ["G1", "S7"], "intro": [], "clear": "좋아, 손가락이 기억했다."}, {"id": "e9", "title": "일곱 줄", "root": 48, "pad": [60, 64, 67], "lanes": ["G", "E", "D", "C", "B", "H", "K"], "pattern": {"G": "xx......", "E": "..x.....", "D": ".....x..", "C": "......x.", "B": "x...x...", "H": "x.x.x.x.", "K": "x..xx..."}, "givens": ["D5", "E2"], "intro": [], "clear": "좋아, 손가락이 기억했다."}, {"id": "e10", "title": "코드 스탭", "root": 45, "pad": [57, 60, 64], "lanes": ["A", "G", "E", "D", "Q", "S", "K"], "pattern": {"A": "..x.....", "G": ".x.x....", "E": "....xx..", "D": "......xx", "Q": ".x..x..x", "S": "..x...xx", "K": "x...xx.."}, "givens": ["E5", "K0", "Q1"], "intro": [], "clear": "좋아, 손가락이 기억했다."}, {"id": "e11", "title": "다섯 음 전부", "root": 41, "pad": [53, 57, 60], "lanes": ["A", "G", "E", "D", "C", "B", "H", "S"], "pattern": {"A": "x.......", "G": ".x......", "E": "..x.....", "D": "...x....", "C": ".......x", "B": "x...x...", "H": "x.x.x.x.", "S": "..x...xx"}, "givens": ["D3", "S2", "G1", "E2"], "intro": [], "clear": "좋아, 손가락이 기억했다."}, {"id": "e12", "title": "마지막 연습", "root": 43, "pad": [55, 59, 62], "lanes": ["A", "G", "E", "D", "C", "B", "S", "K"], "pattern": {"A": ".....xxx", "G": "....x...", "E": "...x....", "D": ".x......", "C": "x.......", "B": "x.x.x.x.", "S": "..x..xx.", "K": "x..x.x.."}, "givens": ["G4", "E3"], "intro": [], "clear": "좋아, 손가락이 기억했다."}]},
  {
   "id": "lesson",
   "title": "풀이 연습",
@@ -1821,7 +1822,7 @@ const SONGS = [
   }
  }
 ];
-let SONG = SONGS[1], STAGES = SONG.stages;
+let SONG = SONGS.find(sg => sg.id === 'starlight'), STAGES = SONG.stages;
 const LANES = {
   A: { name: '라', c: '#ff8fc8', midi: 81 }, G: { name: '솔', c: '#ffb35c', midi: 79 }, E: { name: '미', c: '#ffe066', midi: 76 },
   D: { name: '레', c: '#7fe3ad', midi: 74 }, C: { name: '도', c: '#6ccbff', midi: 72 },
@@ -1851,7 +1852,7 @@ const CAST = {
   sena: { name: '세나', tag: '#f2c055', alt: '선글라스를 머리에 얹은 금발 웨이브 선배 세나',
     oops: ['후배님, 그 음은 아니야.', '음정 체크. 다시.', '실수도 B면의 매력이지만, 아니야.'], hint: '여기. 반짝이는 칸, 보이지?', glow: '반짝이는 칸부터 해 볼까.',
     start: '채운 음은 계속 루프돼. 큰 숫자부터 짚어 봐.', song: '처음부터 끝까지. 볼륨 올려.', again: '또 듣고 싶으면 방송실로 와.' },
-  me: { name: '나', tag: '#ffd45e', narrator: true, alt: '', oops: ['…틀렸다.'], hint: '여기다.', glow: '반짝이는 칸부터.', start: '', song: '', again: '' }
+  me: { name: '나', tag: '#ffd45e', narrator: true, alt: '', oops: ['…틀렸다.'], hint: '여기다.', glow: '반짝이는 칸부터.', start: '혼자 연습이다. 큰 숫자부터 차근차근 풀어 보자.', song: '처음부터 끝까지 쳐 보자.', again: '또 연습하러 오자.' }
 };
 const OOPS = () => CAST[G.char].oops;
 
@@ -1991,7 +1992,7 @@ const customStore = {
 customStore.load().forEach(sg => { if (sg && sg.id && Array.isArray(sg.stages)) SONGS.push(sg); });
 const P = migrate(saved);
 const prog = () => P.songs[SONG.id];
-function selectSong(id) { SONG = SONGS.find(sg => sg.id === id) || SONGS[1]; STAGES = SONG.stages; STEP = 60 / SONG.bpm / 2; G.lead = null; setChar(SONG.singer || 'ria'); P.last = SONG.id; persist(); }
+function selectSong(id) { SONG = SONGS.find(sg => sg.id === id) || SONGS.find(sg => sg.id === 'starlight'); STAGES = SONG.stages; STEP = 60 / SONG.bpm / 2; G.lead = null; setChar(SONG.singer || 'ria'); P.last = SONG.id; persist(); }
 const persist = () => store.save(P);
 window.claude?.hot?.snapshot?.(() => ({ progress: P }));
 
@@ -2453,7 +2454,7 @@ function freePlay(page = 0) {
   say(fresh ? '와 줬구나! 나는 리아. 이번 주말 옥상 라이브에서 부를 곡들 악보가 다 번져 버렸어. 처음이라면 풀이 연습으로 숫자 보는 법부터 알려 줄게!'
     : '어서 와! 오늘은 어떤 곡을 복원해 볼까?', false,
     SONGS.filter(sg => !sg.ai).slice(page * 6, page * 6 + 6).map(sg => { const st = P.songs[sg.id].stars, done = st.filter(Boolean).length;
-      return [`${sg.title}\n${sg.lesson ? '숫자 맞추는 요령' : CAST[sg.singer].name + ' · ' + LEADS[sg.lead]} · ${done}/${st.length}`, () => { selectSong(sg.id); openStage(done ? Math.min(P.songs[sg.id].unlocked, st.length - 1) : 0); }, sg.id !== (fresh ? 'lesson' : P.last)]; }).concat(pages > 1 ? [[`다른 곡 ▸\n${page + 1}/${pages}쪽`, () => freePlay((page + 1) % pages), true]] : [])
+      return [`${sg.title}\n${sg.lesson ? '숫자 맞추는 요령' : sg.etude ? '혼자 연습 · ' + LEADS[sg.lead] : CAST[sg.singer].name + ' · ' + LEADS[sg.lead]} · ${done}/${st.length}`, () => { selectSong(sg.id); openStage(done ? Math.min(P.songs[sg.id].unlocked, st.length - 1) : 0); }, sg.id !== (fresh ? 'lesson' : P.last)]; }).concat(pages > 1 ? [[`다른 곡 ▸\n${page + 1}/${pages}쪽`, () => freePlay((page + 1) % pages), true]] : [])
       .concat([['AI 뮤직맵 ✦\n노래 검색해서 맵 만들기', aiMenu], ['← 처음으로\n메인 메뉴', mainMenu, true]]));
 }
 
@@ -2796,7 +2797,18 @@ function endWeek() {
 const REST = ['#하루 푹 쉬었다. 몸이 가벼워졌다.', '#창가에 누워 좋아하는 음악만 들었다.', '#일찍 잠들었다. 꿈에서 누군가 노래하고 있었다.'];
 function rest() { showHub(true); tire(35); toast('컨디션 +35'); scene('me', [REST[Math.floor(Math.random() * REST.length)]], spend); }
 function practiceMenu() {
-  say('무엇을 연습할까?', true, Object.entries(STATS).map(([k, n]) => [`${n} 연습\n지금 ${S.stats[k]}`, () => practice(k)]).concat([back]));
+  say('무엇을 연습할까?', true, Object.entries(STATS).map(([k, n]) => [`${n} 연습\n지금 ${S.stats[k]}`, () => practice(k)])
+    .concat([[`연습곡 퍼즐\n연주·작곡 +1 (${Math.min(12, S.etude || 0)}/12)`, practicePuzzle], back]));
+}
+function practicePuzzle() { // a bar of the etude: solve it for play and comp, three stars adds sense
+  const n = SONGS.find(sg => sg.id === 'etude').stages.length, i = (S.etude || 0) < n ? S.etude || 0 : Math.floor(Math.random() * n);
+  showHub(false); selectSong('etude'); UI.strip = true; tire(-10);
+  G.after = stars => {
+    S.etude = Math.max(S.etude || 0, i + 1); S.stats.play = Math.min(10, S.stats.play + 1); S.stats.comp = Math.min(10, S.stats.comp + 1);
+    if (stars === 3) S.stats.sense = Math.min(10, S.stats.sense + 1);
+    toast(stars === 3 ? '연주·작곡·센스 +1' : '연주·작곡 +1'); scene('me', ['#연습곡 한 소절을 끝까지 쳤다. 손가락이 기억하기 시작했다.'], spend);
+  };
+  openStage(i);
 }
 function practice(k) {
   showHub(true); const weak = S.cond < 25, gain = weak ? 1 : 2; S.stats[k] = Math.min(10, S.stats[k] + gain); tire(-12); toast(`${STATS[k]} +${gain}`);
