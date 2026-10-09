@@ -61,7 +61,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   position: relative;
   flex: none;
   display: grid;
-  grid-template-columns: 44px 1fr 72px;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   height: 56px;
@@ -105,13 +105,13 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 }
 .hud-value {
   font-family: var(--font-display);
-  font-size: 26px;
+  font-size: clamp(20px, 6.4vw, 26px);
   line-height: 1;
   color: var(--gold);
   font-variant-numeric: tabular-nums;
 }
 
-.hud-right { display: flex; justify-content: flex-end; align-items: center; }
+.hud-right { display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
 
 /* 남은 시간 링: --p = 남은 비율 */
 .timer {
@@ -144,7 +144,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .timer[hidden] { display: none; }
 
 .hud-done {
-  padding: 9px 14px;
+  padding: 9px 12px;
   border: 0;
   border-radius: 10px;
   background: var(--gold);
@@ -158,29 +158,26 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .stage { position: relative; flex: 1; min-height: 0; }
 #board { position: absolute; inset: 0; display: block; touch-action: none; }
 
+/* 상단 HUD의 바로 연주 / 다음 버튼 (보드를 가리지 않게) */
 .flow-btn {
-  position: absolute;
-  right: 12px;
-  bottom: 120px;
-  z-index: 2;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px 10px 14px;
+  gap: 6px;
+  padding: 9px 12px 9px 11px;
   border: 0;
   border-radius: 999px;
   background: var(--gold);
   color: #2a2008;
   font-weight: 600;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
 }
 .flow-btn[hidden] { display: none; }
 .flow-btn .tri {
   width: 0;
   height: 0;
-  border-top: 6px solid transparent;
-  border-bottom: 6px solid transparent;
-  border-left: 9px solid currentColor;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 8px solid currentColor;
 }
 
 /* ---------- 공통 화면 ---------- */

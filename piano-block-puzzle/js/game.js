@@ -1637,7 +1637,9 @@ export class Game {
     }
 
     const aspect = this.part.cellH / this.cellW;
-    let sw = Math.min(this.cellW * 0.8, (this.slotW - 16) / 5);
+    // 지금 트레이에서 가장 넓은 블록이 칸에 들어가는 만큼 (모두 같은 비율)
+    const widest = Math.max(3, ...this.tray.map((p) => (p ? p.w : 0)));
+    let sw = Math.min(this.cellW * 0.85, (this.slotW - 14) / widest);
     let sh = sw * aspect;
     if (sh * 3 > trayH - 16) {
       sh = (trayH - 16) / 3;

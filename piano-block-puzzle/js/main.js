@@ -89,9 +89,6 @@ const game = new Game($('#board'), audio, {
       el.hudProgress.style.width = w;
     }
   },
-  layout({ trayTop, H }) {
-    el.flow.style.bottom = `${Math.round(H - trayTop + 12)}px`;
-  },
   end: showResult,
   listened() {
     if (lastStats) showResult(lastStats, true);
@@ -175,7 +172,7 @@ function startGame(song, mode) {
   el.menu.hidden = true;
   el.pause.hidden = true;
   el.result.hidden = true;
-  el.flowLabel.textContent = mode === 'free' ? '다음 페이지' : '바로 연주';
+  el.flowLabel.textContent = mode === 'free' ? '다음' : '연주';
   for (const k of Object.keys(shown)) delete shown[k];
   game.start(song, mode, { auto, hints: hintsOn });
 }
