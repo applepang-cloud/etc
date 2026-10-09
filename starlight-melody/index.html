@@ -2891,13 +2891,17 @@ function hub() {
   UI.stageLabel = `${weekLabel(S.week)} · ${S.week < FESTIVAL ? `축제 D-${FESTIVAL - S.week}주` : S.week === WEEKS ? '마지막 주' : `종업식 D-${WEEKS - S.week}주`}`;
   const anyMet = HEROINES.some(h => S.met[h]), dateOk = HEROINES.some(h => S.met[h] && S.aff[h] >= 30) && S.dated !== S.week;
   const prompt = S.cond < 25 ? '몸이 무겁다. 오늘은 좀 쉬는 게 좋겠다.' : S.ap === AP ? `${weekLabel(S.week)}. 이번 주엔 뭘 할까?` : `이번 주에 할 수 있는 일이 ${S.ap}번 남았다.`;
-  say(prompt, false, [
+  const step = COACH[S.coach || 0], coach = step && S.week <= 4 && (!step[1] || anyMet) && S.cond >= 25 ? step : null;
+  if (coach) S.coach = (S.coach || 0) + 1;
+  say(coach ? coach[2] : prompt, false, [
     ['연습하기\n연주·작곡·센스', practiceMenu], ['둘러보기\n새로운 만남', exploreMenu],
     ['만나러 가기\n대화하기', anyMet ? meetMenu : () => toast('아직 만난 사람이 없어요. 학교를 둘러보세요!'), anyMet ? false : true],
     ['합주하기\n퍼즐로 곡 완성', anyMet ? duetMenu : () => toast('먼저 함께할 보컬을 만나야 해요.'), anyMet ? false : true],
     ['주말 데이트\n' + (S.dated === S.week ? '이번 주는 약속했어' : '호감도 30부터'), dateOk ? dateMenu : () => toast(S.dated === S.week ? '데이트는 한 주에 한 번이에요.' : '호감도 30 이상인 사람이 있어야 해요.'), dateOk ? false : true],
     ['쉬기\n컨디션 회복', rest]]);
+  UI.coach = coach ? { key: coach[0], acts: UI.talk.actions } : null;
 }
+const COACH = [['talk:1', null, '먼저 둘러보기부터 해 보자. 학교 어딘가에서 노래하는 누군가를 만날지도 모른다.'], ['talk:2', 'met', '방금 만난 사람을 다시 만나러 가 보자. 이야기를 나눌수록 가까워진다.'], ['friend', null, '막히면 위쪽 민준 버튼. 한 주에 한 번, 행동을 쓰지 않고 소문을 들을 수 있다.']];
 const back = ['← 돌아가기', () => hub(), true];
 /* --- invitations: someone who likes you a lot phones to ask you out this weekend (once a season each) --- */
 const INVITES = typeof EXTRA_DATA !== 'undefined' && EXTRA_DATA.invites || {};
@@ -3391,6 +3395,7 @@ function render(now) {
   if (ctlH) { drawControls(PADX, y, CW, ctlH); y += ctlH + 4; }
   if (hintLines) hintLines.forEach((l, i) => txt(l, PADX + 2, y + 8 + i * 17, font(12), COL.dim));
   if (G.guide && G.mode === 'play' && UI.board && B.geom) drawSpotlight(now);
+  drawCoach(now);
   drawCard(now);
   drawPhone(now);
   drawToast(now);
@@ -3685,6 +3690,22 @@ function drawCell(px, py, c, s, lane, x, y, now) {
 
 const spotCv = document.createElement('canvas'), spx = spotCv.getContext('2d');
 // tutorial: dim everything but the line being explained, its cells and the talk box; a finger taps the next cell
+function drawCoach(now) { // hub coach marks: dim all but one control (and the talk box), a finger taps it
+  const C = UI.coach; if (!C || C.acts !== UI.talk.actions || G.mode !== 'sim' || UI.help) return;
+  const r = hits.find(h => h.key === C.key); if (!r) return;
+  const holes = [[r.x - 4, r.y - 4, r.w + 8, r.h + 8]], t0 = UI.talkRect;
+  const b0 = hits.find(h => h.key === 'talk:0'); if (t0 && b0) holes.push([t0.x - 4, t0.y - 4, t0.w + 10, b0.y - t0.y]); // the words, not the other buttons
+  if (spotCv.width !== cv.width || spotCv.height !== cv.height) { spotCv.width = cv.width; spotCv.height = cv.height; }
+  spx.setTransform(1, 0, 0, 1, 0, 0); spx.clearRect(0, 0, spotCv.width, spotCv.height); spx.fillStyle = 'rgba(8,6,26,.55)'; spx.fillRect(0, 0, spotCv.width, spotCv.height);
+  spx.setTransform(SX, 0, 0, SY, 0, 0); spx.globalCompositeOperation = 'destination-out'; spx.fillStyle = '#000';
+  holes.forEach(([x, y, w, h]) => { spx.beginPath(); spx.roundRect ? spx.roundRect(x, y, w, h, 8) : spx.rect(x, y, w, h); spx.fill(); });
+  spx.globalCompositeOperation = 'source-over';
+  cx.save(); cx.setTransform(1, 0, 0, 1, 0, 0); cx.drawImage(spotCv, 0, 0); cx.restore();
+  cx.save(); cx.setLineDash([5, 4]); box(holes[0][0], holes[0][1], holes[0][2], holes[0][3], 8, null, COL.gold, 2); cx.restore();
+  if (!FINGER.complete) return;
+  const cxp = r.x + r.w * 0.62, cyp = r.y + r.h * 0.6, t = (now % 900) / 900, push = reduceMotion ? 0 : t < .5 ? (1 - Math.cos(t * 2 * Math.PI)) * 5 : 0, sc = 1.1;
+  cx.save(); cx.imageSmoothingEnabled = false; cx.drawImage(FINGER, cxp + 3 + (10 - push) - FINGER_DATA.tip[0] * sc, cyp + 3 + (10 - push) - FINGER_DATA.tip[1] * sc, FINGER.width * sc, FINGER.height * sc); cx.restore();
+}
 function drawSpotlight(now) {
   const g = B.geom, sp = g.cell + g.gap, f = B.focus, holes = [];
   if (f && f.row !== undefined && f.row >= 0) holes.push([g.gx - 4, g.y0 + f.row * sp - 4, g.x0 + 8 * sp - g.gx + 6, g.cell + 8]);
