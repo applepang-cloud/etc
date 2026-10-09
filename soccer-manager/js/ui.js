@@ -2,7 +2,8 @@
  * 터치라인 매니저 — 화면
  *
  * 엔진(TL) 상태를 250ms마다 진행시키고 그린다. 매치데이 패널은 매 프레임
- * 값만 바꾸고, 탭 보드는 상태가 바뀌었을 때(rev)나 탭별 주기에 맞춰 다시 그린다.
+ * 값만 바꾸고, 탭 보드와 열린 창(선수 상세 등)은 상태가 바뀌었을 때(rev)나
+ * 탭별 주기에 맞춰 다시 그린다.
  */
 (function () {
   'use strict';
@@ -16,11 +17,11 @@
   const pct = (x) => Math.round(x * 100) + '%';
 
   const TABS = [
-    ['club', '구단'], ['squad', '선수단'], ['market', '이적시장'], ['facilities', '시설'],
-    ['league', '리그'], ['records', '기록'], ['settings', '설정'],
+    ['club', '구단'], ['squad', '선수단'], ['scout', '스카우트'], ['gear', '장비'], ['manager', '감독'],
+    ['facilities', '시설'], ['league', '리그'], ['records', '기록'], ['settings', '설정'],
   ];
   // 탭별 주기적 갱신 간격(ms). 0이면 상태가 바뀔 때만 다시 그린다.
-  const PERIODIC = { club: 2000, squad: 1500, market: 1500, facilities: 1500, league: 0, records: 0, settings: 0 };
+  const PERIODIC = { club: 2000, squad: 1500, scout: 1500, gear: 2000, manager: 2000, facilities: 1500, league: 0, records: 0, settings: 0 };
   const TAB_KEY = 'touchline-manager-tab';
 
   let S = null;
@@ -37,11 +38,15 @@
     bootSeen: 0,
     cloudReady: false,
     flash: null,
+    skillFlash: null,
     mom: 0,
     ball: { x: 50, y: 50 },
     jit: [],
     offline: null,
     modal: null,
+    modalRender: null,
+    modalRev: -1,
+    modalAt: 0,
     crestKey: '',
     draftName: null,
     timer: null,
@@ -58,8 +63,9 @@
     miss: '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="2 1.6"/></svg>',
     whistle: '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="5" cy="7" r="3.3" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M7.5 4.5L11 3v2.6L8.2 6" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>',
     order: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9.5L6 2l4 7.5z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>',
+    skill: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 .8l1.5 3.4 3.7.4-2.8 2.5.8 3.6L6 8.9 2.8 10.7l.8-3.6L.8 4.6l3.7-.4z" fill="var(--g-SSR)"/></svg>',
   };
-  const EV_ICON = { goal: ICON.goal, card: ICON.card, injury: ICON.injury, sub: ICON.sub, save: ICON.save, miss: ICON.miss, ko: ICON.whistle, ht: ICON.whistle, ft: ICON.whistle, order: ICON.order, info: ICON.order };
+  const EV_ICON = { goal: ICON.goal, card: ICON.card, injury: ICON.injury, sub: ICON.sub, save: ICON.save, miss: ICON.miss, ko: ICON.whistle, ht: ICON.whistle, ft: ICON.whistle, order: ICON.order, info: ICON.order, skill: ICON.skill };
   const CUP = '<svg viewBox="0 0 34 34" aria-hidden="true"><path class="cup" d="M9 4h16v6c0 5-3.4 8.6-8 8.6S9 15 9 10zM9 6H4.5c0 4.3 2 6.8 5.2 7.3M25 6h4.5c0 4.3-2 6.8-5.2 7.3M14.5 19h5l1 5h-7zM10.5 25h13v4h-13z" stroke-width="1.4"/></svg>';
 
   /* ---------------------------------------------------------------- 엠블럼 */
@@ -93,10 +99,6 @@
       `<text x="20" y="${s.length > 2 ? 27 : 28}" text-anchor="middle" font-size="${fs}" fill="${fg}" font-family="Black Han Sans, IBM Plex Sans KR, sans-serif">${esc(s)}</text></svg>`;
   }
   const kitDot = (kit) => `<span class="kit-dot" style="--k:${(TL.KITS[kit] || TL.KITS.red).l}"></span>`;
-  function teamCrest(id, size) {
-    const t = TL.teamById(S, id);
-    return crest(t.kit, t.name, t.short, size);
-  }
 
   function applyKit() {
     const k = TL.KITS[S.club.kit] || TL.KITS.red;
@@ -107,12 +109,27 @@
     st.setProperty('--on-club-d', k.onD);
   }
 
+  /* ----------------------------------------------------------- RPG 표시 */
+
+  const gradeBadge = (g) => `<span class="grade g-${g}">${TL.GRADES[g].name}</span>`;
+  function starsHTML(n) {
+    return `<span class="stars" aria-label="돌파 ${n}단계">${'★'.repeat(n)}<span class="stars-off">${'★'.repeat(TL.MAX_STAR - n)}</span></span>`;
+  }
+  const skillKind = { passive: '패시브', trigger: '발동', block: '방어' };
+  function xpBar(p) {
+    const cap = TL.levelCap(p.star);
+    const full = p.lv >= cap;
+    const w = full ? 100 : Math.min(100, Math.round(p.xp / TL.xpNeed(p.lv) * 100));
+    return `<span class="xpbar${full ? ' full' : ''}"><i style="width:${w}%"></i></span>`;
+  }
+  const itemLabel = (it) => `${esc(it.name)}${it.plus ? ` <b class="plus">+${it.plus}</b>` : ''}`;
+
   /* ---------------------------------------------------------------- 토스트 */
 
   function toast(text, kind) {
     const box = $('toasts');
     const el = document.createElement('div');
-    el.className = 'toast' + (kind ? ' ' + kind : '');
+    el.className = 'toast' + (kind ? ' t-' + kind : '');
     el.setAttribute('role', 'status');
     el.textContent = text;
     box.appendChild(el);
@@ -131,22 +148,23 @@
     }
     const tier = TL.TIERS[S.tier];
     const rounds = S.league.fixtures.length;
-    const roundTxt = S.phase === 'offseason' ? '비시즌' : `${Math.min(S.round + (S.phase === 'post' ? 0 : 1), rounds)}/${rounds}라운드`;
-    $('tb-meta').textContent = `${tier.name} ${tier.label} · 시즌 ${S.season} · ${roundTxt}`;
-    $('tb-money').textContent = M(S.money);
+    const roundTxt = S.phase === 'offseason' ? '비시즌' : `${Math.min(S.round + (S.phase === 'post' ? 0 : 1), rounds)}/${rounds}R`;
+    const fame = S.tier === 1 && S.prestige ? ` · 명성 ${S.prestige}` : '';
+    setText('tb-meta', `${tier.name}${fame} · ${TL.leaguePos(S)}위 · 시즌 ${S.season} · ${roundTxt} · 감독 Lv.${S.mgr.lv}`);
+    setText('tb-money', M(S.money));
     $('tb-money').classList.toggle('neg', S.money < 0);
     const eco = TL.roundEconomy(S);
     const rate = $('tb-rate');
-    rate.textContent = (eco.net >= 0 ? '+' : '') + M(eco.net) + '/R';
-    rate.classList.toggle('neg', eco.net < 0);
-    rate.title = '한 라운드(경기 1회) 기준 예상 손익';
-    $('tb-fans').textContent = N(S.fans);
-    $('tb-pos').textContent = TL.leaguePos(S) + '위';
+    setText('tb-rate', '+' + M(eco.total) + '/R');
+    rate.title = '한 라운드(경기 1회) 기준 예상 수입';
+    setText('tb-tickets', N(S.mat.tickets));
+    setText('tb-shards', N(S.mat.shards));
+    setText('tb-books', N(S.mat.books));
     for (const b of document.querySelectorAll('#speed .seg-b')) {
       const on = b.dataset.act === 'pause' ? S.paused : (!S.paused && Number(b.dataset.v) === S.speed);
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
-    $('btn-pause').textContent = S.paused ? '재개' : '정지';
+    setText('btn-pause', S.paused ? '재개' : '정지');
   }
 
   /* ---------------------------------------------------------------- 매치데이 */
@@ -167,14 +185,13 @@
       '<div class="led-score" aria-live="off"><span id="sb-hg">-</span><span class="led-colon">:</span><span id="sb-ag">-</span></div>' +
       '<div class="led-team"><span id="sb-ac"></span><span class="led-name" id="sb-an"></span><span class="led-ha">AWAY</span></div>' +
       '<div class="led-clock" id="sb-clock">--</div></div>' +
-      `<div class="pitch" id="pitch" role="img" aria-label="경기 진행 화면">${lines}<div id="dots"></div><span class="ball" id="ball"></span><div id="flash-slot"></div></div>` +
+      `<div class="pitch" id="pitch" role="img" aria-label="경기 진행 화면">${lines}<div id="dots"></div><span class="ball" id="ball"></span><div id="skill-slot"></div><div id="flash-slot"></div></div>` +
       '<div class="mom" aria-hidden="true"><span class="mom-name" id="mom-h"></span><div class="mom-track"><span class="mom-fill" id="mom-fill"></span></div><span class="mom-name" id="mom-a"></span></div>' +
       '<div class="orders" id="orders"></div>' +
       '<div id="md-body"></div>';
-    const dots = $('dots');
     let html = '';
     for (let i = 0; i < 22; i++) html += `<span class="dot" id="dot${i}"></span>`;
-    dots.innerHTML = html;
+    $('dots').innerHTML = html;
     for (let i = 0; i < 22; i++) ui.jit.push({ x: 0, y: 0 });
     ui.phaseKey = '';
   }
@@ -213,7 +230,6 @@
     const away = TL.teamById(S, pair.a);
     const speed = S.speed;
 
-    // 상태 줄
     let phase = '';
     let clock = '';
     const left = (t) => Math.max(0, Math.ceil((t - S.phaseT) / speed));
@@ -229,7 +245,6 @@
     const roundNo = S.phase === 'offseason' ? 1 : (L ? S.round + (S.phase === 'post' ? 0 : 1) : S.round + 1);
     setText('md-round', `${TL.TIERS[S.tier].name} ${S.phase === 'offseason' ? `시즌 ${S.season} 개막전` : roundNo + '라운드'}`);
 
-    // 전광판
     const key = pair.h + pair.a + S.club.kit + S.club.name;
     if (ui.sbKey !== key) {
       ui.sbKey = key;
@@ -250,7 +265,6 @@
     ui.mom += (targetMom - ui.mom) * 0.35;
     const homeSpots = dotSpots(myHome ? S.formation : '4-4-2');
     const awaySpots = dotSpots(myHome ? '4-4-2' : S.formation);
-    const myColor = 'var(--club)';
     const oppColor = oppDotColor(myHome ? away.kit : home.kit);
     const moving = S.phase === 'match' && !S.paused;
     const shift = ui.mom * 12;
@@ -268,9 +282,8 @@
       const y = clamp(spot.y + (spot.x > 6 ? j.y : 0), 5, 95);
       el.style.left = x.toFixed(1) + '%';
       el.style.top = y.toFixed(1) + '%';
-      el.style.setProperty('--c', (isHome === myHome) ? myColor : oppColor);
+      el.style.setProperty('--c', (isHome === myHome) ? 'var(--club)' : oppColor);
     }
-    const ball = $('ball');
     const flashOn = ui.flash && now < ui.flash.until;
     if (flashOn) {
       ui.ball.x = ui.flash.side === 'h' ? 99 : 1;
@@ -282,14 +295,20 @@
     } else if (S.phase !== 'post') {
       ui.ball.x = 50; ui.ball.y = 50;
     }
+    const ball = $('ball');
     ball.style.left = ui.ball.x.toFixed(1) + '%';
     ball.style.top = ui.ball.y.toFixed(1) + '%';
     const slot = $('flash-slot');
     if (flashOn && !slot.firstChild) {
       slot.innerHTML = `<div class="flash ${ui.flash.mine ? 'mine' : 'theirs'}">${ui.flash.mine ? 'GOAL!' : '실점'}</div>`;
     } else if (!flashOn && slot.firstChild) slot.innerHTML = '';
+    const sk = $('skill-slot');
+    const skOn = ui.skillFlash && now < ui.skillFlash.until;
+    if (skOn && sk.dataset.k !== String(ui.skillFlash.until)) {
+      sk.dataset.k = String(ui.skillFlash.until);
+      sk.innerHTML = `<div class="skill-flash"><b>${esc(ui.skillFlash.skill)}</b> ${esc(ui.skillFlash.name)}</div>`;
+    } else if (!skOn && sk.firstChild) { sk.innerHTML = ''; sk.dataset.k = ''; }
 
-    // 흐름 막대
     const fill = $('mom-fill');
     const m = ui.mom;
     fill.style.left = (m >= 0 ? 50 : 50 + m * 50) + '%';
@@ -303,19 +322,32 @@
   function renderOrders() {
     const L = S.live;
     const active = S.phase === 'match' && L && !L.done;
-    const left = L ? L.ordersLeft : TL.ORDERS_PER_MATCH;
+    const total = TL.ordersPerMatch(S);
+    const left = L ? L.ordersLeft : total;
     const cur = active && L.order ? L.order : null;
-    const key = [S.phase, left, cur ? cur.k + cur.until : '', active && L.minute >= 88, S.paused].join('|');
+    const key = [S.phase, left, total, cur ? cur.k + cur.until : '', active && L.minute >= 88, S.mgr.tal.chari].join('|');
     if (ui.orderKey === key) return;
     ui.orderKey = key;
     const note = cur ? `${TL.ORDERS[cur.k].name} 지시 중 · ${cur.until}'까지` : active ? '15분간 효과' : '경기 중에만 쓸 수 있어요';
+    const mult = 1 + 0.15 * (S.mgr.tal.chari || 0);
     const btns = Object.keys(TL.ORDERS).map((k) => {
       const o = TL.ORDERS[k];
-      const fx = `공${o.att > 0 ? '+' : ''}${o.att} 수${o.def > 0 ? '+' : ''}${o.def}`;
+      const a = Math.round(o.att * mult * 10) / 10, d = Math.round(o.def * mult * 10) / 10;
+      const fx = `공${a > 0 ? '+' : ''}${a} 수${d > 0 ? '+' : ''}${d}`;
       const dis = !active || left <= 0 || L.minute >= 88 || !!cur;
       return `<button type="button" class="btn order-b${cur && cur.k === k ? ' is-on' : ''}" data-act="order" data-k="${k}" data-key="order-${k}"${dis ? ' disabled' : ''}>${o.name}<small>${fx}</small></button>`;
     }).join('');
-    $('orders').innerHTML = `<div class="orders-head"><span>감독 지시 ${left}/${TL.ORDERS_PER_MATCH}</span><span>${note}</span></div><div class="orders-row">${btns}</div>`;
+    $('orders').innerHTML = `<div class="orders-head"><span>감독 지시 ${left}/${total}</span><span>${note}</span></div><div class="orders-row">${btns}</div>`;
+  }
+
+  function lootText(loot, levels) {
+    if (!loot) return '';
+    const parts = [];
+    if (loot.shards) parts.push(`돌파석 +${loot.shards}`);
+    if (loot.books) parts.push(`스킬북 +${loot.books}`);
+    if (loot.item) parts.push(`${gradeBadge(loot.item.grade)} ${esc(loot.item.name)}`);
+    if (levels) parts.push(`레벨업 ${levels}회`);
+    return parts.join(' · ');
   }
 
   function renderMdBody(now) {
@@ -334,9 +366,9 @@
         let foot = '';
         if (S.phase === 'post' && S.lastResult) {
           const r = S.lastResult;
-          foot = r.home
-            ? `<p class="md-note">관중 ${N(r.attendance)}명 · 입장 수입 ${M(r.gate)}</p>`
-            : '<p class="md-note">원정 경기라 입장 수입은 없습니다</p>';
+          const gate = r.home ? `관중 ${N(r.attendance)}명 · 입장 수입 ${M(r.gate)}` : '원정 경기';
+          const loot = lootText(r.loot, r.levels);
+          foot = `<p class="md-note">${gate}</p>${loot ? `<p class="md-note loot">전리품 ${loot}</p>` : ''}`;
         }
         body.innerHTML = `<ol class="ticker" aria-label="문자 중계">${items}</ol>${foot}`;
       }
@@ -354,37 +386,33 @@
       return;
     }
     // 경기 준비: 1초에 한 번만 다시 그린다
-    const key = 'pre' + S.season + '-' + S.round + S.formation + S.tactic;
+    const key = 'pre' + S.season + '-' + S.round + S.formation + S.tactic + S.rev;
     if (ui.phaseKey === key && now - (ui.mdAt || 0) < 1000) return;
     ui.phaseKey = key;
     ui.mdAt = now;
     const pv = TL.matchPreview(S);
     if (!pv) { body.innerHTML = ''; return; }
     const me = pv.me, opp = pv.opp;
-    const bar = (a, b) => {
+    const row = (k, a, b) => {
       const max = Math.max(a, b, 1);
-      return `<span class="cmp-bar l"><i style="width:${(a / max * 100).toFixed(0)}%"></i></span>`;
+      return `<div class="cmp-row"><span class="v">${a.toFixed(1)}</span><span class="cmp-bar l"><i style="width:${(a / max * 100).toFixed(0)}%"></i></span><span class="k">${k}</span><span class="cmp-bar r"><i style="width:${(b / max * 100).toFixed(0)}%"></i></span><span class="v">${b.toFixed(1)}</span></div>`;
     };
-    const barR = (a, b) => {
-      const max = Math.max(a, b, 1);
-      return `<span class="cmp-bar r"><i style="width:${(b / max * 100).toFixed(0)}%"></i></span>`;
-    };
-    const row = (k, a, b) => `<div class="cmp-row"><span class="v">${a.toFixed(1)}</span>${bar(a, b)}<span class="k">${k}</span>${barR(a, b)}<span class="v">${b.toFixed(1)}</span></div>`;
     const oppOvr = (opp.att + opp.def) / 2;
     const xi = TL.lineup(S).xi;
     const byPos = {};
     for (const x of xi) {
       const p = S.players.find((q) => q.id === x.id);
       if (!p) continue;
-      (byPos[x.pos] = byPos[x.pos] || []).push(`${esc(p.name)} <span class="muted">${Math.floor(p.ovr)}</span>`);
+      (byPos[x.pos] = byPos[x.pos] || []).push(`<button type="button" class="linkish g-t-${p.grade}" data-act="player" data-id="${p.id}">${esc(p.name)}</button> <span class="muted">${Math.floor(p.ovr)}</span>`);
     }
     const lines = TL.POSITIONS.filter((p) => byPos[p]).map((p) => `<div class="xi-line"><span class="pos-badge pos-${p}">${p}</span>${byPos[p].join(' · ')}</div>`).join('');
     const pr = pv.probs;
+    const skillTxt = me.skill.att || me.skill.def ? ` · 스킬 공+${me.skill.att.toFixed(1)} 수+${me.skill.def.toFixed(1)}` : '';
     body.innerHTML = `<div class="preview">` +
       `<div class="pv-opp">${crest(opp.kit, opp.name, opp.short, 30)}<div><h3>${pv.home ? '홈' : '원정'} vs ${esc(opp.name)}</h3><p>현재 ${pv.oppPos}위 · 킥오프까지 ${Math.max(0, Math.ceil((TL.T.pre - S.phaseT) / S.speed))}초</p></div></div>` +
       `<div class="cmp">${row('공격', me.att, opp.att)}${row('수비', me.def, opp.def)}${row('전력', me.ovr, oppOvr)}</div>` +
       `<div class="odds" aria-label="예상 승률"><span class="o-w" style="width:${pct(pr.w)}">승 ${pct(pr.w)}</span><span class="o-d" style="width:${pct(pr.d)}">무 ${pct(pr.d)}</span><span class="o-l" style="width:${pct(pr.l)}">패 ${pct(pr.l)}</span></div>` +
-      `<div class="xi-mini"><span class="muted">선발 XI · ${esc(S.formation)} ${esc(TL.TACTICS[S.tactic].name)}</span>${lines}</div></div>`;
+      `<div class="xi-mini"><span class="muted">선발 XI · ${esc(S.formation)} ${esc(TL.TACTICS[S.tactic].name)}${skillTxt}</span>${lines}</div></div>`;
   }
 
   function moveText(sm) {
@@ -408,7 +436,6 @@
 
   // 탭 버튼은 그대로 두고 배지만 바꾼다(키보드 포커스 유지)
   function updateTabBadges() {
-    const youth = S.youth.length;
     const affordable = TL.FAC_KEYS.some((k) => S.fac[k] < TL.FAC_MAX && TL.facilityCost(k, S.fac[k]) <= S.money);
     const set = (id, text, cls, title) => {
       const el = $('badge-' + id);
@@ -420,7 +447,9 @@
       el.textContent = text;
       el.title = title;
     };
-    set('market', youth ? String(youth) : null, 'tab-badge', '유스 콜업 대기');
+    const scoutN = S.mat.tickets + S.youth.length;
+    set('scout', scoutN ? String(scoutN) : null, 'tab-badge', '티켓·유스 대기');
+    set('manager', S.mgr.pts ? String(S.mgr.pts) : null, 'tab-badge', '남은 특성 포인트');
     set('facilities', affordable ? '' : null, 'tab-badge is-dot', '업그레이드 가능');
   }
 
@@ -433,7 +462,9 @@
     switch (ui.tab) {
       case 'club': html = renderClub(); break;
       case 'squad': html = renderSquad(); break;
-      case 'market': html = renderMarket(); break;
+      case 'scout': html = renderScout(); break;
+      case 'gear': html = renderGear(); break;
+      case 'manager': html = renderManager(); break;
       case 'facilities': html = renderFacilities(); break;
       case 'league': html = renderLeague(); break;
       case 'records': html = renderRecords(); break;
@@ -451,7 +482,7 @@
   function maybeRenderPanel(now) {
     if (now - ui.lastTabs > 1000) { updateTabBadges(); ui.lastTabs = now; }
     const active = document.activeElement;
-    const typing = active && $('panel').contains(active) && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+    const typing = active && $('panel').contains(active) && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT');
     if (typing) return;
     const per = PERIODIC[ui.tab];
     const expired = ui.confirm && now > ui.confirm.until;
@@ -476,35 +507,35 @@
     if (S.flags.welcome) {
       const name = ui.draftName != null ? ui.draftName : S.club.name;
       html += `<section class="card welcome"><h2>감독님, ${esc(S.club.name)}에 오신 걸 환영합니다</h2>` +
-        `<p>5부 리그에서 출발해 1부 리그 우승까지 가는 게 목표입니다. 경기는 자동으로 흘러가고, 감독님은 영입과 시설 투자, 전술을 맡습니다. 창을 닫아도 최대 2시간까지는 구단이 알아서 돌아갑니다.</p>` +
+        `<p>5부 리그에서 출발해 1부 리그 우승까지 가는 방치형 축구 RPG입니다. 경기는 자동으로 흘러가고, 선수들은 경기와 훈련으로 경험치를 쌓습니다. 골드로 레벨업하고, 스카우트로 높은 등급 선수를 뽑고, 경기에서 얻은 장비를 강화하세요. 창단 선물로 프리미엄 스카우트 티켓 3장을 드렸습니다.</p>` +
         `<form class="form-row" id="welcome-form"><label for="welcome-name">구단 이름</label><input class="input" id="welcome-name" maxlength="20" value="${esc(name)}" autocomplete="off">` +
         `<div class="swatches" role="group" aria-label="홈 유니폼 색">${swatches()}</div>` +
         `<button type="submit" class="btn btn-primary">이 이름으로 시작</button></form></section>`;
     }
     const objTxt = obj ? TL.objectiveLabel(obj, S.tier) : '-';
     html += `<div class="kpis">` +
-      `<div class="kpi"><span class="kpi-k">라운드당 예상 손익</span><span class="kpi-v ${eco.net >= 0 ? 'pos' : 'neg'}">${eco.net >= 0 ? '+' : ''}${M(eco.net)}</span><span class="kpi-s">수입 ${M(eco.total)} · 주급 ${M(eco.wages)}</span></div>` +
+      `<div class="kpi"><span class="kpi-k">라운드당 예상 수입</span><span class="kpi-v pos">+${M(eco.total)}</span><span class="kpi-s">팬 ${N(S.fans)}명 · 스폰서 ${M(eco.inc.sponsor)}</span></div>` +
       `<div class="kpi"><span class="kpi-k">홈 관중</span><span class="kpi-v">${N(att)}<span class="muted" style="font-size:.7em"> / ${N(cap)}</span></span><span class="kpi-s">${att >= cap ? '매진 행렬. 경기장을 넓힐 때입니다' : `빈자리 ${N(cap - att)}석`}</span></div>` +
       `<div class="kpi"><span class="kpi-k">구단주 목표</span><span class="kpi-v">${esc(objTxt)}</span><span class="kpi-s">현재 ${pos}위 · 달성 보상 ${obj ? M(obj.reward) : '-'}</span></div>` +
-      `<div class="kpi"><span class="kpi-k">선발 전력</span><span class="kpi-v">${xi.ovr.toFixed(1)}</span><span class="kpi-s">${esc(tier.name)} 평균 ${tier.ai}</span></div></div>`;
+      `<div class="kpi"><span class="kpi-k">선발 전력</span><span class="kpi-v">${xi.ovr.toFixed(1)}</span><span class="kpi-s">${esc(tier.name)} 평균 ${TL.tierAI(S, S.tier).toFixed(0)}</span></div></div>`;
 
     const cur = S.fin.cur;
     const ledger = (rows, sumLabel, sum) => `<dl class="ledger">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}<dt class="sum">${sumLabel}</dt><dd class="sum ${sum >= 0 ? 'pos' : 'neg'}">${sum >= 0 ? '+' : ''}${M(sum)}</dd></dl>`;
     const curIn = cur.gate + cur.tv + cur.sponsor + cur.merch + cur.bonus + cur.sales;
-    const curOut = cur.wages + cur.buys + cur.build;
-    html += `<section class="card"><div class="sec-h"><h2>재정</h2><p>홈 경기는 두 라운드에 한 번이라 입장 수입은 절반으로 잡았습니다</p></div><div class="fin-grid">` +
-      `<div class="fin-col"><h3>라운드당 예상</h3>${ledger([
-        ['입장 수입', M(eco.inc.gate)], ['중계권', M(eco.inc.tv)], ['스폰서', M(eco.inc.sponsor)], ['굿즈 판매', M(eco.inc.merch)], ['선수 주급', '−' + M(eco.wages)],
-      ], '순이익', eco.net)}</div>` +
+    const curOut = cur.growth + cur.scout + cur.gear + cur.build;
+    html += `<section class="card"><div class="sec-h"><h2>재정</h2><p>주급은 없습니다. 번 돈은 전부 선수 성장과 시설에 씁니다</p></div><div class="fin-grid">` +
+      `<div class="fin-col"><h3>라운드당 예상 수입</h3>${ledger([
+        ['입장 수입', M(eco.inc.gate)], ['중계권', M(eco.inc.tv)], ['스폰서', M(eco.inc.sponsor)], ['굿즈 판매', M(eco.inc.merch)],
+      ], '합계', eco.total)}</div>` +
       `<div class="fin-col"><h3>시즌 ${S.season} 누적</h3>${ledger([
-        ['운영 수입', M(cur.gate + cur.tv + cur.sponsor + cur.merch)], ['상금·보너스', M(cur.bonus)], ['선수 판매', M(cur.sales)],
-        ['주급', '−' + M(cur.wages)], ['영입·스카우트', '−' + M(cur.buys)], ['시설 투자', '−' + M(cur.build)],
+        ['운영 수입', M(cur.gate + cur.tv + cur.sponsor + cur.merch)], ['상금·보너스', M(cur.bonus)], ['방출·분해', M(cur.sales)],
+        ['선수 성장', '−' + M(cur.growth)], ['스카우트', '−' + M(cur.scout)], ['장비 강화', '−' + M(cur.gear)], ['시설 투자', '−' + M(cur.build)],
       ], '합계', curIn - curOut)}</div></div></section>`;
 
     const form = S.league.table.me.form;
     const lr = S.lastResult;
     html += `<section class="card"><div class="sec-h"><h2>최근 흐름</h2><p>${form.length ? '최근 5경기 ' + formChips(form) : '아직 치른 경기가 없습니다'}</p></div>` +
-      (lr ? `<p class="hint">지난 경기: ${lr.round}라운드 ${lr.home ? '홈' : '원정'} ${esc(lr.opp)}전 <b>${lr.gf}:${lr.ga}</b> ${lr.res === 'W' ? '승리' : lr.res === 'D' ? '무승부' : '패배'}</p>` : '<p class="hint">첫 경기가 곧 시작됩니다. 왼쪽 전광판에서 경기를 지켜보세요.</p>') +
+      (lr ? `<p class="hint">지난 경기: ${lr.round}라운드 ${lr.home ? '홈' : '원정'} ${esc(lr.opp)}전 <b>${lr.gf}:${lr.ga}</b> ${lr.res === 'W' ? '승리' : lr.res === 'D' ? '무승부' : '패배'}${lootText(lr.loot, lr.levels) ? ` · 전리품 ${lootText(lr.loot, lr.levels)}` : ''}</p>` : '<p class="hint">첫 경기가 곧 시작됩니다. 왼쪽 전광판에서 경기를 지켜보세요.</p>') +
       `</section>`;
 
     html += `<section class="card"><h2>구단 소식</h2><ul class="news">${S.news.slice(0, 14).map((n) => `<li><span class="when">S${n.s} ${n.r}R</span><span class="k-${n.k}">${esc(n.t)}</span></li>`).join('')}</ul></section>`;
@@ -523,7 +554,7 @@
   /* ----- 선수단 */
 
   function grade(ovr) {
-    const ai = TL.TIERS[S.tier].ai;
+    const ai = TL.tierAI(S, S.tier);
     if (ovr >= ai + 8) return 'g-elite';
     if (ovr >= ai + 3) return 'g-good';
     if (ovr >= ai - 3) return 'g-mid';
@@ -531,117 +562,264 @@
   }
   const fitClass = (f) => (f >= 85 ? 'f-good' : f >= 65 ? 'f-mid' : 'f-low');
 
+  function levelButton(p, cls) {
+    const cap = TL.levelCap(p.star);
+    if (p.lv >= cap) {
+      if (p.star >= TL.MAX_STAR) return `<button type="button" class="btn btn-sm" disabled>MAX</button>`;
+      return `<button type="button" class="btn btn-sm btn-star" data-act="player" data-id="${p.id}" data-key="star-${p.id}">돌파</button>`;
+    }
+    const c = TL.levelCost(S, p);
+    return `<button type="button" class="btn btn-sm ${cls || 'btn-primary'}" data-act="lvup" data-id="${p.id}" data-key="lvup-${p.id}"${S.money < c ? ` disabled title="${M(c - S.money)} 부족"` : ''}>Lv↑ ${M(c)}</button>`;
+  }
+
   function renderSquad() {
     const lu = TL.lineup(S);
     const xiIds = new Set(lu.xi.map((x) => x.id));
     const R = TL.teamRating(S, lu.xi);
-    const ai = TL.TIERS[S.tier].ai;
+    const ai = TL.tierAI(S, S.tier);
     const d = (v) => { const x = v - ai; return `<small class="${x >= 0 ? 'pos' : 'neg'}">${x >= 0 ? '+' : ''}${x.toFixed(1)}</small>`; };
     const forms = Object.keys(TL.FORMATIONS).map((f) => `<button type="button" class="seg-b" data-act="formation" data-f="${f}" data-key="f-${f}" aria-pressed="${S.formation === f}">${f}</button>`).join('');
     const tacs = Object.keys(TL.TACTICS).map((t) => `<button type="button" class="seg-b" data-act="tactic" data-t="${t}" data-key="t-${t}" aria-pressed="${S.tactic === t}">${TL.TACTICS[t].name}</button>`).join('');
-    const live = S.phase === 'match' && S.live && !S.live.done ? new Set(S.live.xi.map((x) => x.id)) : null;
-    const canSell = S.players.length > TL.SQUAD_MIN;
 
     let html = `<section class="card"><div class="ctl-grid">` +
       `<div class="ctl"><span class="ctl-k">포메이션</span><div class="seg" role="group" aria-label="포메이션">${forms}</div><p class="hint">${esc(TL.FORMATIONS[S.formation].desc)}</p></div>` +
       `<div class="ctl"><span class="ctl-k">전술</span><div class="seg" role="group" aria-label="전술">${tacs}</div><p class="hint">공격적일수록 골도 실점도 늘어납니다</p></div></div>` +
-      `<div class="ratings" style="margin-top:12px"><span>공격<b>${R.att.toFixed(1)}</b>${d(R.att)}</span><span>수비<b>${R.def.toFixed(1)}</b>${d(R.def)}</span><span>전력<b>${R.ovr.toFixed(1)}</b>${d(R.ovr)}</span><span class="muted" style="align-self:center">숫자 옆은 리그 평균(${ai}) 대비</span></div></section>`;
+      `<div class="ratings" style="margin-top:12px"><span>공격<b>${R.att.toFixed(1)}</b>${d(R.att)}</span><span>수비<b>${R.def.toFixed(1)}</b>${d(R.def)}</span><span>전력<b>${R.ovr.toFixed(1)}</b>${d(R.ovr)}</span><span class="muted" style="align-self:center">리그 평균(${ai.toFixed(0)}) 대비 · 스킬·특성 포함</span></div></section>`;
 
-    html += `<section class="card"><div class="sec-h"><h2>선수단 ${S.players.length}/${TL.SQUAD_MAX}</h2><p>선발 11명은 컨디션까지 따져 자동으로 고릅니다. 지친 선수는 휴식으로 빼 두세요. 판매가는 가치의 85% · 주급 합계 ${M(TL.squadWages(S))}</p></div><div class="plist">`;
-    html += `<div class="prow head"><span>#</span><span>선수</span><span style="text-align:center">OVR</span><span class="p-stats"><span>포지션</span><span>잠재</span><span>컨디션</span><span>시즌</span><span>주급 · 가치</span></span><span></span></div>`;
+    html += `<section class="card"><div class="sec-h"><div><h2>선수단 ${S.players.length}/${TL.SQUAD_MAX}</h2><p>선발 11명은 컨디션까지 따져 자동으로 고릅니다. 이름을 누르면 돌파·스킬·장비를 관리할 수 있어요</p></div>` +
+      `<button type="button" class="btn btn-primary" data-act="lvteam" data-key="lvteam">선발 일괄 레벨업</button></div><div class="plist">`;
+    html += `<div class="prow head"><span>#</span><span>선수</span><span style="text-align:center">OVR</span><span class="p-stats"><span>포지션</span><span>레벨</span><span>컨디션</span><span>스킬</span><span>시즌</span></span><span></span></div>`;
     for (const pos of TL.POSITIONS) {
       const ps = S.players.filter((p) => p.pos === pos).sort((a, b) => b.ovr - a.ovr);
       if (!ps.length) continue;
       html += `<h3 class="pgroup">${TL.POS_NAME[pos]} ${ps.length}</h3>`;
-      for (const p of ps) {
-        const tags = [];
-        if (xiIds.has(p.id)) tags.push('<span class="tag tag-xi">선발</span>');
-        if (p.youth) tags.push('<span class="tag tag-youth">유스</span>');
-        if (p.inj > 0) tags.push(`<span class="tag tag-inj">부상 ${p.inj}</span>`);
-        if (p.rest) tags.push('<span class="tag tag-rest">휴식</span>');
-        const o = Math.floor(p.ovr);
-        const prog = p.ovr >= p.pot ? 100 : Math.round((p.ovr - o) * 100);
-        const sell = TL.sellPrice(p);
-        const confirming = isConfirming('sell', p.id);
-        const playing = live && live.has(p.id);
-        const sellDis = !canSell || playing;
-        const sellTitle = playing ? '경기 중인 선수' : !canSell ? `최소 ${TL.SQUAD_MIN}명 필요` : '';
-        const fit = Math.round(p.fit);
-        html += `<div class="prow${xiIds.has(p.id) ? ' is-xi' : ''}${p.inj > 0 ? ' is-out' : ''}">` +
-          `<span class="p-num">${p.num}</span>` +
-          `<div class="p-main"><span class="p-name">${esc(p.name)}</span><span class="p-sub">${p.age}세 ${tags.join('')}</span></div>` +
-          `<span class="p-ovr ${grade(p.ovr)}" title="다음 능력치까지 ${prog}%">${o}<span class="prog"><i style="width:${prog}%"></i></span></span>` +
-          `<span class="p-stats"><span><span class="pos-badge pos-${p.pos}">${p.pos}</span></span>` +
-          `<span class="p-pot"><span class="lbl">잠재</span>${p.pot}</span>` +
-          `<span class="p-fit"><span class="bar"><i class="${fitClass(fit)}" style="width:${fit}%"></i></span><span>${fit}</span></span>` +
-          `<span class="p-season">${p.sApps}경기 ${p.sGoals}골</span>` +
-          `<span class="p-money"><span>${M(TL.playerWage(p))}/주</span><span class="muted">${M(TL.playerValue(p))}</span></span></span>` +
-          `<span class="p-act"><button type="button" class="btn btn-sm btn-ghost" data-act="rest" data-id="${p.id}" data-key="rest-${p.id}" aria-pressed="${p.rest}">${p.rest ? '복귀' : '휴식'}</button>` +
-          `<button type="button" class="btn btn-sm ${confirming ? 'btn-confirm' : ''}" data-act="sell" data-id="${p.id}" data-key="sell-${p.id}" title="${sellDis ? sellTitle : `판매가 ${M(sell)}`}"${sellDis ? ' disabled' : ''}>${confirming ? `확인 · ${M(sell)}` : '판매'}</button></span></div>`;
-      }
+      for (const p of ps) html += playerRow(p, xiIds.has(p.id));
     }
     html += '</div></section>';
     return html;
   }
 
-  /* ----- 이적시장 */
+  function playerRow(p, inXI) {
+    const tags = [];
+    if (inXI) tags.push('<span class="tag tag-xi">선발</span>');
+    if (p.youth) tags.push('<span class="tag tag-youth">유스</span>');
+    if (p.inj > 0) tags.push(`<span class="tag tag-inj">부상 ${p.inj}</span>`);
+    if (p.rest) tags.push('<span class="tag tag-rest">휴식</span>');
+    const fit = Math.round(p.fit);
+    const sk = TL.SKILLS[p.skill];
+    const cap = TL.levelCap(p.star);
+    return `<div class="prow${inXI ? ' is-xi' : ''}${p.inj > 0 ? ' is-out' : ''}">` +
+      `<span class="p-num">${p.num}</span>` +
+      `<div class="p-main"><button type="button" class="p-name linkish" data-act="player" data-id="${p.id}" data-key="pl-${p.id}">${esc(p.name)}</button>` +
+      `<span class="p-sub">${gradeBadge(p.grade)}${starsHTML(p.star)}${tags.join('')}</span></div>` +
+      `<span class="p-ovr ${grade(p.ovr)}">${Math.floor(p.ovr)}</span>` +
+      `<span class="p-stats"><span><span class="pos-badge pos-${p.pos}">${p.pos}</span></span>` +
+      `<span class="p-lv"><span>Lv.${p.lv}<span class="muted">/${cap}</span></span>${xpBar(p)}</span>` +
+      `<span class="p-fit"><span class="bar"><i class="${fitClass(fit)}" style="width:${fit}%"></i></span><span>${fit}</span></span>` +
+      `<span class="p-skill" title="${esc(sk.desc(p.slv))}">${esc(sk.name)} <span class="muted">Lv.${p.slv}</span></span>` +
+      `<span class="p-season">${p.sApps}경기 ${p.sGoals}골</span></span>` +
+      `<span class="p-act">${levelButton(p)}</span></div>`;
+  }
 
-  function renderMarket() {
-    const lu = TL.lineup(S);
-    const weak = {};
-    for (const x of lu.xi) {
-      const p = S.players.find((q) => q.id === x.id);
-      if (!p) continue;
-      weak[x.pos] = weak[x.pos] == null ? p.ovr : Math.min(weak[x.pos], p.ovr);
+  /* ----- 선수 상세 창 */
+
+  function openPlayer(id) {
+    const p = S.players.find((q) => q.id === id);
+    if (!p) return;
+    ui.modalPid = id;
+    openModal(() => playerModal(), 'player');
+  }
+
+  function playerModal() {
+    const p = S.players.find((q) => q.id === ui.modalPid);
+    if (!p) return `<h2 id="modal-title">선수를 찾을 수 없어요</h2><div class="modal-actions"><button type="button" class="btn" data-act="close">닫기</button></div>`;
+    const g = TL.GRADES[p.grade];
+    const sk = TL.SKILLS[p.skill];
+    const cap = TL.levelCap(p.star);
+    const gear = TL.gearBonus(S, p);
+    const lvB = g.growth * (p.lv - 1);
+    const starB = 2 * (p.star - 1);
+    const xiIds = new Set(TL.lineup(S).xi.map((x) => x.id));
+
+    // 레벨업 버튼: 1회, 10회, 최대
+    let lvHTML = '';
+    if (p.lv < cap) {
+      const c1 = TL.levelCost(S, p);
+      let sum = 0, n = 0, lv = p.lv;
+      const tmp = { lv: p.lv, grade: p.grade };
+      while (n < 10 && lv < cap) { tmp.lv = lv; sum += TL.levelCost(S, tmp); lv++; n++; }
+      lvHTML = `<div class="btn-row"><button type="button" class="btn btn-primary" data-act="lvup" data-id="${p.id}" data-key="m-lv1"${S.money < c1 ? ' disabled' : ''}>레벨업 ${M(c1)}</button>` +
+        `<button type="button" class="btn" data-act="lvup" data-n="10" data-id="${p.id}" data-key="m-lv10"${S.money < c1 ? ' disabled' : ''}>+${n} ${M(sum)}</button>` +
+        `<button type="button" class="btn" data-act="lvup" data-n="999" data-id="${p.id}" data-key="m-lvmax"${S.money < c1 ? ' disabled' : ''}>자금 되는 만큼</button></div>`;
+    } else {
+      lvHTML = `<p class="hint">${p.star >= TL.MAX_STAR ? '최고 레벨입니다.' : `레벨 상한 ${cap}에 닿았습니다. 돌파하면 상한이 ${TL.levelCap(p.star + 1)}로 오릅니다.`}</p>`;
     }
+
+    let starHTML = '';
+    const sc = TL.starCost(S, p);
+    if (sc) {
+      const ready = p.lv >= cap;
+      const can = ready && S.mat.shards >= sc.shards && S.money >= sc.money;
+      starHTML = `<p class="hint">★${p.star} → ★${p.star + 1}: OVR +2, 레벨 상한 ${cap} → ${TL.levelCap(p.star + 1)} · 돌파석 ${N(S.mat.shards)}/${sc.shards} · ${M(sc.money)}${ready ? '' : ` · Lv.${cap} 필요`}</p>` +
+        `<button type="button" class="btn btn-star" data-act="star" data-id="${p.id}" data-key="m-star"${can ? '' : ' disabled'}>돌파</button>`;
+    } else starHTML = '<p class="hint">최대 돌파 ★5</p>';
+
+    let skillHTML = '';
+    const kc = TL.skillCost(S, p);
+    skillHTML = `<p class="skill-desc"><b>${esc(sk.name)}</b> <span class="tag tag-rest">${skillKind[sk.kind]}</span> Lv.${p.slv}/${TL.MAX_SKILL}<br>${esc(sk.desc(p.slv))}</p>`;
+    if (kc) {
+      const can = S.mat.books >= kc.books && S.money >= kc.money;
+      skillHTML += `<p class="hint">다음 레벨: ${esc(sk.desc(p.slv + 1))} · 스킬북 ${N(S.mat.books)}/${kc.books} · ${M(kc.money)}</p>` +
+        `<button type="button" class="btn" data-act="skillup" data-id="${p.id}" data-key="m-skill"${can ? '' : ' disabled'}>스킬 강화</button>`;
+    }
+
+    const mine = TL.gearOf(S, p);
+    const gearHTML = TL.SLOT_KEYS.map((slot) => {
+      const it = mine[slot];
+      const cands = S.items.filter((i) => i.slot === slot && i.owner !== p.id)
+        .sort((a, b) => TL.itemBonus(b) - TL.itemBonus(a)).slice(0, 4);
+      const cur = it
+        ? `<div class="slot-cur">${gradeBadge(it.grade)} ${itemLabel(it)} <span class="muted">OVR +${TL.itemBonus(it).toFixed(2)}</span> <button type="button" class="btn btn-sm btn-ghost" data-act="unequip" data-item="${it.id}" data-key="m-un-${it.id}">해제</button></div>`
+        : '<div class="slot-cur muted">비어 있음</div>';
+      const list = cands.map((c) => {
+        const owner = c.owner != null ? S.players.find((q) => q.id === c.owner) : null;
+        return `<li>${gradeBadge(c.grade)}<span class="slot-txt">${itemLabel(c)} <span class="muted">+${TL.itemBonus(c).toFixed(2)}${owner ? ` · ${esc(owner.name)} 착용 중` : ''}</span></span><button type="button" class="btn btn-sm" data-act="equip" data-item="${c.id}" data-id="${p.id}" data-key="m-eq-${c.id}">장착</button></li>`;
+      }).join('');
+      return `<div class="slot"><h4>${TL.SLOTS[slot]}</h4>${cur}${list ? `<ul class="slot-list">${list}</ul>` : ''}</div>`;
+    }).join('');
+
+    const rv = TL.releaseValue(p);
+    const releasing = isConfirming('release-p', p.id);
+    const canRelease = S.players.length > TL.SQUAD_MIN;
+    return `<div class="pm-head"><div class="pm-ovr ${grade(p.ovr)}">${Math.floor(p.ovr)}<small>OVR</small></div>` +
+      `<div class="pm-id"><span class="pm-tags">${gradeBadge(p.grade)}${starsHTML(p.star)}<span class="pos-badge pos-${p.pos}">${p.pos}</span><span class="muted">#${p.num}</span>${xiIds.has(p.id) ? '<span class="tag tag-xi">선발</span>' : ''}</span>` +
+      `<h2 id="modal-title">${esc(p.name)}</h2>` +
+      `<p class="lead">기본 ${p.base.toFixed(1)} · 레벨 +${lvB.toFixed(1)} · 돌파 +${starB} · 장비 +${gear.toFixed(1)} · 통산 ${p.apps}경기 ${p.goals}골</p></div></div>` +
+      `<section class="pm-sec"><h3>레벨 <span class="muted">Lv.${p.lv}/${cap}</span></h3>${xpBar(p)}<p class="hint">경험치 ${p.lv >= cap ? 'MAX' : `${Math.floor(p.xp)}/${TL.xpNeed(p.lv)}`} · 레벨당 OVR +${g.growth} (${g.name})</p>${lvHTML}</section>` +
+      `<section class="pm-sec"><h3>돌파 ${starsHTML(p.star)}</h3>${starHTML}</section>` +
+      `<section class="pm-sec"><h3>스킬</h3>${skillHTML}</section>` +
+      `<section class="pm-sec"><h3>장비</h3><div class="slots">${gearHTML}</div></section>` +
+      `<div class="modal-actions"><button type="button" class="btn btn-ghost" data-act="rest" data-id="${p.id}" data-key="m-rest">${p.rest ? '선발 후보로 복귀' : '휴식 지정'}</button>` +
+      `<button type="button" class="btn ${releasing ? 'btn-confirm' : 'btn-ghost'}" data-act="release-p" data-id="${p.id}" data-key="m-release"${canRelease ? '' : ' disabled'}>${releasing ? `확인: 방출 (돌파석 +${rv.shards}${rv.money ? `, ${M(rv.money)}` : ''})` : '방출'}</button>` +
+      `<button type="button" class="btn btn-primary" data-act="close" data-key="m-close">닫기</button></div>`;
+  }
+
+  /* ----- 스카우트 */
+
+  function oddsBars(odds) {
+    return `<div class="odds-list">${TL.GRADE_KEYS.filter((g) => odds[g] > 0).map((g) => `<div class="odds-row">${gradeBadge(g)}<span class="odds-bar"><i class="gb-${g}" style="width:${Math.max(1.5, Math.min(100, odds[g]))}%"></i></span><span class="odds-n">${odds[g] >= 10 ? odds[g].toFixed(0) : odds[g].toFixed(2).replace(/0$/, '')}%</span></div>`).join('')}</div>`;
+  }
+
+  function renderScout() {
+    const g1 = TL.scoutPrice(S, 'gold', 1).money;
+    const g10 = TL.scoutPrice(S, 'gold', 10).money;
     const full = S.players.length >= TL.SQUAD_MAX;
-    const rc = TL.refreshCost(S);
-    let html = `<section class="card"><div class="sec-h"><div><h2>이적 시장</h2><p>${S.marketIn}라운드 뒤 새 명단 · 스카우트 Lv.${S.fac.scout} · 가용 자금 ${M(S.money)}</p></div>` +
-      `<button type="button" class="btn" data-act="refresh" data-key="refresh"${S.money < rc ? ' disabled' : ''}>새 명단 받기 ${M(rc)}</button></div>`;
-    if (!S.market.length) html += '<p class="hint">남은 매물이 없습니다. 다음 갱신을 기다리거나 새 명단을 받아 보세요.</p>';
-    else {
-      html += `<div class="plist"><div class="prow mk head"><span>포지션</span><span>선수</span><span style="text-align:center">OVR</span><span class="p-stats"><span>잠재(추정)</span><span>주전 대비</span><span>주급</span><span>이적료</span></span><span></span></div>`;
-      for (const m of S.market) {
-        const o = Math.floor(m.ovr);
-        const w = weak[m.pos];
-        const delta = w == null ? null : o - Math.floor(w);
-        const confirming = isConfirming('buy', m.id);
-        const short = S.money < m.price;
-        const dis = full || short;
-        const why = full ? '스쿼드가 가득 찼어요' : short ? `${M(m.price - S.money)} 부족` : '';
-        const potTxt = m.potLo === m.potHi ? `${m.potHi}` : `${m.potLo}~${m.potHi}`;
-        html += `<div class="prow mk">` +
-          `<span class="p-num"><span class="pos-badge pos-${m.pos}">${m.pos}</span></span>` +
-          `<div class="p-main"><span class="p-name">${esc(m.name)}</span><span class="p-sub">${m.age}세 ${m.gem ? '<span class="tag tag-gem">원더키드</span>' : ''}</span></div>` +
-          `<span class="p-ovr ${grade(m.ovr)}">${o}</span>` +
-          `<span class="p-stats"><span class="p-pot"><span class="lbl">잠재</span>${potTxt}</span>` +
-          `<span class="delta ${delta == null ? 'muted' : delta > 0 ? 'pos' : 'muted'}"><span class="lbl">주전 대비</span>${delta == null ? '—' : (delta > 0 ? '+' : '') + delta}</span>` +
-          `<span class="p-money">${M(TL.playerWage(m))}/주</span>` +
-          `<span class="p-money"><b>${M(m.price)}</b></span></span>` +
-          `<span class="p-act"><button type="button" class="btn btn-sm ${confirming ? 'btn-confirm' : 'btn-primary'}" data-act="buy" data-id="${m.id}" data-key="buy-${m.id}"${dis ? ` disabled title="${why}"` : ''}>${confirming ? `확인: ${M(m.price)} 지불` : '영입'}</button></span></div>`;
-      }
-      html += '</div>';
-    }
-    html += `<p class="hint" style="margin-top:10px">잠재력은 스카우트 추정치입니다. 스카우트 네트워크를 키우면 오차가 줄어듭니다.</p></section>`;
+    const lv = Math.min(TL.levelCap(1), TL.TIERS[S.tier].recruitLv);
+    let html = `<div class="scout-grid">` +
+      `<section class="card banner banner-gold"><div class="sec-h"><div><h2>일반 스카우트</h2><p>구단 자금으로 선수를 찾습니다. 리그가 오를수록 비싸집니다</p></div></div>${oddsBars(TL.scoutOdds(S, 'gold'))}` +
+      `<div class="btn-row"><button type="button" class="btn" data-act="scout" data-kind="gold" data-n="1" data-key="sc-g1"${S.money < g1 ? ' disabled' : ''}>1회 ${M(g1)}</button>` +
+      `<button type="button" class="btn btn-primary" data-act="scout" data-kind="gold" data-n="10" data-key="sc-g10"${S.money < g10 ? ' disabled' : ''}>10회 ${M(g10)}</button></div>` +
+      `<p class="hint">10회는 10% 할인, 희귀 이상 1명 보장</p></section>` +
+      `<section class="card banner banner-premium"><div class="sec-h"><div><h2>프리미엄 스카우트</h2><p>티켓으로 높은 등급을 노립니다. 보유 티켓 ${N(S.mat.tickets)}장</p></div></div>${oddsBars(TL.scoutOdds(S, 'premium'))}` +
+      `<div class="btn-row"><button type="button" class="btn" data-act="scout" data-kind="premium" data-n="1" data-key="sc-p1"${S.mat.tickets < 1 ? ' disabled' : ''}>1회 티켓 1장</button>` +
+      `<button type="button" class="btn btn-primary" data-act="scout" data-kind="premium" data-n="10" data-key="sc-p10"${S.mat.tickets < 10 ? ' disabled' : ''}>10회 티켓 10장</button></div>` +
+      `<p class="hint">10회는 영웅 이상 1명 보장. 티켓은 시즌 보상·업적·감독 레벨업으로 얻습니다</p></section></div>`;
+    html += `<p class="hint">새 선수는 Lv.${lv}로 합류합니다(현재 리그 기준). 스쿼드 ${S.players.length}/${TL.SQUAD_MAX}${full ? ' · 가득 차서 새로 뽑는 선수는 돌파석으로 바뀝니다' : ''}. 스카우트 네트워크 시설을 키우면 고등급 확률이 오릅니다.</p>`;
 
-    html += `<section class="card"><div class="sec-h"><h2>유스 아카데미</h2><p>시즌이 끝날 때마다 유망주가 올라옵니다. 1군 계약을 하지 않으면 다음 시즌 종료 때 떠납니다</p></div>`;
+    html += `<section class="card"><div class="sec-h"><h2>유스 아카데미</h2><p>시즌이 끝날 때마다 유망주가 올라옵니다. 계약하지 않으면 다음 시즌 종료 때 떠납니다</p></div>`;
     if (!S.youth.length) html += '<p class="hint">대기 중인 유망주가 없습니다. 첫 콜업은 시즌이 끝난 뒤입니다.</p>';
     else {
       html += '<div class="plist">';
-      for (const y of S.youth.slice().sort((a, b) => b.pot - a.pot)) {
-        const confirming = isConfirming('release', y.id);
+      for (const y of S.youth.slice().sort((a, b) => TL.GRADE_KEYS.indexOf(b.grade) - TL.GRADE_KEYS.indexOf(a.grade))) {
+        const confirming = isConfirming('release-y', y.id);
+        const sk = TL.SKILLS[y.skill];
         html += `<div class="prow mk">` +
           `<span class="p-num"><span class="pos-badge pos-${y.pos}">${y.pos}</span></span>` +
-          `<div class="p-main"><span class="p-name">${esc(y.name)}</span><span class="p-sub">${y.age}세 <span class="tag tag-youth">유스</span>${y.pot >= 80 ? '<span class="tag tag-gem">특급</span>' : ''}</span></div>` +
+          `<div class="p-main"><span class="p-name">${esc(y.name)}</span><span class="p-sub">${gradeBadge(y.grade)}<span class="tag tag-youth">유스</span></span></div>` +
           `<span class="p-ovr ${grade(y.ovr)}">${Math.floor(y.ovr)}</span>` +
-          `<span class="p-stats"><span class="p-pot"><span class="lbl">잠재</span>${y.pot}</span><span class="muted">S${y.until}까지</span>` +
-          `<span class="p-money">${M(TL.playerWage(y))}/주</span><span class="p-money muted">무료</span></span>` +
+          `<span class="p-stats"><span class="p-skill">${esc(sk.name)}</span><span class="muted">Lv.1</span>` +
+          `<span class="muted">S${y.until}까지</span><span class="p-money muted">무료</span></span>` +
           `<span class="p-act"><button type="button" class="btn btn-sm btn-primary" data-act="promote" data-id="${y.id}" data-key="promote-${y.id}"${full ? ' disabled title="스쿼드가 가득 찼어요"' : ''}>1군 계약</button>` +
-          `<button type="button" class="btn btn-sm ${confirming ? 'btn-confirm' : 'btn-ghost'}" data-act="release" data-id="${y.id}" data-key="release-${y.id}">${confirming ? '확인: 방출' : '방출'}</button></span></div>`;
+          `<button type="button" class="btn btn-sm ${confirming ? 'btn-confirm' : 'btn-ghost'}" data-act="release-y" data-id="${y.id}" data-key="ry-${y.id}">${confirming ? `확인: 방출 (돌파석 +${TL.GRADES[y.grade].shards})` : '방출'}</button></span></div>`;
       }
       html += '</div>';
     }
     html += '</section>';
+    return html;
+  }
+
+  function scoutModal(r) {
+    const best = r.results.reduce((b, x) => (TL.GRADE_KEYS.indexOf(x.player.grade) > TL.GRADE_KEYS.indexOf(b.player.grade) ? x : b), r.results[0]);
+    const big = TL.GRADE_KEYS.indexOf(best.player.grade) >= 3;
+    const cards = r.results.map((x, i) => {
+      const p = x.player;
+      const sk = TL.SKILLS[p.skill];
+      return `<div class="pull pull-${p.grade}" style="--i:${i}"><span class="pull-grade">${gradeBadge(p.grade)}</span>` +
+        `<b class="pull-ovr">${Math.floor(p.ovr)}</b><span class="pull-name">${esc(p.name)}</span>` +
+        `<span class="pull-meta"><span class="pos-badge pos-${p.pos}">${p.pos}</span> ${esc(sk.name)}</span>` +
+        (x.kept ? '' : `<span class="pull-conv">돌파석 +${x.shards}</span>`) + `</div>`;
+    }).join('');
+    openModal(() => `<h2 id="modal-title">${big ? `${TL.GRADES[best.player.grade].name} 등급 ${esc(best.player.name)} 영입!` : '스카우트 결과'}</h2>` +
+      `<div class="pull-grid${r.results.length === 1 ? ' single' : ''}">${cards}</div>` +
+      `<div class="modal-actions"><button type="button" class="btn" data-act="tab" data-tab="squad">선수단 보기</button><button type="button" class="btn btn-primary" data-act="close" data-autofocus>확인</button></div>`, 'scout', true);
+  }
+
+  /* ----- 장비 */
+
+  function renderGear() {
+    const xiIds = new Set(TL.lineup(S).xi.map((x) => x.id));
+    const items = S.items.slice().sort((a, b) => (b.owner != null) - (a.owner != null) || TL.itemBonus(b) - TL.itemBonus(a));
+    const players = S.players.slice().sort((a, b) => (xiIds.has(b.id) - xiIds.has(a.id)) || b.ovr - a.ovr);
+    let html = `<section class="card"><div class="sec-h"><div><h2>장비 ${S.items.length}/${TL.INVENTORY_MAX}</h2><p>경기에서 이기면 장비가 떨어집니다(승 40%, 무 18%, 패 6%). 가방이 가득 차면 새 장비는 자동으로 분해됩니다</p></div>` +
+      `<div class="btn-row"><button type="button" class="btn btn-primary" data-act="autoequip" data-key="autoequip">자동 장착</button>` +
+      `<button type="button" class="btn" data-act="dismantle-below" data-g="N" data-key="dis-n">일반 일괄 분해</button>` +
+      `<button type="button" class="btn" data-act="dismantle-below" data-g="R" data-key="dis-r">희귀 이하 일괄 분해</button></div></div>`;
+    if (!items.length) {
+      html += '<p class="hint">아직 장비가 없습니다. 경기에서 이기면 축구화와 보호구를 얻습니다.</p></section>';
+      return html;
+    }
+    html += '<div class="item-grid">';
+    for (const it of items) {
+      const owner = it.owner != null ? S.players.find((q) => q.id === it.owner) : null;
+      const max = it.plus >= TL.MAX_PLUS;
+      const ec = max ? 0 : TL.enhanceCost(it);
+      const dis = isConfirming('dismantle', it.id);
+      const opts = ['<option value="">미장착</option>'].concat(players.map((p) => `<option value="${p.id}"${owner && owner.id === p.id ? ' selected' : ''}>${xiIds.has(p.id) ? '★ ' : ''}${esc(p.name)} (${p.pos} ${Math.floor(p.ovr)})</option>`)).join('');
+      html += `<article class="item item-${it.grade}">` +
+        `<header>${gradeBadge(it.grade)}<span class="muted">${TL.SLOTS[it.slot]}</span><b class="item-bonus">OVR +${TL.itemBonus(it).toFixed(2)}</b></header>` +
+        `<h3>${itemLabel(it)}</h3>` +
+        `<label class="sr-only" for="eq-${it.id}">${esc(it.name)} 장착 선수</label><select class="input select" id="eq-${it.id}" data-equip="${it.id}">${opts}</select>` +
+        `<div class="btn-row"><button type="button" class="btn btn-sm btn-primary" data-act="enhance" data-item="${it.id}" data-key="en-${it.id}"${max || S.money < ec ? ' disabled' : ''}>${max ? '최대 강화' : `강화 +${it.plus + 1} ${M(ec)}`}</button>` +
+        `<button type="button" class="btn btn-sm ${dis ? 'btn-confirm' : 'btn-ghost'}" data-act="dismantle" data-item="${it.id}" data-key="dis-${it.id}">${dis ? `확인 +${M(TL.dismantleValue(it))}` : '분해'}</button></div></article>`;
+    }
+    html += '</div></section>';
+    return html;
+  }
+
+  /* ----- 감독 */
+
+  function renderManager() {
+    const g = S.mgr;
+    const need = TL.mgrXpNeed(g.lv);
+    const w = Math.min(100, Math.round(g.xp / need * 100));
+    const spent = TL.TALENT_KEYS.reduce((n, k) => n + (g.tal[k] || 0), 0);
+    const resetting = isConfirming('respec', 0);
+    let html = `<section class="card mgr-card"><div class="mgr-head"><div class="mgr-badge"><small>LV</small>${g.lv}</div>` +
+      `<div class="mgr-id"><h2>${esc(TL.mgrTitle(g.lv))}</h2><p class="hint">${esc(S.club.name)} 감독 · 특성 포인트 <b>${g.pts}</b></p>` +
+      `<span class="xpbar"><i style="width:${w}%"></i></span><p class="hint">경험치 ${Math.floor(g.xp)}/${need}</p></div></div>` +
+      `<p class="hint">경기 승리 40 · 무승부 20 · 패배 10 경험치(상위 리그일수록 더 많이), 시즌을 마치면 보너스를 받습니다. 레벨마다 특성 포인트 1개, 5레벨마다 프리미엄 티켓 1장.</p></section>`;
+    html += `<section class="card"><div class="sec-h"><h2>특성</h2><p>투자 ${spent}포인트</p></div><div class="tal-grid">`;
+    for (const k of TL.TALENT_KEYS) {
+      const t = TL.TALENTS[k];
+      const n = g.tal[k] || 0;
+      const max = n >= t.max;
+      const pips = Array.from({ length: t.max }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('');
+      html += `<article class="tal"><header><h3>${t.name}</h3><span class="lv">${n}/${t.max}</span></header>` +
+        `<div class="pips" style="grid-template-columns:repeat(${t.max},1fr)" aria-hidden="true">${pips}</div>` +
+        `<p class="fac-eff"><span>현재 <b>${n ? esc(t.desc(n)) : '효과 없음'}</b></span>${max ? '<span class="muted">최대</span>' : `<span class="muted">다음 ${esc(t.desc(n + 1))}</span>`}</p>` +
+        `<button type="button" class="btn btn-primary btn-sm" data-act="talent" data-k="${k}" data-key="tal-${k}"${max || g.pts <= 0 ? ' disabled' : ''}>+1 투자</button></article>`;
+    }
+    html += `</div><div class="btn-row" style="margin-top:12px"><button type="button" class="btn ${resetting ? 'btn-confirm' : ''}" data-act="respec" data-key="respec"${spent ? '' : ' disabled'}>${resetting ? `확인: ${M(TL.respecCost(S))} 내고 초기화` : `특성 초기화 ${M(TL.respecCost(S))}`}</button></div></section>`;
     return html;
   }
 
@@ -676,8 +854,9 @@
     const tier = TL.TIERS[S.tier];
     const rows = TL.standings(S);
     const up = S.tier > 1, down = S.tier < 5;
-    let html = `<section class="card"><div class="sec-h"><h2>${tier.name} ${tier.label} · 시즌 ${S.season}</h2><div class="zone-key">` +
-      (up ? '<span style="--c:var(--win)">1~2위 승격</span>' : '<span style="--c:var(--gold)">1위 우승</span>') +
+    const fame = S.tier === 1 ? ` · 명성 Lv.${S.prestige || 0}` : '';
+    let html = `<section class="card"><div class="sec-h"><h2>${tier.name} ${tier.label} · 시즌 ${S.season}${fame}</h2><div class="zone-key">` +
+      (up ? '<span style="--c:var(--win)">1~2위 승격</span>' : '<span style="--c:var(--gold)">1위 우승 · 명성 +1</span>') +
       (down ? '<span style="--c:var(--loss)">7~8위 강등</span>' : '') + '</div></div>' +
       `<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="l">#</th><th class="l">팀</th><th>경기</th><th>승</th><th>무</th><th>패</th><th>득실</th><th>승점</th><th class="l">최근</th></tr></thead><tbody>`;
     rows.forEach((r, i) => {
@@ -685,7 +864,9 @@
       html += `<tr class="${r.me ? 'me' : ''}"><td class="l ${zone}">${i + 1}</td><td class="l"><span class="team-cell">${kitDot(r.kit)}${esc(r.name)}</span></td>` +
         `<td>${r.p}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gd > 0 ? '+' : ''}${r.gd}</td><td><b>${r.pts}</b></td><td class="l">${r.form.length ? formChips(r.form) : '<span class="muted">-</span>'}</td></tr>`;
     });
-    html += '</tbody></table></div></section>';
+    html += '</tbody></table></div>';
+    if (S.tier === 1) html += `<p class="hint" style="margin-top:10px">1부 리그에서 우승할 때마다 명성이 1 올라 상대 전력이 +2.5 강해지고 수입이 20%씩 늘어납니다.</p>`;
+    html += '</section>';
 
     html += `<section class="card"><h2>우리 일정</h2><div class="sched">`;
     S.league.fixtures.forEach((round, i) => {
@@ -731,7 +912,9 @@
       `<div><dt>경기</dt><dd>${played}</dd></div><div><dt>승 · 무 · 패</dt><dd>${st.w} · ${st.d} · ${st.l}</dd></div>` +
       `<div><dt>승률</dt><dd>${played ? pct(st.w / played) : '-'}</dd></div><div><dt>득점 · 실점</dt><dd>${st.gf} · ${st.ga}</dd></div>` +
       `<div><dt>승격</dt><dd>${st.promotions}회</dd></div><div><dt>최다 점수차 승리</dt><dd>${best}</dd></div>` +
-      `<div><dt>최고 도달 리그</dt><dd>${TL.TIERS[S.bestTier].name}</dd></div><div><dt>플레이 시간(게임)</dt><dd>${fmtDur(S.time)}</dd></div></dl></section>`;
+      `<div><dt>최고 도달 리그</dt><dd>${TL.TIERS[S.bestTier].name}</dd></div><div><dt>명성</dt><dd>Lv.${S.prestige || 0}</dd></div>` +
+      `<div><dt>스카우트</dt><dd>${N(st.scouted || 0)}회</dd></div><div><dt>스킬 발동</dt><dd>${N(st.skills || 0)}회</dd></div>` +
+      `<div><dt>최고 등급 영입</dt><dd>${TL.GRADES[st.bestGrade || 'N'].name}</dd></div><div><dt>플레이 시간(게임)</dt><dd>${fmtDur(S.time)}</dd></div></dl></section>`;
 
     html += `<section class="card"><h2>시즌별 기록</h2>`;
     if (!S.history.length) html += '<p class="hint">첫 시즌이 끝나면 여기에 기록이 쌓입니다.</p>';
@@ -749,7 +932,10 @@
     html += `<section class="card"><div class="sec-h"><h2>업적</h2><p>${done}/${TL.ACHIEVEMENTS.length} 달성</p></div><div class="ach-grid">`;
     for (const a of TL.ACHIEVEMENTS) {
       const got = S.ach[a.id];
-      html += `<div class="ach${got ? ' done' : ''}"><b>${a.name}</b><span>${a.desc}${a.reward ? ` · ${M(a.reward)}` : ''}</span>${got ? `<span>시즌 ${got.season} 달성</span>` : ''}</div>`;
+      const rw = [];
+      if (a.reward) rw.push(M(a.reward));
+      if (a.tickets) rw.push(`티켓 ${a.tickets}`);
+      html += `<div class="ach${got ? ' done' : ''}"><b>${a.name}</b><span>${a.desc}${rw.length ? ` · ${rw.join(', ')}` : ''}</span>${got ? `<span>시즌 ${got.season} 달성</span>` : ''}</div>`;
     }
     html += '</div></section>';
     return html;
@@ -778,20 +964,44 @@
 
   /* ---------------------------------------------------------------- 모달 */
 
-  function openModal(html, kind) {
+  // render: HTML을 돌려주는 함수. 열려 있는 동안 상태가 바뀌면 다시 그린다(static이면 한 번만).
+  function openModal(render, kind, isStatic) {
     const wrap = $('modal');
+    if (!ui.modal) ui.modalReturn = document.activeElement;
     ui.modal = kind;
-    ui.modalReturn = document.activeElement;
-    wrap.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">${html}</div>`;
+    ui.modalRender = render;
+    ui.modalStatic = !!isStatic;
+    wrap.innerHTML = `<div class="modal${kind === 'player' ? ' wide' : ''}" role="dialog" aria-modal="true" aria-labelledby="modal-title">${render()}</div>`;
     wrap.hidden = false;
-    const first = wrap.querySelector('[data-autofocus]') || wrap.querySelector('button');
+    ui.modalRev = S.rev;
+    ui.modalAt = Date.now();
+    const first = wrap.querySelector('[data-autofocus]') || wrap.querySelector('button:not([disabled])');
     if (first) first.focus();
+  }
+  function refreshModal(force) {
+    if (!ui.modal || ui.modalStatic || !ui.modalRender) return;
+    const now = Date.now();
+    if (!force && S.rev === ui.modalRev && now - ui.modalAt < 1500) return;
+    const box = $('modal').querySelector('.modal');
+    if (!box) return;
+    const active = document.activeElement;
+    const focusKey = active && box.contains(active) ? active.getAttribute('data-key') : null;
+    const scroll = box.scrollTop;
+    box.innerHTML = ui.modalRender();
+    box.scrollTop = scroll;
+    if (focusKey) {
+      const el = box.querySelector(`[data-key="${focusKey}"]`);
+      if (el) el.focus({ preventScroll: true });
+    }
+    ui.modalRev = S.rev;
+    ui.modalAt = now;
   }
   function closeModal() {
     const wrap = $('modal');
     wrap.hidden = true;
     wrap.innerHTML = '';
     ui.modal = null;
+    ui.modalRender = null;
     if (ui.modalReturn && document.contains(ui.modalReturn)) ui.modalReturn.focus({ preventScroll: true });
   }
 
@@ -801,31 +1011,33 @@
     money.push(`리그 상금 ${M(sm.prize)}`);
     if (sm.promoBonus) money.push(`승격 보너스 ${M(sm.promoBonus)}`);
     if (sm.objective) money.push(sm.objective.ok ? `구단주 목표(${esc(sm.objective.label)}) 달성 ${M(sm.objective.reward)}` : `구단주 목표(${esc(sm.objective.label)}) 실패`);
+    const rw = sm.reward ? `시즌 보상: 티켓 ${sm.reward.tickets}장 · 돌파석 ${sm.reward.shards}개 · 스킬북 ${sm.reward.books}권` : '';
     const extra = [];
     if (sm.top) extra.push(`팀 득점왕 ${esc(sm.top.name)} ${sm.top.goals}골`);
-    if (sm.retired.length) extra.push(`은퇴: ${sm.retired.map(esc).join(', ')}`);
     if (sm.youth) extra.push(`유스 유망주 ${sm.youth}명 콜업 대기`);
-    const next = sm.move < 0 ? `다음 시즌은 ${TL.TIERS[sm.tier - 1].name}에서 뜁니다.` : sm.move > 0 ? `다음 시즌은 ${TL.TIERS[sm.tier + 1].name}에서 다시 올라가야 합니다.` : `다음 시즌도 ${esc(sm.tierName)}입니다.`;
-    openModal(`<h2 id="modal-title">시즌 ${sm.season} 종료</h2>` +
+    const next = sm.champion && sm.tier === 1 ? `명성이 올라 다음 시즌 1부 리그 상대들이 더 강해집니다.`
+      : sm.move < 0 ? `다음 시즌은 ${TL.TIERS[sm.tier - 1].name}에서 뜁니다.` : sm.move > 0 ? `다음 시즌은 ${TL.TIERS[sm.tier + 1].name}에서 다시 올라가야 합니다.` : `다음 시즌도 ${esc(sm.tierName)}입니다.`;
+    openModal(() => `<h2 id="modal-title">시즌 ${sm.season} 종료</h2>` +
       `<div class="big-result"><span class="season-pos">${sm.pos}위</span><div><b>${esc(moveText(sm))}</b><p class="lead">${esc(sm.tierName)} · ${sm.w}승 ${sm.d}무 ${sm.l}패 · 득점 ${sm.gf} 실점 ${sm.ga} · 승점 ${sm.pts}</p></div></div>` +
-      `<p class="lead">${money.join(' · ')}</p>` +
+      `<p class="lead">${money.join(' · ')}</p>` + (rw ? `<p class="lead"><b>${rw}</b></p>` : '') +
       (extra.length ? `<p class="lead">${extra.join(' · ')}</p>` : '') +
       `<table class="mini-table">${rows}</table><p class="lead">${next}</p>` +
-      `<div class="modal-actions"><button type="button" class="btn" data-act="close">닫기</button><button type="button" class="btn btn-primary" data-act="skip" data-autofocus>새 시즌 시작</button></div>`, 'season');
+      `<div class="modal-actions"><button type="button" class="btn" data-act="close">닫기</button><button type="button" class="btn btn-primary" data-act="skip" data-autofocus>새 시즌 시작</button></div>`, 'season', true);
   }
 
   function offlineModal(r) {
     const played = r.w + r.d + r.l;
     const parts = [];
     parts.push(`<p class="lead">자리를 비운 ${fmtDur(r.realSeconds)} 동안 구단이 ${fmtDur(r.gameSec)}만큼 움직였습니다${r.capped ? ' (최대 2시간까지만 인정)' : ''}.</p>`);
-    parts.push(`<dl class="stat-list"><div><dt>경기</dt><dd>${played}경기 · ${r.w}승 ${r.d}무 ${r.l}패</dd></div><div><dt>득실</dt><dd>${r.gf} : ${r.ga}</dd></div>` +
-      `<div><dt>자금 변화</dt><dd class="${r.money >= 0 ? 'pos' : 'neg'}">${r.money >= 0 ? '+' : ''}${M(r.money)}</dd></div><div><dt>팬 변화</dt><dd>${r.fans >= 0 ? '+' : ''}${N(r.fans)}</dd></div></dl>`);
+    parts.push(`<dl class="stat-list"><div><dt>경기</dt><dd>${played}경기 · ${r.w}승 ${r.d}무 ${r.l}패</dd></div><div><dt>자금</dt><dd class="pos">+${M(r.money)}</dd></div>` +
+      `<div><dt>선수 레벨업</dt><dd>${r.levels}회</dd></div><div><dt>장비 획득</dt><dd>${r.items}개</dd></div>` +
+      `<div><dt>티켓</dt><dd>+${r.tickets}</dd></div><div><dt>돌파석 · 스킬북</dt><dd>+${r.shards} · +${r.books}</dd></div></dl>`);
     for (const sm of r.seasons) parts.push(`<p class="lead">시즌 ${sm.season} ${esc(sm.tierName)} ${sm.pos}위 · ${esc(moveText(sm))}</p>`);
-    if (r.held) parts.push('<p class="lead">시즌이 끝나 새 시즌 개막은 감독님을 기다리고 있습니다. 비시즌 동안 영입과 유스 계약을 정리해 두세요.</p>');
+    if (r.held) parts.push('<p class="lead">시즌이 끝나 새 시즌 개막은 감독님을 기다리고 있습니다. 비시즌 동안 선수들을 키우고 스카우트를 돌려 두세요.</p>');
     if (r.achievements.length) parts.push(`<p class="lead">업적: ${r.achievements.map((a) => esc(a.name)).join(', ')}</p>`);
     ui.offlineSeason = r.seasons.length ? r.seasons[r.seasons.length - 1] : null;
     const more = ui.offlineSeason ? '<button type="button" class="btn" data-act="season-report">시즌 결과 보기</button>' : '';
-    openModal(`<h2 id="modal-title">다시 오셨군요, 감독님</h2>${parts.join('')}<div class="modal-actions">${more}<button type="button" class="btn btn-primary" data-act="close" data-autofocus>계속하기</button></div>`, 'offline');
+    openModal(() => `<h2 id="modal-title">다시 오셨군요, 감독님</h2>${parts.join('')}<div class="modal-actions">${more}<button type="button" class="btn btn-primary" data-act="close" data-autofocus>계속하기</button></div>`, 'offline', true);
   }
 
   function fmtDur(sec) {
@@ -841,16 +1053,24 @@
 
   function handleEvents(events, quiet) {
     for (const e of events) {
-      if (e.kind === 'goal' && !quiet) {
+      if (quiet) continue;
+      if (e.kind === 'goal') {
         ui.flash = { mine: e.mine, side: S.live ? (e.mine === S.live.home ? 'h' : 'a') : 'h', until: Date.now() + 1800 };
         if (e.mine) toast(`${e.minute}' 골! ${e.scorer}`, 'goal');
-      } else if (e.kind === 'achievement' && !quiet) {
-        toast(`업적 달성: ${e.name}${e.reward ? ' +' + M(e.reward) : ''}`, 'ach');
-      } else if (e.kind === 'injury' && !quiet) {
+      } else if (e.kind === 'skill') {
+        ui.skillFlash = { skill: e.skill, name: e.name, until: Date.now() + 1600 };
+      } else if (e.kind === 'achievement') {
+        const rw = [];
+        if (e.reward) rw.push(M(e.reward));
+        if (e.tickets) rw.push(`티켓 ${e.tickets}`);
+        toast(`업적 달성: ${e.name}${rw.length ? ' +' + rw.join(', ') : ''}`, 'ach');
+      } else if (e.kind === 'mgrLevel') {
+        toast(`감독 레벨 ${e.lv}! 특성 포인트 +1`, 'ach');
+      } else if (e.kind === 'loot' && !e.auto && TL.GRADE_KEYS.indexOf(e.item.grade) >= 2) {
+        toast(`장비 획득: ${TL.GRADES[e.item.grade].name} ${e.item.name}`, 'ach');
+      } else if (e.kind === 'injury') {
         toast(`${e.name} 부상 (${e.rounds}경기)`, 'err');
-      } else if (e.kind === 'market' && !quiet) {
-        toast('이적 시장에 새 매물이 올라왔어요');
-      } else if (e.kind === 'seasonEnd' && !quiet) {
+      } else if (e.kind === 'seasonEnd') {
         seasonModal(e.summary);
         save(true);
       }
@@ -862,7 +1082,7 @@
     const o = ui.offline;
     if (!o) ui.offline = r;
     else {
-      for (const k of ['realSeconds', 'gameSec', 'money', 'fans', 'w', 'd', 'l', 'gf', 'ga']) o[k] += r[k];
+      for (const k of ['realSeconds', 'gameSec', 'money', 'fans', 'w', 'd', 'l', 'gf', 'ga', 'levels', 'tickets', 'shards', 'books', 'items']) o[k] += r[k];
       o.capped = o.capped || r.capped;
       o.held = r.held;
       o.seasons = o.seasons.concat(r.seasons);
@@ -873,7 +1093,7 @@
     const r = ui.offline;
     if (!r || document.visibilityState === 'hidden') return;
     ui.offline = null;
-    if (r.realSeconds >= 60 && (r.w + r.d + r.l > 0 || r.seasons.length)) offlineModal(r);
+    if (r.realSeconds >= 60 && (r.w + r.d + r.l > 0 || r.seasons.length || r.levels > 0)) offlineModal(r);
     S.rev++;
   }
 
@@ -891,6 +1111,7 @@
       ui.confirm = { kind, id: String(id), until: Date.now() + 4000 };
     }
     renderPanel();
+    refreshModal(true);
   }
 
   function setTab(id) {
@@ -905,18 +1126,37 @@
 
   function act(name, d) {
     const id = Number(d.id);
+    const item = Number(d.item);
     switch (name) {
-      case 'tab': setTab(d.tab); return;
+      case 'tab': setTab(d.tab); if (ui.modal) closeModal(); return;
       case 'pause': TL.setPaused(S, !S.paused); renderTop(); return;
       case 'speed': TL.setSpeed(S, Number(d.v)); renderTop(); return;
       case 'order': result(TL.issueOrder(S, d.k)); ui.orderKey = ''; ui.evCount = -1; break;
-      case 'buy': confirmThen('buy', id, () => result(TL.buyPlayer(S, id))); break;
-      case 'sell': confirmThen('sell', id, () => result(TL.sellPlayer(S, id))); break;
-      case 'release': confirmThen('release', id, () => result(TL.releaseYouth(S, id))); break;
+      case 'player': openPlayer(id); return;
+      case 'lvup': result(TL.levelUp(S, id, Number(d.n) || 1)); break;
+      case 'lvteam': result(TL.levelUpTeam(S)); break;
+      case 'star': result(TL.starUp(S, id)); break;
+      case 'skillup': result(TL.skillUp(S, id)); break;
+      case 'release-p': confirmThen('release-p', id, () => { const r = TL.releasePlayer(S, id); result(r); if (r.ok) closeModal(); }); break;
+      case 'release-y': confirmThen('release-y', id, () => result(TL.releaseYouth(S, id))); break;
       case 'promote': result(TL.promoteYouth(S, id)); break;
       case 'rest': result(TL.toggleRest(S, id)); break;
+      case 'equip': result(TL.equipItem(S, item, id)); break;
+      case 'unequip': result(TL.unequipItem(S, item)); break;
+      case 'autoequip': result(TL.autoEquip(S)); break;
+      case 'enhance': result(TL.enhanceItem(S, item)); break;
+      case 'dismantle': confirmThen('dismantle', item, () => result(TL.dismantleItem(S, item))); break;
+      case 'dismantle-below': result(TL.dismantleBelow(S, d.g)); break;
+      case 'scout': {
+        const r = TL.scout(S, d.kind, Number(d.n));
+        if (!r.ok) { toast(r.msg, 'err'); return; }
+        if (r.events) handleEvents(r.events, false);
+        scoutModal(r);
+        break;
+      }
+      case 'talent': result(TL.addTalent(S, d.k)); break;
+      case 'respec': confirmThen('respec', 0, () => result(TL.resetTalents(S))); break;
       case 'upgrade': result(TL.upgradeFacility(S, d.fac)); break;
-      case 'refresh': result(TL.refreshMarket(S)); break;
       case 'formation': TL.setFormation(S, d.f); break;
       case 'tactic': TL.setTactic(S, d.t); break;
       case 'kit': TL.setKit(S, d.kit); applyKit(); ui.sbKey = ''; break;
@@ -931,6 +1171,7 @@
     S.rev++;
     renderTop();
     renderPanel();
+    refreshModal(true);
     save(false);
   }
 
@@ -1001,6 +1242,19 @@
     }
   }
 
+  function onChange(e) {
+    const t = e.target;
+    if (t.matches && t.matches('[data-equip]')) {
+      const itemId = Number(t.getAttribute('data-equip'));
+      const r = t.value === '' ? TL.unequipItem(S, itemId) : TL.equipItem(S, itemId, Number(t.value));
+      result(r);
+      t.blur();
+      renderTop();
+      renderPanel();
+      save(false);
+    }
+  }
+
   /* ---------------------------------------------------------------- 저장·루프 */
 
   function save(force) {
@@ -1028,6 +1282,7 @@
     renderTop();
     renderMatchday(now);
     maybeRenderPanel(now);
+    refreshModal(false);
     if (now - ui.saveAt > 5000) save(false);
   }
 
@@ -1078,10 +1333,10 @@
     document.addEventListener('click', (e) => {
       const b = e.target.closest('[data-act]');
       if (!b || b.disabled) return;
-      if (b.closest('#modal') && b.dataset.act === 'tab') closeModal();
       act(b.dataset.act, b.dataset);
     });
     document.addEventListener('submit', onSubmit);
+    document.addEventListener('change', onChange);
     document.addEventListener('input', (e) => {
       if (e.target.id === 'welcome-name' || e.target.id === 'club-name') ui.draftName = e.target.value;
     });

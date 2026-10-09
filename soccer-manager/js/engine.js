@@ -1,9 +1,12 @@
 /*
- * 터치라인 매니저 — 게임 엔진
+ * 터치라인 매니저 — 게임 엔진 (방치형 축구 RPG)
  *
  * DOM에 의존하지 않는 순수 로직이다. 브라우저에서는 window.TL, Node에서는
  * module.exports로 노출된다. 모든 시간은 "게임 초" 단위이며 속도 배율은
  * tick()에서만 곱한다. 상태 객체는 JSON으로 그대로 저장할 수 있어야 한다.
+ *
+ * 성장 축: 선수 레벨(경험치·골드) → 돌파(★, 레벨 상한) → 스킬 레벨 → 장비 강화,
+ * 그리고 감독 레벨과 특성. 구단 운영(리그·시설·팬·수입)이 골드를 만든다.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -11,7 +14,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const SAVE_VERSION = 1;
+  const SAVE_VERSION = 2;
 
   /* ------------------------------------------------------------------ 난수 */
 
@@ -32,6 +35,7 @@
   const pick = (arr) => arr[Math.floor(rng() * arr.length)];
   const chance = (p) => rng() < p;
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const round2 = (v) => Math.round(v * 100) / 100;
   function gauss() {
     let u = 0, v = 0;
     while (u === 0) u = rng();
@@ -61,6 +65,9 @@
     }
     return arr;
   }
+  function pickOdds(odds) {
+    return weighted(Object.keys(odds), (k) => odds[k]);
+  }
 
   /* ---------------------------------------------------------------- 상수 */
 
@@ -72,15 +79,15 @@
   const OFFLINE_RATE = 0.5;     // 오프라인 진행은 1배속의 절반
 
   const TIERS = {
-    5: { name: '5부 리그', label: '아마추어', ai: 41, scale: 1, ticket: 7000, fanCap: 9000 },
-    4: { name: '4부 리그', label: '세미프로', ai: 50, scale: 2.6, ticket: 11000, fanCap: 40000 },
-    3: { name: '3부 리그', label: '프로', ai: 59, scale: 7, ticket: 18000, fanCap: 160000 },
-    2: { name: '2부 리그', label: '챔피언십', ai: 67, scale: 18, ticket: 28000, fanCap: 650000 },
-    1: { name: '1부 리그', label: '프리미어', ai: 75, scale: 45, ticket: 42000, fanCap: 2500000 },
+    5: { name: '5부 리그', label: '아마추어', ai: 42, scale: 1, ticket: 7000, fanCap: 9000, recruitLv: 1 },
+    4: { name: '4부 리그', label: '세미프로', ai: 52, scale: 2.6, ticket: 11000, fanCap: 40000, recruitLv: 5 },
+    3: { name: '3부 리그', label: '프로', ai: 62, scale: 7, ticket: 18000, fanCap: 160000, recruitLv: 10 },
+    2: { name: '2부 리그', label: '챔피언십', ai: 71, scale: 18, ticket: 28000, fanCap: 650000, recruitLv: 15 },
+    1: { name: '1부 리그', label: '프리미어', ai: 79, scale: 45, ticket: 42000, fanCap: 2500000, recruitLv: 20 },
   };
 
   const ECON = {
-    startMoney: 1.5e8,
+    startMoney: 3000e4,
     startFans: 600,
     sponsorPerRound: 150e4,
     tvPerRound: 150e4,
@@ -90,15 +97,35 @@
     prizeBase: 6000e4,
     promoBonus: 5000e4,
     attendRate: 0.6,
-    sellRate: 0.85,
-    refreshCost: 300e4,
+    scoutCost: 500e4,
   };
   const PRIZE_SHARE = [1, 0.75, 0.6, 0.5, 0.42, 0.36, 0.3, 0.25];
-  const SQUAD_MAX = 26;
+  // 명성: 1부 리그 우승마다 1씩 올라 1부 상대가 강해지고 보상도 커진다(끝없는 엔드게임)
+  const PRESTIGE_AI = 2.5;
+  const PRESTIGE_PAY = 0.2;
+  const tierAI = (s, tier) => TIERS[tier].ai + (tier === 1 ? PRESTIGE_AI * (s.prestige || 0) : 0);
+  const scaleOf = (s, tier) => TIERS[tier].scale * (tier === 1 ? 1 + PRESTIGE_PAY * (s.prestige || 0) : 1);
+  const SQUAD_MAX = 30;
   const SQUAD_MIN = 14;
-  const MARKET_REFRESH_ROUNDS = 3;
 
-  const GROWTH_PER_SEC = 0.0062;
+  /* ------------------------------------------------------------- 등급·성장 */
+
+  const GRADE_KEYS = ['N', 'R', 'SR', 'SSR', 'UR'];
+  const GRADES = {
+    N: { name: '일반', base: [31, 35], growth: 0.39, cost: 1, shards: 1 },
+    R: { name: '희귀', base: [36, 40], growth: 0.46, cost: 1.3, shards: 3 },
+    SR: { name: '영웅', base: [41, 45], growth: 0.53, cost: 1.7, shards: 8 },
+    SSR: { name: '전설', base: [46, 50], growth: 0.59, cost: 2.2, shards: 20 },
+    UR: { name: '신화', base: [51, 55], growth: 0.66, cost: 3, shards: 50 },
+  };
+  const MAX_STAR = 5;
+  const STAR_OVR = 2;
+  const STAR_SHARDS = [0, 5, 15, 40, 100]; // ★n → ★n+1
+  const MAX_SKILL = 10;
+  const levelCap = (star) => 10 + star * 10;
+  const xpNeed = (lv) => Math.round(60 * Math.pow(1.12, lv - 1));
+  const XP_PER_SEC = 0.35;
+  const XP_START = 30, XP_BENCH = 8, XP_GOAL = 10, XP_SKILL = 5;
   const FIT_PER_SEC = 0.29;
 
   const POSITIONS = ['GK', 'DF', 'MF', 'FW'];
@@ -106,6 +133,66 @@
   const W_ATT = { GK: 0, DF: 0.25, MF: 0.7, FW: 1.1 };
   const W_DEF = { GK: 2.2, DF: 1.0, MF: 0.45, FW: 0.08 };
   const W_SCORE = { GK: 0.01, DF: 0.6, MF: 2, FW: 5 };
+
+  /* ---------------------------------------------------------------- 스킬 */
+
+  // kind: passive(선발이면 팀 능력치 가산) · trigger(경기 중 발동해 슈팅) · block(실점 위기 저지)
+  const SKILLS = {
+    cannon: { name: '대포알 슛', pos: ['FW', 'MF'], kind: 'trigger', uses: 2, p: (l) => 0.3 + 0.03 * l,
+      desc: (l) => `경기당 2번, 강력한 슈팅을 날린다 (골 확률 ${Math.round((0.3 + 0.03 * l) * 100)}%)` },
+    poacher: { name: '골 냄새', pos: ['FW'], kind: 'passive', att: (l) => 0.35 + 0.13 * l, score: 2,
+      desc: (l) => `팀 공격 +${(0.35 + 0.13 * l).toFixed(1)}, 이 선수에게 득점 기회가 몰린다` },
+    playmaker: { name: '킬패스', pos: ['MF'], kind: 'passive', att: (l) => 0.4 + 0.15 * l,
+      desc: (l) => `팀 공격 +${(0.4 + 0.15 * l).toFixed(1)}` },
+    freekick: { name: '프리킥 마스터', pos: ['MF', 'FW', 'DF'], kind: 'trigger', uses: 1, p: (l) => 0.28 + 0.035 * l,
+      desc: (l) => `경기당 1번, 직접 프리킥 (골 확률 ${Math.round((0.28 + 0.035 * l) * 100)}%)` },
+    engine: { name: '강철 체력', pos: ['MF', 'DF'], kind: 'passive', def: (l) => 0.25 + 0.1 * l, fatigue: 0.5,
+      desc: (l) => `팀 수비 +${(0.25 + 0.1 * l).toFixed(1)}, 경기 후 체력 소모 절반` },
+    wall: { name: '철벽', pos: ['DF'], kind: 'passive', def: (l) => 0.4 + 0.15 * l,
+      desc: (l) => `팀 수비 +${(0.4 + 0.15 * l).toFixed(1)}` },
+    tackle: { name: '슬라이딩 태클', pos: ['DF'], kind: 'block', uses: 1, p: (l) => 0.2 + 0.025 * l,
+      desc: (l) => `경기당 1번, 실점 위기를 ${Math.round((0.2 + 0.025 * l) * 100)}% 확률로 끊어낸다` },
+    save: { name: '슈퍼 세이브', pos: ['GK'], kind: 'block', uses: 2, p: (l) => 0.2 + 0.025 * l,
+      desc: (l) => `경기당 2번, 실점 위기를 ${Math.round((0.2 + 0.025 * l) * 100)}% 확률로 막아낸다` },
+    sweeper: { name: '스위퍼 키퍼', pos: ['GK'], kind: 'passive', def: (l) => 0.5 + 0.15 * l,
+      desc: (l) => `팀 수비 +${(0.5 + 0.15 * l).toFixed(1)}` },
+    captain: { name: '캡틴', pos: ['GK', 'DF', 'MF', 'FW'], kind: 'passive', rare: true, att: (l) => 0.25 + 0.08 * l, def: (l) => 0.25 + 0.08 * l,
+      desc: (l) => `팀 공격·수비 +${(0.25 + 0.08 * l).toFixed(1)}` },
+  };
+  const SKILL_TRIGGER_P = 0.022; // 선수 한 명당 분당 발동 확률
+
+  /* ---------------------------------------------------------------- 장비 */
+
+  const SLOTS = { boots: '축구화', gear: '보호구' };
+  const SLOT_KEYS = ['boots', 'gear'];
+  const ITEM_NAMES = {
+    boots: ['스터드 축구화', '스피드 축구화', '컨트롤 축구화', '파워 축구화', '골든 부트'],
+    gear: ['정강이 보호대', '압박 셔츠', '캡틴 완장', '테이핑 키트', '카본 보호대'],
+  };
+  const ITEM_STAT = {
+    N: { base: 0.4, step: 0.08 }, R: { base: 0.8, step: 0.1 }, SR: { base: 1.2, step: 0.12 },
+    SSR: { base: 1.8, step: 0.15 }, UR: { base: 2.5, step: 0.18 },
+  };
+  const MAX_PLUS = 15;
+  const INVENTORY_MAX = 60;
+  const DROP_CHANCE = { W: 0.4, D: 0.18, L: 0.06 };
+
+  /* ---------------------------------------------------------------- 감독 */
+
+  const TALENTS = {
+    atk: { name: '공격 전술가', max: 10, desc: (n) => `팀 공격 +${(0.4 * n).toFixed(1)}` },
+    def: { name: '수비 전술가', max: 10, desc: (n) => `팀 수비 +${(0.4 * n).toFixed(1)}` },
+    train: { name: '명 트레이너', max: 10, desc: (n) => `선수 경험치 +${10 * n}%` },
+    money: { name: '재무 전문가', max: 10, desc: (n) => `모든 수입 +${5 * n}%` },
+    nego: { name: '협상가', max: 10, desc: (n) => `레벨업·스카우트 비용 −${3 * n}%` },
+    chari: { name: '카리스마', max: 5, desc: (n) => `감독 지시 효과 +${15 * n}%${n >= 5 ? ', 경기당 지시 +1회' : ''}` },
+  };
+  const TALENT_KEYS = Object.keys(TALENTS);
+  const MGR_TITLES = [[40, '축구의 신'], [30, '전설의 명장'], [20, '명장'], [10, '프로 감독'], [5, '유망한 감독'], [1, '초보 감독']];
+  const mgrXpNeed = (lv) => Math.round(80 * Math.pow(1.18, lv - 1));
+  const mgrTitle = (lv) => MGR_TITLES.find(([n]) => lv >= n)[1];
+
+  /* ------------------------------------------------------------- 전술·경기 */
 
   const FORMATIONS = {
     '4-4-2': { GK: 1, DF: 4, MF: 4, FW: 2, att: 0, def: 0, desc: '균형 잡힌 기본형' },
@@ -119,7 +206,7 @@
     balanced: { name: '균형', att: 0, def: 0 },
     defend: { name: '수비적', att: -2.5, def: 2.5 },
   };
-  // 경기 중 감독 지시: 15분간 유지, 경기당 2회
+  // 경기 중 감독 지시: 15분간 유지, 경기당 2회(카리스마 5포인트면 3회)
   const ORDERS = {
     allout: { name: '총공격', att: 5, def: -4, line: '전원 공격! 라인을 끌어올린다' },
     focus: { name: '집중력', att: 2, def: 2, line: '감독이 테크니컬 에어리어에서 집중을 주문한다' },
@@ -140,24 +227,25 @@
   };
   const KIT_KEYS = Object.keys(KITS);
 
+  /* ---------------------------------------------------------------- 시설 */
+
   const STADIUM_CAP = [1500, 3000, 5000, 8000, 12000, 18000, 27000, 40000, 56000, 75000];
   const FAC_MAX = 10;
   const FACILITIES = {
     stadium: { name: '경기장', base: 3000e4, growth: 2.15, blurb: '관중 수용 인원이 늘어 홈 경기 입장 수입이 커진다' },
-    training: { name: '훈련장', base: 2500e4, growth: 2.1, blurb: '선수들이 잠재력까지 더 빨리 성장한다' },
-    academy: { name: '유소년 아카데미', base: 2000e4, growth: 2.1, blurb: '시즌마다 더 많고 뛰어난 유망주가 올라온다' },
+    training: { name: '훈련장', base: 2500e4, growth: 2.1, blurb: '선수들이 경험치를 더 빨리 쌓는다' },
+    academy: { name: '유소년 아카데미', base: 2000e4, growth: 2.1, blurb: '시즌마다 더 많고 등급 높은 유망주가 올라온다' },
     medical: { name: '메디컬 센터', base: 1500e4, growth: 2.0, blurb: '체력 회복이 빨라지고 부상이 줄어든다' },
     store: { name: '구단 스토어', base: 1800e4, growth: 2.05, blurb: '팬 한 명당 굿즈 수입이 늘어난다' },
-    scout: { name: '스카우트 네트워크', base: 1200e4, growth: 2.0, blurb: '이적 시장 매물이 늘고 잠재력을 정확히 본다' },
+    scout: { name: '스카우트 네트워크', base: 1200e4, growth: 2.0, blurb: '스카우트에서 높은 등급이 더 잘 나온다' },
   };
   const FAC_KEYS = Object.keys(FACILITIES);
 
   const trainMult = (l) => 1 + 0.15 * (l - 1);
   const medMult = (l) => 1 + 0.12 * (l - 1);
   const storeMult = (l) => 1 + 0.3 * (l - 1);
+  const injuryMult = (l) => 1 - 0.06 * (l - 1);
   const youthCount = (l) => 1 + Math.floor(l / 3);
-  const marketSize = (l) => 6 + Math.floor(l / 2);
-  const scoutSpread = (l) => Math.max(0, 12 - Math.round(l * 1.25));
 
   /* ---------------------------------------------------------------- 이름 */
 
@@ -198,7 +286,7 @@
   const josa = (word, withB, withoutB) => word + (hasBatchim(word) ? withB : withoutB);
 
   function fmtInt(n) { return Math.round(n).toLocaleString('ko-KR'); }
-  // 1.2억, 3,500만, 8,000원 식의 한국식 금액 표기
+  // 1.2억, 3,500만, ₩8,000 식의 한국식 금액 표기
   function fmtMoney(n, opts) {
     const sign = n < 0 ? '-' : '';
     const a = Math.abs(n);
@@ -230,15 +318,34 @@
     return 99;
   }
 
+  function pickPos() {
+    const r = rng();
+    if (r < 0.12) return 'GK';
+    if (r < 0.44) return 'DF';
+    if (r < 0.76) return 'MF';
+    return 'FW';
+  }
+  function pickSkill(pos) {
+    if (chance(0.07)) return 'captain';
+    const keys = Object.keys(SKILLS).filter((k) => !SKILLS[k].rare && SKILLS[k].pos.indexOf(pos) >= 0);
+    return pick(keys);
+  }
+
   function makePlayer(s, o) {
-    const ovr = clamp(o.ovr, 15, 97);
-    return {
+    const g = GRADES[o.grade] ? o.grade : 'N';
+    const pos = o.pos || pickPos();
+    const p = {
       id: s.nextId++,
       name: o.name || genName(),
-      pos: o.pos,
-      age: o.age,
-      ovr: Math.round(ovr * 100) / 100,
-      pot: Math.round(clamp(Math.max(o.pot, ovr), 15, 99)),
+      pos,
+      grade: g,
+      star: 1,
+      lv: clamp(o.lv || 1, 1, levelCap(1)),
+      xp: 0,
+      base: round2(o.base != null ? o.base : rand(GRADES[g].base[0], GRADES[g].base[1])),
+      ovr: 0,
+      skill: o.skill || pickSkill(pos),
+      slv: 1,
       fit: 100,
       inj: 0,
       goals: 0,
@@ -249,44 +356,63 @@
       joined: s.season,
       rest: false,
       num: 0,
+      spent: 0,
     };
+    p.ovr = round2(p.base + GRADES[g].growth * (p.lv - 1));
+    return p;
   }
+
   const ovrOf = (p) => Math.floor(p.ovr);
-  function playerValue(p) {
-    let v = 5e7 * Math.pow(4, (p.ovr - 50) / 10);
-    const gap = Math.max(0, p.pot - p.ovr);
-    if (p.age <= 21) v *= 1 + gap / 22;
-    else if (p.age <= 25) v *= 1 + gap / 35;
-    else if (p.age >= 30) v *= Math.max(0.2, 1 - (p.age - 29) * 0.14);
-    return roundMoney(v);
-  }
-  const playerWage = (p) => roundMoney(3e5 * Math.pow(4, (p.ovr - 50) / 10));
-  const sellPrice = (p) => roundMoney(playerValue(p) * ECON.sellRate);
-  function ageFactor(age) {
-    if (age <= 19) return 1.15;
-    if (age <= 21) return 1;
-    if (age <= 23) return 0.75;
-    if (age <= 25) return 0.5;
-    if (age <= 27) return 0.28;
-    if (age <= 29) return 0.12;
-    return 0;
-  }
-  const gapFactor = (p) => clamp((p.pot - p.ovr) / 8, 0, 1);
   // 컨디션이 경기력에 반영된 실효 능력치
   const effOf = (p) => p.ovr * (0.82 + 0.18 * p.fit / 100);
 
-  function pickPos() {
-    const r = rng();
-    if (r < 0.12) return 'GK';
-    if (r < 0.44) return 'DF';
-    if (r < 0.76) return 'MF';
-    return 'FW';
+  function itemBonus(it) {
+    const st = ITEM_STAT[it.grade] || ITEM_STAT.N;
+    return st.base + st.step * it.plus;
   }
+  function gearOf(s, p) {
+    const out = {};
+    for (const it of s.items) if (it.owner === p.id) out[it.slot] = it;
+    return out;
+  }
+  function gearBonus(s, p) {
+    let b = 0;
+    for (const it of s.items) if (it.owner === p.id) b += itemBonus(it);
+    return b;
+  }
+  function refreshOvr(s, p) {
+    p.ovr = round2(p.base + GRADES[p.grade].growth * (p.lv - 1) + STAR_OVR * (p.star - 1) + gearBonus(s, p));
+  }
+  function refreshAll(s) { for (const p of s.players) refreshOvr(s, p); }
 
-  function squadWages(s) {
-    let w = 0;
-    for (const p of s.players) w += playerWage(p);
-    return w;
+  const negoMult = (s) => 1 - 0.03 * (s.mgr.tal.nego || 0);
+  function levelCost(s, p) {
+    return roundMoney(120e4 * GRADES[p.grade].cost * Math.pow(1.12, p.lv - 1) * negoMult(s));
+  }
+  function starCost(s, p) {
+    if (p.star >= MAX_STAR) return null;
+    return { shards: STAR_SHARDS[p.star], money: roundMoney(levelCost(s, p) * 3) };
+  }
+  function skillCost(s, p) {
+    if (p.slv >= MAX_SKILL) return null;
+    return { books: p.slv, money: roundMoney(50e4 * p.slv * p.slv * GRADES[p.grade].cost) };
+  }
+  const xpMult = (s) => trainMult(s.fac.training) * (1 + 0.1 * (s.mgr.tal.train || 0));
+
+  // 경험치를 더하고 상한까지 자동 레벨업. 오른 레벨 수를 돌려준다.
+  function gainXp(s, p, amount) {
+    const cap = levelCap(p.star);
+    if (p.lv >= cap) { p.xp = Math.min(xpNeed(p.lv), p.xp + amount); return 0; }
+    p.xp += amount;
+    let up = 0;
+    while (p.lv < cap && p.xp >= xpNeed(p.lv)) {
+      p.xp -= xpNeed(p.lv);
+      p.lv++;
+      up++;
+    }
+    if (p.lv >= cap) p.xp = Math.min(p.xp, xpNeed(p.lv));
+    if (up) refreshOvr(s, p);
+    return up;
   }
 
   /* ------------------------------------------------------------- 라인업 */
@@ -308,10 +434,8 @@
     }
     for (const slot of xi) {
       if (slot.id !== null) continue;
-      const best = avail.filter((p) => !used.has(p.id))
-        .sort((a, b) => effOf(b) - effOf(a))
-        .find((p) => (slot.pos === 'GK') === (p.pos === 'GK')) ||
-        avail.filter((p) => !used.has(p.id)).sort((a, b) => effOf(b) - effOf(a))[0];
+      const rest = avail.filter((p) => !used.has(p.id)).sort((a, b) => effOf(b) - effOf(a));
+      const best = rest.find((p) => (slot.pos === 'GK') === (p.pos === 'GK')) || rest[0];
       if (best) {
         const gkSwap = (slot.pos === 'GK') !== (best.pos === 'GK');
         slot.id = best.id;
@@ -335,14 +459,35 @@
     return { att: a / aw, def: d / dw, ovr: o / xi.length };
   }
 
+  // 선발 선수들의 패시브 스킬 합
+  function skillBonus(s, xi) {
+    let att = 0, def = 0;
+    for (const x of xi) {
+      if (x.id === null) continue;
+      const p = playerById(s, x.id);
+      if (!p) continue;
+      const sk = SKILLS[p.skill];
+      if (!sk || sk.kind !== 'passive') continue;
+      if (sk.att) att += sk.att(p.slv);
+      if (sk.def) def += sk.def(p.slv);
+    }
+    return { att, def };
+  }
+
   function teamRating(s, xi, order) {
     const base = rateXI(xi);
     const f = FORMATIONS[s.formation] || FORMATIONS['4-4-2'];
     const t = TACTICS[s.tactic] || TACTICS.balanced;
-    let att = base.att + f.att + t.att;
-    let def = base.def + f.def + t.def;
-    if (order && ORDERS[order]) { att += ORDERS[order].att; def += ORDERS[order].def; }
-    return { att, def, ovr: base.ovr };
+    const sk = skillBonus(s, xi);
+    const tal = s.mgr.tal;
+    let att = base.att + f.att + t.att + sk.att + 0.4 * (tal.atk || 0);
+    let def = base.def + f.def + t.def + sk.def + 0.4 * (tal.def || 0);
+    if (order && ORDERS[order]) {
+      const m = 1 + 0.15 * (tal.chari || 0);
+      att += ORDERS[order].att * m;
+      def += ORDERS[order].def * m;
+    }
+    return { att, def, ovr: base.ovr, skill: sk };
   }
 
   function xg(att, def, home) {
@@ -372,7 +517,7 @@
   function genTeam(s, tier, bias, used) {
     const n = genClubName(used);
     used.add(n.name); used.add(n.short);
-    const base = TIERS[tier].ai + bias + rand(-4, 4);
+    const base = tierAI(s, tier) + bias + rand(-4, 4);
     const tilt = rand(-3, 3);
     return {
       id: 't' + (s.nextTeamId++),
@@ -470,10 +615,12 @@
 
   /* ---------------------------------------------------------------- 경제 */
 
+  const moneyMult = (s) => 1 + 0.05 * (s.mgr.tal.money || 0);
   function incomeRates(s) {
     const t = TIERS[s.tier];
-    const sponsor = ECON.sponsorPerRound * t.scale * (1 + 0.05 * Math.min(10, totalTrophies(s))) / ROUND_SECONDS;
-    const merch = s.fans * ECON.merchPerFanRound * storeMult(s.fac.store) / ROUND_SECONDS;
+    const m = moneyMult(s);
+    const sponsor = ECON.sponsorPerRound * scaleOf(s, s.tier) * (1 + 0.05 * Math.min(10, totalTrophies(s))) / ROUND_SECONDS * m;
+    const merch = s.fans * ECON.merchPerFanRound * storeMult(s.fac.store) / ROUND_SECONDS * m;
     return { sponsor, merch, total: sponsor + merch };
   }
   const stadiumCap = (s) => STADIUM_CAP[s.fac.stadium - 1];
@@ -493,35 +640,186 @@
     return n;
   }
   function addFin(s, key, v) { s.fin.cur[key] = (s.fin.cur[key] || 0) + v; }
-  function emptyFin() { return { gate: 0, tv: 0, sponsor: 0, merch: 0, bonus: 0, sales: 0, wages: 0, buys: 0, build: 0 }; }
+  function emptyFin() { return { gate: 0, tv: 0, sponsor: 0, merch: 0, bonus: 0, sales: 0, growth: 0, scout: 0, gear: 0, build: 0 }; }
 
-  // 한 라운드 기준 예상 손익(대시보드용)
+  // 한 라운드 기준 예상 수입(대시보드용)
   function roundEconomy(s) {
     const r = incomeRates(s);
     const t = TIERS[s.tier];
-    const gate = expectedAttendance(s) * t.ticket / 2; // 홈 경기는 두 라운드에 한 번
-    const tv = ECON.tvPerRound * t.scale;
-    const wages = squadWages(s);
+    const m = moneyMult(s);
+    const gate = expectedAttendance(s) * t.ticket / 2 * m; // 홈 경기는 두 라운드에 한 번
+    const tv = ECON.tvPerRound * scaleOf(s, s.tier) * m;
     const inc = { gate, tv, sponsor: r.sponsor * ROUND_SECONDS, merch: r.merch * ROUND_SECONDS };
     const total = inc.gate + inc.tv + inc.sponsor + inc.merch;
-    return { inc, total, wages, net: total - wages };
+    return { inc, total };
   }
 
   function describeFacility(key, l) {
     switch (key) {
       case 'stadium': return `${fmtInt(STADIUM_CAP[l - 1])}석`;
-      case 'training': return `성장 ×${trainMult(l).toFixed(2)}`;
-      case 'academy': return `유망주 ${youthCount(l)}명 · 최대 잠재 ${youthPotCeil(l)}`;
+      case 'training': return `경험치 ×${trainMult(l).toFixed(2)}`;
+      case 'academy': return `유망주 ${youthCount(l)}명 · 영웅 이상 ${Math.round(youthHighOdds(l))}%`;
       case 'medical': return `회복 ×${medMult(l).toFixed(2)} · 부상 −${Math.round((1 - injuryMult(l)) * 100)}%`;
       case 'store': return `굿즈 ×${storeMult(l).toFixed(2)}`;
-      case 'scout': return `매물 ${marketSize(l)}명 · 오차 ±${Math.ceil(scoutSpread(l) / 2)}`;
+      case 'scout': {
+        const o = scoutOddsFor(l, 'premium');
+        return `프리미엄 전설 이상 ${(o.SSR + o.UR).toFixed(1)}%`;
+      }
       default: return '';
     }
   }
-  const injuryMult = (l) => 1 - 0.06 * (l - 1);
-  const youthPotCeil = (l) => Math.min(99, 66 + l * 3);
+
+  /* ---------------------------------------------------------- 스카우트 */
+
+  const SCOUTS = {
+    gold: { name: '일반 스카우트', odds: { N: 70, R: 26, SR: 3.5, SSR: 0.45, UR: 0.05 } },
+    premium: { name: '프리미엄 스카우트', odds: { N: 0, R: 60, SR: 30, SSR: 8.5, UR: 1.5 } },
+  };
+  function scoutOddsFor(level, kind) {
+    const base = SCOUTS[kind].odds;
+    const l = level - 1;
+    const o = Object.assign({}, base);
+    o.SR = base.SR * (1 + 0.05 * l);
+    o.SSR = base.SSR * (1 + 0.07 * l);
+    o.UR = base.UR * (1 + 0.09 * l);
+    const extra = (o.SR + o.SSR + o.UR) - (base.SR + base.SSR + base.UR);
+    if (kind === 'gold') o.N -= extra; else o.R -= extra;
+    return o;
+  }
+  const scoutOdds = (s, kind) => scoutOddsFor(s.fac.scout, kind);
+  function scoutPrice(s, kind, count) {
+    if (kind === 'premium') return { tickets: count };
+    const one = roundMoney(ECON.scoutCost * TIERS[s.tier].scale * negoMult(s));
+    return { money: count >= 10 ? one * 9 : one * count };
+  }
+
+  function recruit(s, grade) {
+    const lv = Math.min(levelCap(1), TIERS[s.tier].recruitLv);
+    return makePlayer(s, { grade, lv });
+  }
+
+  function scout(s, kind, count) {
+    count = count === 10 ? 10 : 1;
+    if (!SCOUTS[kind]) return no('알 수 없는 스카우트예요');
+    const price = scoutPrice(s, kind, count);
+    if (price.tickets && s.mat.tickets < price.tickets) return no(`티켓이 ${price.tickets - s.mat.tickets}장 부족해요`);
+    if (price.money && s.money < price.money) return no(`자금이 ${fmtMoney(price.money - s.money)} 부족해요`);
+    if (price.tickets) s.mat.tickets -= price.tickets;
+    if (price.money) { s.money -= price.money; addFin(s, 'scout', price.money); }
+    const odds = scoutOdds(s, kind);
+    const grades = [];
+    for (let i = 0; i < count; i++) grades.push(pickOdds(odds));
+    // 10연차 보장: 프리미엄은 영웅 이상, 일반은 희귀 이상 1명
+    if (count === 10) {
+      const floor = kind === 'premium' ? 'SR' : 'R';
+      const fi = GRADE_KEYS.indexOf(floor);
+      if (!grades.some((g) => GRADE_KEYS.indexOf(g) >= fi)) grades[9] = floor;
+    }
+    const results = [];
+    for (const g of grades) {
+      const p = recruit(s, g);
+      if (s.players.length < SQUAD_MAX) {
+        joinSquad(s, p);
+        results.push({ player: p, kept: true });
+      } else {
+        const shards = GRADES[g].shards * 2;
+        s.mat.shards += shards;
+        results.push({ player: p, kept: false, shards });
+      }
+      if (GRADE_KEYS.indexOf(g) >= 3) pushNews(s, 'big', `${SCOUTS[kind].name}에서 ${GRADES[g].name} ${josa(p.name, '을', '를')} 영입했습니다!`);
+    }
+    s.stats.scouted = (s.stats.scouted || 0) + count;
+    const out = [];
+    checkAchievements(s, out);
+    s.rev++;
+    return { ok: true, msg: `${SCOUTS[kind].name} ${count}회`, results, events: out };
+  }
+
+  /* -------------------------------------------------------------- 유스 */
+
+  function youthOdds(l) {
+    return { N: Math.max(10, 70 - 6 * l), R: 25 + 2 * l, SR: 4 + 2.2 * l, SSR: 1 + 0.9 * l, UR: 0.15 * l };
+  }
+  function youthHighOdds(l) {
+    const o = youthOdds(l);
+    const t = o.N + o.R + o.SR + o.SSR + o.UR;
+    return (o.SR + o.SSR + o.UR) / t * 100;
+  }
+  function genYouth(s) {
+    const lvl = s.fac.academy;
+    const out = [];
+    const n = youthCount(lvl) + (chance(0.3) ? 1 : 0);
+    for (let i = 0; i < n; i++) {
+      const p = makePlayer(s, { grade: pickOdds(youthOdds(lvl)), lv: 1, youth: true });
+      p.until = s.season + 1; // 다음 시즌 유스 콜업 전까지 대기
+      out.push(p);
+    }
+    return out;
+  }
+
+  /* -------------------------------------------------------------- 장비 */
+
+  function dropGradeOdds(tier) {
+    const tb = 5 - tier;
+    return { N: Math.max(15, 55 - 8 * tb), R: 30, SR: 11 + 3 * tb, SSR: 3.5 + 1.5 * tb, UR: 0.5 + 0.5 * tb };
+  }
+  function makeItem(s, grade, slot) {
+    const sl = slot || pick(SLOT_KEYS);
+    return { id: s.nextItemId++, slot: sl, grade, plus: 0, name: pick(ITEM_NAMES[sl]), owner: null };
+  }
+  function addItem(s, it, out) {
+    if (s.items.length >= INVENTORY_MAX) {
+      const gold = dismantleValue(it);
+      s.money += gold;
+      addFin(s, 'sales', gold);
+      if (out) out.push({ kind: 'loot', item: it, auto: gold });
+      return false;
+    }
+    s.items.push(it);
+    if (out) out.push({ kind: 'loot', item: it });
+    return true;
+  }
+  const enhanceCost = (it) => roundMoney(20e4 * GRADES[it.grade].cost * Math.pow(1.28, it.plus));
+  function enhanceSpent(it) {
+    let t = 0;
+    for (let i = 0; i < it.plus; i++) t += roundMoney(20e4 * GRADES[it.grade].cost * Math.pow(1.28, i));
+    return t;
+  }
+  const dismantleValue = (it) => roundMoney(8e4 * GRADES[it.grade].cost * (1 + it.plus * 0.5) + enhanceSpent(it) * 0.3);
+
+  /* -------------------------------------------------------------- 목표 */
+
+  function makeObjective(s) {
+    const our = rateXI(lineup(s).xi).ovr;
+    const diff = our - tierAI(s, s.tier);
+    const target = diff >= 5 ? 1 : diff >= 2 ? 2 : diff >= -1 ? 4 : diff >= -4 ? 5 : 6;
+    return { target, reward: roundMoney(4000e4 * scaleOf(s, s.tier) * (1 + (6 - target) * 0.15)), done: false };
+  }
+  function objectiveLabel(o, tier) {
+    if (!o) return '';
+    if (o.target === 1) return '리그 우승';
+    if (o.target === 2 && tier > 1) return '승격 (2위 이내)';
+    if (o.target === 6 && tier < 5) return '잔류 (6위 이내)';
+    return `${o.target}위 이내`;
+  }
+
+  function pushNews(s, kind, text) {
+    s.news.unshift({ s: s.season, r: s.round, k: kind, t: text });
+    if (s.news.length > 40) s.news.length = 40;
+  }
 
   /* ------------------------------------------------------------ 새 게임 */
+
+  function shortName(name) {
+    const clean = String(name).trim();
+    const first = clean.split(/\s+/)[0].replace(/[^가-힣]/g, '');
+    if (first.length >= 2 && first.length <= 3) return first;
+    const hangul = clean.replace(/[^가-힣]/g, '');
+    if (hangul.length >= 2) return hangul.slice(0, 2);
+    const words = clean.split(/\s+/).filter(Boolean);
+    if (words.length >= 2) return words.slice(0, 3).map((w) => w[0]).join('').toUpperCase();
+    return clean.slice(0, 3).toUpperCase() || 'FC';
+  }
 
   function newGame(opts) {
     opts = opts || {};
@@ -538,6 +836,7 @@
       round: 0,
       tier: 5,
       bestTier: 5,
+      prestige: 0,
       phase: 'pre',
       phaseT: 0,
       speed: 1,
@@ -547,17 +846,19 @@
       players: [],
       nextId: 1,
       nextTeamId: 1,
+      nextItemId: 1,
       league: null,
       live: null,
       fac: { stadium: 1, training: 1, academy: 1, medical: 1, store: 1, scout: 1 },
-      market: [],
-      marketIn: MARKET_REFRESH_ROUNDS,
+      mat: { tickets: 3, shards: 5, books: 2 },
+      items: [],
+      mgr: { lv: 1, xp: 0, pts: 0, tal: { atk: 0, def: 0, train: 0, money: 0, nego: 0, chari: 0 } },
       youth: [],
       news: [],
       history: [],
       trophies: {},
       ach: {},
-      stats: { w: 0, d: 0, l: 0, gf: 0, ga: 0, bigWin: 0, promotions: 0, unbeaten: 0, bestWin: null },
+      stats: { w: 0, d: 0, l: 0, gf: 0, ga: 0, bigWin: 0, promotions: 0, unbeaten: 0, bestWin: null, scouted: 0, skills: 0, bestGrade: 'N' },
       fin: { cur: emptyFin(), prev: null },
       objective: null,
       lastResult: null,
@@ -572,102 +873,25 @@
     };
     if (opts.name) s.club.short = shortName(s.club.name);
 
-    // 창단 스쿼드: 18명, 리그 평균보다 살짝 약하고 유망주 셋
-    const base = TIERS[5].ai;
-    const plan = [['GK', 2], ['DF', 6], ['MF', 6], ['FW', 4]];
-    for (const [pos, n2] of plan) {
-      for (let i = 0; i < n2; i++) {
-        const age = randInt(20, 32);
-        const ovr = base + rand(-6, 2.5) - (age >= 30 ? 0 : 0.5);
-        const p = makePlayer(s, { pos, age, ovr, pot: ovr + (age < 24 ? rand(2, 9) : rand(0, 2)) });
+    // 창단 스쿼드: 대부분 일반 등급, 포지션마다 희귀 한 명, 에이스 공격수 한 명
+    const plan = [['GK', 2], ['DF', 6], ['MF', 6], ['FW', 3]];
+    for (const [pos, cnt] of plan) {
+      for (let i = 0; i < cnt; i++) {
+        const grade = i === 0 && pos !== 'GK' ? 'R' : chance(0.15) ? 'R' : 'N';
+        const p = makePlayer(s, { pos, grade, lv: randInt(1, 4) });
         p.num = assignNumber(s, pos);
         s.players.push(p);
       }
     }
-    for (const pos of ['DF', 'MF', 'FW']) {
-      const ovr = base + rand(-9, -5);
-      const p = makePlayer(s, { pos, age: randInt(17, 18), ovr, pot: rand(62, 72), youth: true });
-      p.num = assignNumber(s, pos);
-      s.players.push(p);
-    }
+    const ace = makePlayer(s, { pos: 'FW', grade: 'SR', lv: 1, skill: 'cannon' });
+    ace.num = assignNumber(s, 'FW');
+    s.players.push(ace);
+    s.stats.bestGrade = 'SR';
+    refreshAll(s);
     newLeague(s, 5, null);
-    s.market = genMarket(s);
     s.objective = makeObjective(s);
-    pushNews(s, 'club', `${josa(s.club.name, '이', '가')} 창단했습니다. 목표는 1부 리그!`);
+    pushNews(s, 'club', `${josa(s.club.name, '이', '가')} 창단했습니다. 창단 선물로 프리미엄 스카우트 티켓 3장을 받았습니다`);
     return s;
-  }
-
-  function shortName(name) {
-    const clean = String(name).trim();
-    const first = clean.split(/\s+/)[0].replace(/[^가-힣]/g, '');
-    if (first.length >= 2 && first.length <= 3) return first;
-    const hangul = clean.replace(/[^가-힣]/g, '');
-    if (hangul.length >= 2) return hangul.slice(0, 2);
-    const words = clean.split(/\s+/).filter(Boolean);
-    if (words.length >= 2) return words.slice(0, 3).map((w) => w[0]).join('').toUpperCase();
-    return clean.slice(0, 3).toUpperCase() || 'FC';
-  }
-
-  /* ------------------------------------------------------- 시장 · 유스 */
-
-  function genMarketPlayer(s) {
-    const lvl = s.fac.scout;
-    const base = TIERS[s.tier].ai;
-    const age = randInt(18, 32);
-    const ovr = clamp(base + rand(-7, 5) + lvl * 0.6 - (age < 21 ? 4 : 0), 25, 94);
-    let pot = age < 24 ? ovr + rand(2, 10 + lvl * 1.2) : ovr + rand(0, 3);
-    let gem = false;
-    if (age < 22 && chance(0.04 + lvl * 0.012)) { pot += rand(6, 14); gem = true; }
-    const p = makePlayer(s, { pos: pickPos(), age, ovr, pot });
-    const spread = scoutSpread(lvl);
-    const lo = Math.round(p.pot - rand(0, spread));
-    p.potLo = Math.max(ovrOf(p), lo);
-    p.potHi = Math.min(99, p.potLo + spread);
-    if (p.potHi < p.pot) p.potHi = p.pot;
-    p.gem = gem;
-    p.price = roundMoney(playerValue(p) * rand(1.1, 1.35));
-    return p;
-  }
-  function genMarket(s) {
-    const n = marketSize(s.fac.scout);
-    const list = [];
-    for (let i = 0; i < n; i++) list.push(genMarketPlayer(s));
-    list.sort((a, b) => POSITIONS.indexOf(a.pos) - POSITIONS.indexOf(b.pos) || b.ovr - a.ovr);
-    return list;
-  }
-
-  function genYouth(s) {
-    const lvl = s.fac.academy;
-    const out = [];
-    const n = youthCount(lvl) + (chance(0.3) ? 1 : 0);
-    for (let i = 0; i < n; i++) {
-      const ovr = 28 + lvl * 2 + rand(0, 10);
-      let pot = ovr + 14 + lvl * 2.2 + rand(0, 14);
-      pot = Math.min(pot, youthPotCeil(lvl) + rand(0, 4));
-      const p = makePlayer(s, { pos: pickPos(), age: randInt(16, 17), ovr, pot, youth: true });
-      p.until = s.season + 1; // 다음 시즌 유스 콜업 전까지 대기
-      out.push(p);
-    }
-    return out;
-  }
-
-  function makeObjective(s) {
-    const our = rateXI(lineup(s).xi).ovr;
-    const diff = our - TIERS[s.tier].ai;
-    const target = diff >= 5 ? 1 : diff >= 2 ? 2 : diff >= -1 ? 4 : diff >= -4 ? 5 : 6;
-    return { target, reward: roundMoney(4000e4 * TIERS[s.tier].scale * (1 + (6 - target) * 0.15)), done: false };
-  }
-  function objectiveLabel(o, tier) {
-    if (!o) return '';
-    if (o.target === 1) return '리그 우승';
-    if (o.target === 2 && tier > 1) return '승격 (2위 이내)';
-    if (o.target === 6 && tier < 5) return '잔류 (6위 이내)';
-    return `${o.target}위 이내`;
-  }
-
-  function pushNews(s, kind, text) {
-    s.news.unshift({ s: s.season, r: s.round, k: kind, t: text });
-    if (s.news.length > 40) s.news.length = 40;
   }
 
   /* ---------------------------------------------------------------- 경기 */
@@ -679,6 +903,8 @@
     return Math.min(90, 45 + Math.floor((clock - h - T.half) / h * 45));
   }
 
+  const ordersPerMatch = (s) => ORDERS_PER_MATCH + ((s.mgr.tal.chari || 0) >= 5 ? 1 : 0);
+
   function startMatch(s, out) {
     const fx = myFixture(s);
     const home = fx.h === 'me';
@@ -689,8 +915,10 @@
       clock: 0, minute: 0, hg: 0, ag: 0, mom: 0,
       xi: lu.xi.map((x) => ({ id: x.id, pos: x.pos, eff: x.eff })),
       subs: 0,
-      ordersLeft: ORDERS_PER_MATCH,
+      ordersLeft: ordersPerMatch(s),
       order: null,
+      skillUse: {},
+      scorers: {},
       events: [{ m: 0, t: 'ko', side: '', text: '킥오프! 주심의 휘슬이 울린다' }],
       done: false,
     };
@@ -715,6 +943,19 @@
 
   function playerById(s, id) { return s.players.find((p) => p.id === id); }
 
+  function xiPlayers(s) {
+    return s.live.xi.filter((x) => x.id !== null).map((x) => ({ x, p: playerById(s, x.id) })).filter((o) => o.p);
+  }
+
+  function scoreGoal(s, side, name, p, m, out, line) {
+    const L = s.live;
+    if (side === 'h') L.hg++; else L.ag++;
+    if (p) { p.goals++; p.sGoals++; L.scorers[p.id] = (L.scorers[p.id] || 0) + 1; }
+    liveEvent(s, { m, t: 'goal', side, text: line || pick(GOAL_LINES)(name) });
+    L.mom = 0;
+    out.push({ kind: 'goal', mine: side === (L.home ? 'h' : 'a'), minute: m, scorer: name });
+  }
+
   function simMinute(s, m, out) {
     const L = s.live;
     if (L.order && m > L.order.until) {
@@ -729,16 +970,19 @@
     const ph = lh * (1 + L.mom * 0.35);
     const pa = la * (1 - L.mom * 0.35);
     const mySide = L.home ? 'h' : 'a';
+    const oppSide = L.home ? 'a' : 'h';
 
     const nameFor = (side, role) => {
       if (side === mySide) {
-        const pool = L.xi.filter((x) => x.id !== null).map((x) => ({ x, p: playerById(s, x.id) })).filter((o) => o.p);
+        const pool = xiPlayers(s);
         if (!pool.length) return { name: '선수', p: null };
         if (role === 'gk') {
           const g = pool.find((o) => o.x.pos === 'GK') || pool[0];
           return { name: g.p.name, p: g.p };
         }
-        const w = role === 'card' ? (o) => (o.x.pos === 'GK' ? 0.1 : 1) : (o) => W_SCORE[o.x.pos] * o.x.eff;
+        const w = role === 'card'
+          ? (o) => (o.x.pos === 'GK' ? 0.1 : 1)
+          : (o) => W_SCORE[o.x.pos] * o.x.eff * ((SKILLS[o.p.skill] && SKILLS[o.p.skill].score) || 1);
         const o = weighted(pool, w);
         return { name: o.p.name, p: o.p };
       }
@@ -749,16 +993,58 @@
       return { name: t.stars[i], p: null };
     };
 
+    let happened = false;
     if (chance(ph) || chance(pa)) {
+      happened = true;
       // 같은 분에 양쪽 모두 골이 나오는 일은 막는다
       const side = rng() < ph / (ph + pa) ? 'h' : 'a';
-      if (side === 'h') L.hg++; else L.ag++;
       const sc = nameFor(side, 'goal');
-      if (sc.p) { sc.p.goals++; sc.p.sGoals++; }
-      liveEvent(s, { m, t: 'goal', side, text: pick(GOAL_LINES)(sc.name) });
-      L.mom = 0;
-      out.push({ kind: 'goal', mine: side === mySide, minute: m, scorer: sc.name });
-    } else if (chance((lh + la) * 0.9)) {
+      let blocked = false;
+      if (side === oppSide) {
+        // 수비 스킬: 실점 위기 저지
+        for (const o of xiPlayers(s)) {
+          const sk = SKILLS[o.p.skill];
+          if (!sk || sk.kind !== 'block') continue;
+          const used = L.skillUse[o.p.id] || 0;
+          if (used >= sk.uses) continue;
+          if (chance(sk.p(o.p.slv))) {
+            L.skillUse[o.p.id] = used + 1;
+            liveEvent(s, { m, t: 'skill', side: mySide, text: `[${sk.name}] ${o.p.name}! ${sc.name}의 결정적인 슈팅을 막아낸다` });
+            out.push({ kind: 'skill', name: o.p.name, skill: sk.name, mine: true });
+            s.stats.skills = (s.stats.skills || 0) + 1;
+            blocked = true;
+            break;
+          }
+        }
+      }
+      if (!blocked) scoreGoal(s, side, sc.name, sc.p, m, out);
+      else L.mom = clamp(L.mom + (mySide === 'h' ? 0.3 : -0.3), -1, 1);
+    }
+
+    // 공격 스킬: 분당 한 번 발동 기회
+    if (!happened) {
+      const cands = xiPlayers(s).filter((o) => {
+        const sk = SKILLS[o.p.skill];
+        return sk && sk.kind === 'trigger' && (L.skillUse[o.p.id] || 0) < sk.uses;
+      });
+      if (cands.length && chance(SKILL_TRIGGER_P * cands.length)) {
+        happened = true;
+        const o = pick(cands);
+        const sk = SKILLS[o.p.skill];
+        L.skillUse[o.p.id] = (L.skillUse[o.p.id] || 0) + 1;
+        s.stats.skills = (s.stats.skills || 0) + 1;
+        out.push({ kind: 'skill', name: o.p.name, skill: sk.name, mine: true });
+        if (chance(sk.p(o.p.slv))) {
+          scoreGoal(s, mySide, o.p.name, o.p, m, out, `[${sk.name}] ${o.p.name}의 슈팅이 그물을 찢는다!`);
+        } else {
+          const gk = nameFor(oppSide, 'gk');
+          liveEvent(s, { m, t: 'skill', side: mySide, text: `[${sk.name}] ${o.p.name}의 슈팅, ${gk.name}에게 막힌다` });
+          L.mom = clamp(L.mom + (mySide === 'h' ? 0.4 : -0.4), -1, 1);
+        }
+      }
+    }
+
+    if (!happened && chance((lh + la) * 0.9)) {
       const side = rng() < lh / (lh + la) ? 'h' : 'a';
       if (chance(0.5)) {
         const gk = nameFor(side === 'h' ? 'a' : 'h', 'gk');
@@ -768,7 +1054,7 @@
         liveEvent(s, { m, t: 'miss', side, text: pick(MISS_LINES)(sh.name) });
       }
       L.mom = clamp(L.mom + (side === 'h' ? 0.35 : -0.35), -1, 1);
-    } else if (chance(0.045)) {
+    } else if (!happened && chance(0.045)) {
       const side = chance(0.5) ? 'h' : 'a';
       const c = nameFor(side, 'card');
       liveEvent(s, { m, t: 'card', side, text: pick(CARD_LINES)(c.name) });
@@ -843,14 +1129,14 @@
 
   function issueOrder(s, key) {
     const L = s.live;
-    if (s.phase !== 'match' || !L || L.done) return { ok: false, msg: '경기 중에만 지시할 수 있어요' };
-    if (!ORDERS[key]) return { ok: false, msg: '알 수 없는 지시예요' };
-    if (L.ordersLeft <= 0) return { ok: false, msg: '이번 경기 지시를 모두 썼어요' };
-    if (L.minute >= 88) return { ok: false, msg: '경기가 곧 끝나요' };
+    if (s.phase !== 'match' || !L || L.done) return no('경기 중에만 지시할 수 있어요');
+    if (!ORDERS[key]) return no('알 수 없는 지시예요');
+    if (L.ordersLeft <= 0) return no('이번 경기 지시를 모두 썼어요');
+    if (L.minute >= 88) return no('경기가 곧 끝나요');
     L.ordersLeft--;
     L.order = { k: key, until: Math.min(90, L.minute + ORDER_MINUTES) };
     liveEvent(s, { m: L.minute, t: 'order', side: L.home ? 'h' : 'a', text: ORDERS[key].line });
-    return { ok: true };
+    return ok(`${ORDERS[key].name} 지시`);
   }
 
   function simulateOther(s, m) {
@@ -858,6 +1144,20 @@
     m.hg = poisson(xg(h.att, a.def, true));
     m.ag = poisson(xg(a.att, h.def, false));
     recordResult(s, m.h, m.a, m.hg, m.ag);
+  }
+
+  function gainMgrXp(s, amount, out) {
+    const g = s.mgr;
+    g.xp += amount;
+    while (g.xp >= mgrXpNeed(g.lv)) {
+      g.xp -= mgrXpNeed(g.lv);
+      g.lv++;
+      g.pts++;
+      let gift = '';
+      if (g.lv % 5 === 0) { s.mat.tickets++; gift = ' · 프리미엄 티켓 1장'; }
+      pushNews(s, 'ach', `감독 레벨 ${g.lv} 달성! 특성 포인트 +1${gift}`);
+      out.push({ kind: 'mgrLevel', lv: g.lv });
+    }
   }
 
   function endMatch(s, out) {
@@ -874,31 +1174,57 @@
     const res = gf > ga ? 'W' : gf < ga ? 'L' : 'D';
     const t = TIERS[s.tier];
     const opp = teamById(s, L.opp);
+    const mm = moneyMult(s);
 
-    // 출전 선수: 경기 수, 체력, 실전 성장
-    const tm = trainMult(s.fac.training);
+    // 출전 선수: 경기 수, 체력, 경험치
+    const xm = xpMult(s);
+    const played = new Set();
+    let levels = 0;
     for (const x of L.xi) {
       if (x.id === null) continue;
       const p = playerById(s, x.id);
       if (!p) continue;
+      played.add(p.id);
       p.apps++; p.sApps++;
-      p.fit = Math.max(30, p.fit - (p.pos === 'GK' ? rand(6, 10) : rand(17, 25)));
-      p.ovr = Math.min(p.pot, p.ovr + 0.12 * tm * ageFactor(p.age) * gapFactor(p));
+      const sk = SKILLS[p.skill];
+      const drain = p.pos === 'GK' ? rand(6, 10) : rand(17, 25);
+      p.fit = Math.max(30, p.fit - drain * (sk && sk.fatigue ? sk.fatigue : 1));
+      const goals = L.scorers[p.id] || 0;
+      const skills = L.skillUse[p.id] || 0;
+      levels += gainXp(s, p, (XP_START + goals * XP_GOAL + skills * XP_SKILL) * (res === 'W' ? 1.2 : 1) * xm);
     }
-    for (const p of s.players) if (p.inj > 0) p.inj--;
+    for (const p of s.players) {
+      if (!played.has(p.id)) levels += gainXp(s, p, XP_BENCH * xm);
+      if (p.inj > 0) p.inj--;
+    }
 
-    // 수입·지출
+    // 수입
     let gate = 0;
     if (L.home) {
       const att = Math.round(expectedAttendance(s) * rand(0.92, 1.03));
-      gate = Math.min(stadiumCap(s), att) * t.ticket;
       L.attendance = Math.min(stadiumCap(s), att);
+      gate = L.attendance * t.ticket * mm;
     }
-    const tv = ECON.tvPerRound * t.scale;
-    const bonus = (res === 'W' ? ECON.winBonus : res === 'D' ? ECON.drawBonus : 0) * t.scale;
-    const wages = squadWages(s);
-    s.money += gate + tv + bonus - wages;
-    addFin(s, 'gate', gate); addFin(s, 'tv', tv); addFin(s, 'bonus', bonus); addFin(s, 'wages', wages);
+    const tv = ECON.tvPerRound * scaleOf(s, s.tier) * mm;
+    const bonus = (res === 'W' ? ECON.winBonus : res === 'D' ? ECON.drawBonus : 0) * scaleOf(s, s.tier) * mm;
+    s.money += gate + tv + bonus;
+    addFin(s, 'gate', gate); addFin(s, 'tv', tv); addFin(s, 'bonus', bonus);
+
+    // 전리품: 장비·돌파석·스킬북
+    const loot = { shards: 0, books: 0, item: null };
+    const tierMult = 1 + (5 - s.tier) * 0.5;
+    if (res === 'W') {
+      loot.shards = Math.round(randInt(1, 2) * tierMult);
+      if (chance(0.25)) loot.books = 1;
+    } else if (res === 'D' && chance(0.5)) {
+      loot.shards = 1;
+    }
+    s.mat.shards += loot.shards;
+    s.mat.books += loot.books;
+    if (chance(DROP_CHANCE[res])) {
+      const it = makeItem(s, pickOdds(dropGradeOdds(s.tier)));
+      if (addItem(s, it, out)) loot.item = it;
+    }
 
     // 팬
     const cap = t.fanCap;
@@ -916,22 +1242,17 @@
       st.bestWin = { gf, ga, opp: opp.name, season: s.season };
     }
 
+    gainMgrXp(s, (res === 'W' ? 40 : res === 'D' ? 20 : 10) * (1 + (5 - s.tier) * 0.25), out);
+
     const word = res === 'W' ? '승리' : res === 'D' ? '무승부' : '패배';
-    s.lastResult = { round: s.round + 1, opp: opp.name, oppId: opp.id, home: L.home, gf, ga, res, gate, attendance: L.attendance || 0 };
+    s.lastResult = { round: s.round + 1, opp: opp.name, oppId: opp.id, home: L.home, gf, ga, res, gate, attendance: L.attendance || 0, loot, levels };
     pushNews(s, 'match', `${s.round + 1}R ${L.home ? '홈' : '원정'} ${opp.name}전 ${gf}:${ga} ${word}`);
-    if (s.money < 0) pushNews(s, 'warn', `자금이 바닥났습니다. 주급 ${fmtMoney(wages)}을 감당하기 어렵습니다`);
 
     s.round++;
-    s.marketIn--;
-    if (s.marketIn <= 0) {
-      s.market = genMarket(s);
-      s.marketIn = MARKET_REFRESH_ROUNDS;
-      out.push({ kind: 'market' });
-    }
     s.phase = 'post';
     s.phaseT = 0;
     s.rev++;
-    out.push({ kind: 'fulltime', res, gf, ga, opp: opp.name, home: L.home });
+    out.push({ kind: 'fulltime', res, gf, ga, opp: opp.name, home: L.home, loot, levels });
     checkAchievements(s, out);
   }
 
@@ -943,7 +1264,8 @@
     const me = s.league.table.me;
     const tier = s.tier;
     const t = TIERS[tier];
-    const prize = roundMoney(ECON.prizeBase * t.scale * PRIZE_SHARE[pos - 1]);
+    const mm = moneyMult(s);
+    const prize = roundMoney(ECON.prizeBase * scaleOf(s, tier) * PRIZE_SHARE[pos - 1] * mm);
     s.money += prize;
     addFin(s, 'bonus', prize);
 
@@ -952,21 +1274,32 @@
     else if (pos >= 7 && tier < 5) move = 1;
     const champion = pos === 1;
     if (champion) s.trophies[tier] = (s.trophies[tier] || 0) + 1;
+    if (champion && tier === 1) s.prestige = (s.prestige || 0) + 1;
     if (me.l === 0) s.stats.unbeaten++;
 
     let objective = null;
     if (s.objective) {
-      const ok = pos <= s.objective.target;
-      objective = { label: objectiveLabel(s.objective, tier), ok, reward: ok ? s.objective.reward : 0 };
-      if (ok) { s.money += s.objective.reward; addFin(s, 'bonus', s.objective.reward); }
+      const hit = pos <= s.objective.target;
+      objective = { label: objectiveLabel(s.objective, tier), ok: hit, reward: hit ? s.objective.reward : 0 };
+      if (hit) { s.money += s.objective.reward; addFin(s, 'bonus', s.objective.reward); }
     }
+
+    // 시즌 보상: 티켓·돌파석·스킬북
+    const reward = {
+      tickets: Math.max(0, 4 - pos) + (move < 0 ? 1 : 0) + (champion ? 1 : 0),
+      shards: Math.round(10 * (1 + (5 - tier) * 0.6)),
+      books: 3 + (5 - tier),
+    };
+    s.mat.tickets += reward.tickets;
+    s.mat.shards += reward.shards;
+    s.mat.books += reward.books;
 
     const scorers = s.players.filter((p) => p.sGoals > 0).sort((a, b) => b.sGoals - a.sGoals);
     const top = scorers[0] ? { name: scorers[0].name, goals: scorers[0].sGoals } : null;
 
     let promoBonus = 0;
     if (move === -1) {
-      promoBonus = roundMoney(ECON.promoBonus * TIERS[tier - 1].scale);
+      promoBonus = roundMoney(ECON.promoBonus * TIERS[tier - 1].scale * mm);
       s.money += promoBonus;
       addFin(s, 'bonus', promoBonus);
       s.fans = Math.round(s.fans * 1.2 + 500);
@@ -975,13 +1308,14 @@
       s.fans = Math.round(s.fans * 0.88);
     }
     if (champion) s.fans = Math.round(s.fans * 1.08);
+    gainMgrXp(s, 150 * (1 + (5 - tier) * 0.5) * (move < 0 ? 1.5 : 1), out);
 
     const summary = {
       season: s.season, tier, tierName: t.name, pos, move, champion,
       w: me.w, d: me.d, l: me.l, gf: me.gf, ga: me.ga, pts: me.pts,
-      prize, promoBonus, objective, top,
+      prize, promoBonus, objective, top, reward,
       table: table.map((r) => ({ id: r.id, name: r.name, kit: r.kit, me: r.me, pts: r.pts, gd: r.gd, w: r.w, d: r.d, l: r.l })),
-      retired: [], youth: 0, fin: Object.assign({}, s.fin.cur),
+      youth: 0, fin: Object.assign({}, s.fin.cur),
     };
     s.history.unshift({ season: s.season, tier, pos, w: me.w, d: me.d, l: me.l, gf: me.gf, ga: me.ga, pts: me.pts, move, champion, top });
 
@@ -989,63 +1323,38 @@
     let keep = null;
     if (move === 0) {
       keep = table.filter((r, i) => !r.me && !(i < 2 && tier > 1) && !(i >= 6 && tier < 5)).map((r) => s.league.teams.find((x) => x.id === r.id));
+      if (champion && tier === 1) keep = keep.map((x) => Object.assign({}, x, { att: x.att + PRESTIGE_AI, def: x.def + PRESTIGE_AI }));
     }
     s.tier += move;
     s.bestTier = Math.min(s.bestTier, s.tier);
 
-    // 선수 나이·노쇠·은퇴
-    const retired = [];
     for (const p of s.players) {
-      p.age++;
-      if (p.age >= 31) {
-        p.ovr = Math.max(20, p.ovr - (rand(0.4, 1.4) + (p.age - 31) * 0.55));
-        p.pot = Math.min(p.pot, Math.ceil(p.ovr));
-      }
       p.sGoals = 0; p.sApps = 0;
       p.fit = 100; p.inj = 0;
     }
-    s.players = s.players.filter((p) => {
-      const pRet = p.age >= 37 ? 1 : p.age >= 33 ? (p.age - 32) * 0.22 : 0;
-      if (chance(pRet)) { retired.push(p.name); return false; }
-      return true;
-    });
-    summary.retired = retired;
-    for (const n of retired) pushNews(s, 'club', `${josa(n, '이', '가')} 은퇴를 선언했습니다`);
 
     // 유스 콜업
     s.youth = s.youth.filter((y) => y.until > s.season);
     const fresh = genYouth(s);
     s.youth = s.youth.concat(fresh);
     summary.youth = fresh.length;
-    const gem = fresh.find((y) => y.pot >= 80);
-    if (gem) pushNews(s, 'youth', `아카데미에서 특급 유망주 ${josa(gem.name, '이', '가')} 올라왔습니다 (잠재 ${gem.pot})`);
+    const gem = fresh.slice().sort((a, b) => GRADE_KEYS.indexOf(b.grade) - GRADE_KEYS.indexOf(a.grade))[0];
+    if (gem && GRADE_KEYS.indexOf(gem.grade) >= 2) pushNews(s, 'youth', `아카데미에서 ${GRADES[gem.grade].name} 등급 유망주 ${josa(gem.name, '이', '가')} 올라왔습니다`);
     else pushNews(s, 'youth', `유스 아카데미에서 유망주 ${fresh.length}명이 콜업 대기 중입니다`);
-
-    // 재정 위기: 큰 빚을 지면 최고 몸값 선수를 강제로 판다
-    const wages = squadWages(s);
-    if (s.money < -3 * wages && s.players.length > SQUAD_MIN) {
-      const star = s.players.slice().sort((a, b) => playerValue(b) - playerValue(a))[0];
-      const price = sellPrice(star);
-      s.players = s.players.filter((p) => p !== star);
-      s.money += price;
-      addFin(s, 'sales', price);
-      pushNews(s, 'warn', `재정 위기로 ${josa(star.name, '을', '를')} ${fmtMoney(price)}에 매각했습니다`);
-    }
-    fillSquad(s);
 
     s.fin.prev = s.fin.cur;
     s.fin.cur = emptyFin();
     s.season++;
     s.round = 0;
     newLeague(s, s.tier, keep);
-    s.market = genMarket(s);
-    s.marketIn = MARKET_REFRESH_ROUNDS;
     s.objective = makeObjective(s);
 
     if (move === -1) pushNews(s, 'big', `${t.name} ${pos}위! ${TIERS[s.tier].name}로 승격합니다`);
     else if (move === 1) pushNews(s, 'warn', `${t.name} ${pos}위로 ${TIERS[s.tier].name} 강등`);
     if (champion) pushNews(s, 'big', `${t.name} 우승! 트로피를 들어 올렸습니다`);
+    if (champion && tier === 1) pushNews(s, 'warn', `명성 Lv.${s.prestige}: 1부 리그 상대들이 더 강해지고 보상도 커집니다`);
     if (!champion && move === 0) pushNews(s, 'club', `${summary.season}시즌 ${t.name} ${pos}위로 마감`);
+    pushNews(s, 'ach', `시즌 보상: 티켓 ${reward.tickets}장 · 돌파석 ${reward.shards}개 · 스킬북 ${reward.books}권`);
 
     s.seasonEnd = summary;
     s.phase = 'offseason';
@@ -1056,66 +1365,58 @@
     checkAchievements(s, out);
   }
 
-  // 은퇴로 스쿼드가 비면 유스 → 자유계약 순으로 채운다
-  function fillSquad(s) {
-    const need = (pos) => s.players.filter((p) => p.pos === pos).length;
-    const mins = { GK: 2, DF: 5, MF: 5, FW: 3 };
-    for (const pos of POSITIONS) {
-      while (need(pos) < mins[pos] || (s.players.length < 16 && pos === 'MF')) {
-        const y = s.youth.filter((q) => q.pos === pos).sort((a, b) => b.ovr - a.ovr)[0];
-        if (y) {
-          s.youth = s.youth.filter((q) => q !== y);
-          joinSquad(s, y);
-          pushNews(s, 'youth', `스쿼드 공백을 메우려 유스 ${josa(y.name, '을', '를')} 1군에 올렸습니다`);
-        } else {
-          const p = makePlayer(s, { pos, age: randInt(20, 28), ovr: TIERS[s.tier].ai - rand(5, 9), pot: 0 });
-          joinSquad(s, p);
-          pushNews(s, 'club', `자유계약으로 ${POS_NAME[pos]} ${josa(p.name, '을', '를')} 데려왔습니다`);
-        }
-        if (s.players.length >= 16 && need(pos) >= mins[pos]) break;
-      }
-    }
-  }
-
   function joinSquad(s, p) {
-    delete p.price; delete p.potLo; delete p.potHi; delete p.gem; delete p.until;
+    delete p.until;
     p.joined = s.season;
     p.fit = 100;
     p.inj = 0;
     p.rest = false;
     p.num = assignNumber(s, p.pos);
     s.players.push(p);
+    refreshOvr(s, p);
+    if (GRADE_KEYS.indexOf(p.grade) > GRADE_KEYS.indexOf(s.stats.bestGrade || 'N')) s.stats.bestGrade = p.grade;
   }
 
   /* ------------------------------------------------------------- 업적 */
 
+  const gi = (g) => GRADE_KEYS.indexOf(g);
   const ACHIEVEMENTS = [
-    { id: 'first_win', name: '첫 승리', desc: '공식 경기 첫 승', reward: 500e4, test: (s) => s.stats.w >= 1 },
-    { id: 'wins_25', name: '이기는 습관', desc: '통산 25승', reward: 3000e4, test: (s) => s.stats.w >= 25 },
-    { id: 'wins_100', name: '백승 감독', desc: '통산 100승', reward: 5e8, test: (s) => s.stats.w >= 100 },
-    { id: 'goals_100', name: '골 폭죽', desc: '통산 100골', reward: 5000e4, test: (s) => s.stats.gf >= 100 },
-    { id: 'big_win', name: '대승', desc: '5골 차 이상 승리', reward: 2000e4, test: (s) => s.stats.bigWin >= 1 },
-    { id: 'promo', name: '첫 승격', desc: '상위 리그로 승격', reward: 5000e4, test: (s) => s.stats.promotions >= 1 },
-    { id: 'tier3', name: '프로의 세계', desc: '3부 리그 진출', reward: 3e8, test: (s) => s.bestTier <= 3 },
-    { id: 'tier1', name: '꿈의 무대', desc: '1부 리그 진출', reward: 30e8, test: (s) => s.bestTier <= 1 },
-    { id: 'title', name: '첫 우승', desc: '어느 리그든 우승', reward: 1e8, test: (s) => totalTrophies(s) >= 1 },
-    { id: 'title1', name: '정상 등극', desc: '1부 리그 우승', reward: 100e8, test: (s) => (s.trophies[1] || 0) >= 1 },
-    { id: 'unbeaten', name: '무패 시즌', desc: '한 시즌 무패', reward: 3e8, test: (s) => s.stats.unbeaten >= 1 },
-    { id: 'fans_10k', name: '동네 명물', desc: '팬 1만 명', reward: 3000e4, test: (s) => s.fans >= 1e4 },
-    { id: 'fans_100k', name: '전국구 클럽', desc: '팬 10만 명', reward: 5e8, test: (s) => s.fans >= 1e5 },
-    { id: 'fans_1m', name: '세계적 명문', desc: '팬 100만 명', reward: 50e8, test: (s) => s.fans >= 1e6 },
-    { id: 'rich', name: '든든한 금고', desc: '자금 100억', reward: 0, test: (s) => s.money >= 100e8 },
-    { id: 'stadium_max', name: '꿈의 구장', desc: '경기장 최고 레벨', reward: 0, test: (s) => s.fac.stadium >= FAC_MAX },
-    { id: 'homegrown', name: '우리가 키웠다', desc: '유스 출신 OVR 75 선수', reward: 2e8, test: (s) => s.players.some((p) => p.youth && p.ovr >= 75) },
-    { id: 'star', name: '월드클래스', desc: 'OVR 90 선수 보유', reward: 10e8, test: (s) => s.players.some((p) => p.ovr >= 90) },
+    { id: 'first_win', name: '첫 승리', desc: '공식 경기 첫 승', reward: 500e4, tickets: 1, test: (s) => s.stats.w >= 1 },
+    { id: 'wins_25', name: '이기는 습관', desc: '통산 25승', reward: 3000e4, tickets: 1, test: (s) => s.stats.w >= 25 },
+    { id: 'wins_100', name: '백승 감독', desc: '통산 100승', reward: 5e8, tickets: 3, test: (s) => s.stats.w >= 100 },
+    { id: 'goals_100', name: '골 폭죽', desc: '통산 100골', reward: 5000e4, tickets: 1, test: (s) => s.stats.gf >= 100 },
+    { id: 'big_win', name: '대승', desc: '5골 차 이상 승리', reward: 2000e4, tickets: 1, test: (s) => s.stats.bigWin >= 1 },
+    { id: 'promo', name: '첫 승격', desc: '상위 리그로 승격', reward: 5000e4, tickets: 2, test: (s) => s.stats.promotions >= 1 },
+    { id: 'tier3', name: '프로의 세계', desc: '3부 리그 진출', reward: 3e8, tickets: 2, test: (s) => s.bestTier <= 3 },
+    { id: 'tier1', name: '꿈의 무대', desc: '1부 리그 진출', reward: 30e8, tickets: 5, test: (s) => s.bestTier <= 1 },
+    { id: 'title', name: '첫 우승', desc: '어느 리그든 우승', reward: 1e8, tickets: 1, test: (s) => totalTrophies(s) >= 1 },
+    { id: 'title1', name: '정상 등극', desc: '1부 리그 우승', reward: 100e8, tickets: 10, test: (s) => (s.trophies[1] || 0) >= 1 },
+    { id: 'unbeaten', name: '무패 시즌', desc: '한 시즌 무패', reward: 3e8, tickets: 3, test: (s) => s.stats.unbeaten >= 1 },
+    { id: 'fans_10k', name: '동네 명물', desc: '팬 1만 명', reward: 3000e4, tickets: 1, test: (s) => s.fans >= 1e4 },
+    { id: 'fans_100k', name: '전국구 클럽', desc: '팬 10만 명', reward: 5e8, tickets: 2, test: (s) => s.fans >= 1e5 },
+    { id: 'fans_1m', name: '세계적 명문', desc: '팬 100만 명', reward: 50e8, tickets: 5, test: (s) => s.fans >= 1e6 },
+    { id: 'ssr', name: '전설의 시작', desc: '전설 등급 선수 영입', reward: 0, tickets: 1, test: (s) => gi(s.stats.bestGrade) >= 3 },
+    { id: 'ur', name: '신화를 품다', desc: '신화 등급 선수 영입', reward: 0, tickets: 3, test: (s) => gi(s.stats.bestGrade) >= 4 },
+    { id: 'lv30', name: '성장의 증거', desc: '선수 레벨 30 달성', reward: 1e8, tickets: 1, test: (s) => s.players.some((p) => p.lv >= 30) },
+    { id: 'star5', name: '완전 돌파', desc: '★5 선수 보유', reward: 10e8, tickets: 3, test: (s) => s.players.some((p) => p.star >= MAX_STAR) },
+    { id: 'skill10', name: '필살기 완성', desc: '스킬 레벨 10 달성', reward: 3e8, tickets: 2, test: (s) => s.players.some((p) => p.slv >= MAX_SKILL) },
+    { id: 'plus10', name: '장인의 손길', desc: '+10 장비 보유', reward: 2e8, tickets: 1, test: (s) => s.items.some((i) => i.plus >= 10) },
+    { id: 'mgr10', name: '프로 감독', desc: '감독 레벨 10', reward: 1e8, tickets: 1, test: (s) => s.mgr.lv >= 10 },
+    { id: 'skills_50', name: '스킬 쇼', desc: '경기 중 스킬 50회 발동', reward: 5000e4, tickets: 1, test: (s) => (s.stats.skills || 0) >= 50 },
+    { id: 'stadium_max', name: '꿈의 구장', desc: '경기장 최고 레벨', reward: 0, tickets: 3, test: (s) => s.fac.stadium >= FAC_MAX },
+    { id: 'star', name: '월드클래스', desc: 'OVR 90 선수 보유', reward: 10e8, tickets: 3, test: (s) => s.players.some((p) => p.ovr >= 90) },
   ];
   function checkAchievements(s, out) {
     for (const a of ACHIEVEMENTS) {
       if (s.ach[a.id] || !a.test(s)) continue;
       s.ach[a.id] = { season: s.season };
       if (a.reward) { s.money += a.reward; addFin(s, 'bonus', a.reward); }
-      pushNews(s, 'ach', `업적 달성: ${a.name}${a.reward ? ` (+${fmtMoney(a.reward)})` : ''}`);
-      out.push({ kind: 'achievement', id: a.id, name: a.name, reward: a.reward });
+      if (a.tickets) s.mat.tickets += a.tickets;
+      const parts = [];
+      if (a.reward) parts.push(fmtMoney(a.reward));
+      if (a.tickets) parts.push(`티켓 ${a.tickets}장`);
+      pushNews(s, 'ach', `업적 달성: ${a.name}${parts.length ? ` (+${parts.join(', ')})` : ''}`);
+      out.push({ kind: 'achievement', id: a.id, name: a.name, reward: a.reward, tickets: a.tickets });
     }
   }
 
@@ -1131,14 +1432,15 @@
     addFin(s, 'sponsor', r.sponsor * dt);
     addFin(s, 'merch', r.merch * dt);
 
-    const tm = trainMult(s.fac.training);
+    const xp = XP_PER_SEC * xpMult(s) * dt;
     const mm = medMult(s.fac.medical);
     const playing = s.phase === 'match' && s.live ? new Set(s.live.xi.map((x) => x.id)) : null;
+    let up = 0;
     for (const p of s.players) {
-      const g = GROWTH_PER_SEC * tm * ageFactor(p.age) * gapFactor(p);
-      if (g > 0) p.ovr = Math.min(p.pot, p.ovr + g * dt);
+      up += gainXp(s, p, xp);
       if (!playing || !playing.has(p.id)) p.fit = Math.min(100, p.fit + FIT_PER_SEC * mm * dt);
     }
+    if (up) out.push({ kind: 'levelUp', count: up });
 
     switch (s.phase) {
       case 'pre':
@@ -1179,7 +1481,8 @@
     if (s.paused || !(realSeconds > 1)) return null;
     const counted = Math.min(realSeconds, OFFLINE_CAP);
     const gameSec = counted * OFFLINE_RATE;
-    const before = { money: s.money, fans: s.fans, w: s.stats.w, d: s.stats.d, l: s.stats.l, gf: s.stats.gf, ga: s.stats.ga, season: s.season, tier: s.tier };
+    const before = { money: s.money, fans: s.fans, w: s.stats.w, d: s.stats.d, l: s.stats.l, gf: s.stats.gf, ga: s.stats.ga, mat: Object.assign({}, s.mat) };
+    const lvBefore = s.players.reduce((n, p) => n + p.lv, 0);
     const events = [];
     let t = gameSec;
     while (t > 1e-9) {
@@ -1195,6 +1498,11 @@
       fans: s.fans - before.fans,
       w: s.stats.w - before.w, d: s.stats.d - before.d, l: s.stats.l - before.l,
       gf: s.stats.gf - before.gf, ga: s.stats.ga - before.ga,
+      levels: s.players.reduce((n, p) => n + p.lv, 0) - lvBefore,
+      tickets: s.mat.tickets - before.mat.tickets,
+      shards: s.mat.shards - before.mat.shards,
+      books: s.mat.books - before.mat.books,
+      items: events.filter((e) => e.kind === 'loot' && !e.auto).length,
       seasons: events.filter((e) => e.kind === 'seasonEnd').map((e) => e.summary),
       achievements: events.filter((e) => e.kind === 'achievement'),
       events,
@@ -1203,38 +1511,122 @@
 
   /* ------------------------------------------------------------- 행동 */
 
-  const ok = (msg) => ({ ok: true, msg });
-  const no = (msg) => ({ ok: false, msg });
+  function ok(msg) { return { ok: true, msg }; }
+  function no(msg) { return { ok: false, msg }; }
   const inLiveXI = (s, id) => s.phase === 'match' && s.live && !s.live.done && s.live.xi.some((x) => x.id === id);
 
-  function buyPlayer(s, id) {
-    const p = s.market.find((m) => m.id === id);
-    if (!p) return no('이미 다른 구단으로 떠난 선수예요');
-    if (s.players.length >= SQUAD_MAX) return no(`스쿼드는 최대 ${SQUAD_MAX}명이에요`);
-    if (s.money < p.price) return no(`자금이 ${fmtMoney(p.price - s.money)} 부족해요`);
-    s.money -= p.price;
-    addFin(s, 'buys', p.price);
-    s.market = s.market.filter((m) => m !== p);
-    const price = p.price;
-    joinSquad(s, p);
-    pushNews(s, 'transfer', `${josa(p.name, '을', '를')} ${fmtMoney(price)}에 영입했습니다`);
+  function levelUp(s, id, times) {
+    const p = playerById(s, id);
+    if (!p) return no('선수를 찾을 수 없어요');
+    const cap = levelCap(p.star);
+    if (p.lv >= cap) return no(p.star >= MAX_STAR ? '최고 레벨이에요' : `레벨 상한 ${cap}. 돌파가 필요해요`);
+    let n = 0, spent = 0;
+    const want = times || 1;
+    while (n < want && p.lv < cap) {
+      const c = levelCost(s, p);
+      if (s.money < c) break;
+      s.money -= c;
+      spent += c;
+      p.lv++;
+      n++;
+    }
+    if (!n) return no(`자금이 ${fmtMoney(levelCost(s, p) - s.money)} 부족해요`);
+    if (p.lv >= cap) p.xp = Math.min(p.xp, xpNeed(p.lv));
+    p.spent += spent;
+    addFin(s, 'growth', spent);
+    refreshOvr(s, p);
+    const out = [];
+    checkAchievements(s, out);
     s.rev++;
-    return ok(`${p.name} 영입 완료`);
+    return Object.assign(ok(`${p.name} Lv.${p.lv}${n > 1 ? ` (+${n})` : ''}`), { events: out, count: n, spent });
   }
 
-  function sellPlayer(s, id) {
+  // 선발 11명 중 가장 싼 레벨업부터 자금이 허락하는 만큼
+  function levelUpTeam(s, budget) {
+    const ids = new Set(lineup(s).xi.map((x) => x.id).filter((x) => x !== null));
+    const ps = s.players.filter((p) => ids.has(p.id));
+    let n = 0, spent = 0;
+    const limit = budget == null ? Infinity : budget;
+    for (let guard = 0; guard < 2000; guard++) {
+      const cand = ps.filter((p) => p.lv < levelCap(p.star)).sort((a, b) => levelCost(s, a) - levelCost(s, b))[0];
+      if (!cand) break;
+      const c = levelCost(s, cand);
+      if (s.money < c || spent + c > limit) break;
+      s.money -= c;
+      spent += c;
+      cand.spent += c;
+      cand.lv++;
+      if (cand.lv >= levelCap(cand.star)) cand.xp = Math.min(cand.xp, xpNeed(cand.lv));
+      n++;
+    }
+    if (!n) return no('레벨업할 자금이 부족하거나 모두 레벨 상한이에요');
+    for (const p of ps) refreshOvr(s, p);
+    addFin(s, 'growth', spent);
+    const out = [];
+    checkAchievements(s, out);
+    s.rev++;
+    return Object.assign(ok(`선발 11명 레벨업 ${n}회 (${fmtMoney(spent)})`), { events: out, count: n, spent });
+  }
+
+  function starUp(s, id) {
+    const p = playerById(s, id);
+    if (!p) return no('선수를 찾을 수 없어요');
+    if (p.star >= MAX_STAR) return no('이미 최대 돌파예요');
+    if (p.lv < levelCap(p.star)) return no(`레벨 ${levelCap(p.star)}을 찍어야 돌파할 수 있어요`);
+    const c = starCost(s, p);
+    if (s.mat.shards < c.shards) return no(`돌파석이 ${c.shards - s.mat.shards}개 부족해요`);
+    if (s.money < c.money) return no(`자금이 ${fmtMoney(c.money - s.money)} 부족해요`);
+    s.mat.shards -= c.shards;
+    s.money -= c.money;
+    p.spent += c.money;
+    addFin(s, 'growth', c.money);
+    p.star++;
+    refreshOvr(s, p);
+    gainXp(s, p, 0);
+    pushNews(s, 'big', `${p.name} ★${p.star} 돌파! 레벨 상한이 ${levelCap(p.star)}로 올랐습니다`);
+    const out = [];
+    checkAchievements(s, out);
+    s.rev++;
+    return Object.assign(ok(`${p.name} ★${p.star} 돌파`), { events: out });
+  }
+
+  function skillUp(s, id) {
+    const p = playerById(s, id);
+    if (!p) return no('선수를 찾을 수 없어요');
+    const c = skillCost(s, p);
+    if (!c) return no('스킬이 이미 최고 레벨이에요');
+    if (s.mat.books < c.books) return no(`스킬북이 ${c.books - s.mat.books}권 부족해요`);
+    if (s.money < c.money) return no(`자금이 ${fmtMoney(c.money - s.money)} 부족해요`);
+    s.mat.books -= c.books;
+    s.money -= c.money;
+    p.spent += c.money;
+    addFin(s, 'growth', c.money);
+    p.slv++;
+    const out = [];
+    checkAchievements(s, out);
+    s.rev++;
+    return Object.assign(ok(`${SKILLS[p.skill].name} Lv.${p.slv}`), { events: out });
+  }
+
+  function releaseValue(p) {
+    return { money: roundMoney(p.spent * 0.3), shards: GRADES[p.grade].shards * p.star };
+  }
+
+  function releasePlayer(s, id) {
     const p = playerById(s, id);
     if (!p) return no('선수를 찾을 수 없어요');
     if (s.players.length <= SQUAD_MIN) return no(`스쿼드는 최소 ${SQUAD_MIN}명이 필요해요`);
-    if (inLiveXI(s, id)) return no('경기에 뛰고 있는 선수는 팔 수 없어요');
-    if (p.pos === 'GK' && s.players.filter((q) => q.pos === 'GK').length <= 1) return no('마지막 골키퍼는 팔 수 없어요');
-    const price = sellPrice(p);
+    if (inLiveXI(s, id)) return no('경기에 뛰고 있는 선수는 내보낼 수 없어요');
+    if (p.pos === 'GK' && s.players.filter((q) => q.pos === 'GK').length <= 1) return no('마지막 골키퍼는 내보낼 수 없어요');
+    const v = releaseValue(p);
+    for (const it of s.items) if (it.owner === p.id) it.owner = null;
     s.players = s.players.filter((q) => q !== p);
-    s.money += price;
-    addFin(s, 'sales', price);
-    pushNews(s, 'transfer', `${josa(p.name, '을', '를')} ${fmtMoney(price)}에 이적시켰습니다`);
+    s.money += v.money;
+    s.mat.shards += v.shards;
+    addFin(s, 'sales', v.money);
+    pushNews(s, 'transfer', `${josa(p.name, '을', '를')} 방출했습니다 (돌파석 +${v.shards})`);
     s.rev++;
-    return ok(`${p.name} 판매 완료 (+${fmtMoney(price)})`);
+    return ok(`${p.name} 방출 · 돌파석 +${v.shards}${v.money ? ` · ${fmtMoney(v.money)}` : ''}`);
   }
 
   function promoteYouth(s, id) {
@@ -1244,16 +1636,119 @@
     s.youth = s.youth.filter((q) => q !== y);
     joinSquad(s, y);
     pushNews(s, 'youth', `유스 ${josa(y.name, '이', '가')} 1군 계약을 맺었습니다`);
+    const out = [];
+    checkAchievements(s, out);
     s.rev++;
-    return ok(`${y.name} 1군 승격`);
+    return Object.assign(ok(`${y.name} 1군 승격`), { events: out });
   }
 
   function releaseYouth(s, id) {
     const y = s.youth.find((q) => q.id === id);
     if (!y) return no('유망주를 찾을 수 없어요');
     s.youth = s.youth.filter((q) => q !== y);
+    s.mat.shards += GRADES[y.grade].shards;
     s.rev++;
-    return ok(`${y.name} 방출`);
+    return ok(`${y.name} 방출 · 돌파석 +${GRADES[y.grade].shards}`);
+  }
+
+  function equipItem(s, itemId, playerId) {
+    const it = s.items.find((i) => i.id === itemId);
+    const p = playerById(s, playerId);
+    if (!it || !p) return no('장비나 선수를 찾을 수 없어요');
+    const prevOwner = it.owner != null ? playerById(s, it.owner) : null;
+    for (const o of s.items) if (o.owner === p.id && o.slot === it.slot && o !== it) o.owner = null;
+    it.owner = p.id;
+    refreshOvr(s, p);
+    if (prevOwner && prevOwner !== p) refreshOvr(s, prevOwner);
+    s.rev++;
+    return ok(`${p.name}에게 ${it.name} 장착`);
+  }
+  function unequipItem(s, itemId) {
+    const it = s.items.find((i) => i.id === itemId);
+    if (!it || it.owner == null) return no('장착된 장비가 아니에요');
+    const p = playerById(s, it.owner);
+    it.owner = null;
+    if (p) refreshOvr(s, p);
+    s.rev++;
+    return ok('장비를 해제했어요');
+  }
+  // 선발 선수부터 좋은 장비를 채운다
+  function autoEquip(s) {
+    const xiIds = lineup(s).xi.map((x) => x.id).filter((x) => x !== null);
+    const order = xiIds.map((id) => playerById(s, id)).filter(Boolean)
+      .concat(s.players.filter((p) => xiIds.indexOf(p.id) < 0).sort((a, b) => b.ovr - a.ovr));
+    for (const it of s.items) it.owner = null;
+    let n = 0;
+    for (const slot of SLOT_KEYS) {
+      const pool = s.items.filter((i) => i.slot === slot).sort((a, b) => itemBonus(b) - itemBonus(a));
+      for (let i = 0; i < pool.length && i < order.length; i++) { pool[i].owner = order[i].id; n++; }
+    }
+    refreshAll(s);
+    s.rev++;
+    return ok(n ? `장비 ${n}개를 자동 장착했어요` : '장착할 장비가 없어요');
+  }
+  function enhanceItem(s, itemId) {
+    const it = s.items.find((i) => i.id === itemId);
+    if (!it) return no('장비를 찾을 수 없어요');
+    if (it.plus >= MAX_PLUS) return no('최대 강화예요');
+    const c = enhanceCost(it);
+    if (s.money < c) return no(`자금이 ${fmtMoney(c - s.money)} 부족해요`);
+    s.money -= c;
+    addFin(s, 'gear', c);
+    it.plus++;
+    if (it.owner != null) { const p = playerById(s, it.owner); if (p) refreshOvr(s, p); }
+    const out = [];
+    checkAchievements(s, out);
+    s.rev++;
+    return Object.assign(ok(`${it.name} +${it.plus}`), { events: out });
+  }
+  function dismantleItem(s, itemId) {
+    const it = s.items.find((i) => i.id === itemId);
+    if (!it) return no('장비를 찾을 수 없어요');
+    const v = dismantleValue(it);
+    const owner = it.owner != null ? playerById(s, it.owner) : null;
+    s.items = s.items.filter((i) => i !== it);
+    if (owner) refreshOvr(s, owner);
+    s.money += v;
+    addFin(s, 'sales', v);
+    s.rev++;
+    return ok(`${it.name} 분해 +${fmtMoney(v)}`);
+  }
+  // 장착하지 않은, 강화 안 한 특정 등급 이하 장비 일괄 분해
+  function dismantleBelow(s, grade) {
+    const lim = GRADE_KEYS.indexOf(grade);
+    const targets = s.items.filter((i) => i.owner == null && GRADE_KEYS.indexOf(i.grade) <= lim && i.plus === 0);
+    if (!targets.length) return no('분해할 장비가 없어요');
+    let v = 0;
+    for (const it of targets) v += dismantleValue(it);
+    s.items = s.items.filter((i) => targets.indexOf(i) < 0);
+    s.money += v;
+    addFin(s, 'sales', v);
+    s.rev++;
+    return ok(`장비 ${targets.length}개 분해 +${fmtMoney(v)}`);
+  }
+
+  function addTalent(s, key) {
+    const t = TALENTS[key];
+    if (!t) return no('알 수 없는 특성이에요');
+    if (s.mgr.pts <= 0) return no('특성 포인트가 없어요');
+    if ((s.mgr.tal[key] || 0) >= t.max) return no('이미 최대예요');
+    s.mgr.pts--;
+    s.mgr.tal[key] = (s.mgr.tal[key] || 0) + 1;
+    s.rev++;
+    return ok(`${t.name} ${s.mgr.tal[key]}/${t.max}`);
+  }
+  const respecCost = (s) => roundMoney(500e4 * s.mgr.lv);
+  function resetTalents(s) {
+    const spent = TALENT_KEYS.reduce((n, k) => n + (s.mgr.tal[k] || 0), 0);
+    if (!spent) return no('되돌릴 특성이 없어요');
+    const c = respecCost(s);
+    if (s.money < c) return no(`자금이 ${fmtMoney(c - s.money)} 부족해요`);
+    s.money -= c;
+    for (const k of TALENT_KEYS) s.mgr.tal[k] = 0;
+    s.mgr.pts += spent;
+    s.rev++;
+    return ok(`특성 포인트 ${spent}개를 돌려받았어요`);
   }
 
   function upgradeFacility(s, key) {
@@ -1271,18 +1766,6 @@
     s.rev++;
     return Object.assign(ok(`${FACILITIES[key].name} Lv.${lvl + 1}`), { events: out });
   }
-
-  function refreshMarket(s) {
-    const cost = roundMoney(ECON.refreshCost * TIERS[s.tier].scale);
-    if (s.money < cost) return no(`자금이 ${fmtMoney(cost - s.money)} 부족해요`);
-    s.money -= cost;
-    addFin(s, 'buys', cost);
-    s.market = genMarket(s);
-    s.marketIn = MARKET_REFRESH_ROUNDS;
-    s.rev++;
-    return ok('스카우트가 새 명단을 가져왔어요');
-  }
-  const refreshCost = (s) => roundMoney(ECON.refreshCost * TIERS[s.tier].scale);
 
   function toggleRest(s, id) {
     const p = playerById(s, id);
@@ -1329,12 +1812,39 @@
 
   /* -------------------------------------------------------- 저장/불러오기 */
 
+  // v1(구단 운영판) 저장본을 RPG판으로 옮긴다: 잠재력으로 등급을 정하고 능력치는 기본값으로 보존
+  function migrateV1(o) {
+    const gradeOf = (p) => (p.pot >= 85 ? 'SSR' : p.pot >= 72 ? 'SR' : p.pot >= 55 ? 'R' : 'N');
+    const conv = (p, extra) => Object.assign({
+      id: p.id, name: p.name, pos: p.pos, grade: gradeOf(p), star: 1, lv: 1, xp: 0,
+      base: round2(p.ovr), ovr: p.ovr, skill: pickSkill(p.pos), slv: 1, fit: p.fit || 100, inj: p.inj || 0,
+      goals: p.goals || 0, apps: p.apps || 0, sGoals: p.sGoals || 0, sApps: p.sApps || 0, youth: !!p.youth,
+      joined: p.joined || 1, rest: !!p.rest, num: p.num || 0, spent: 0,
+    }, extra || {});
+    o.players = (o.players || []).map((p) => conv(p));
+    o.youth = (o.youth || []).map((y) => conv(y, { youth: true, until: y.until }));
+    delete o.market; delete o.marketIn;
+    o.mat = { tickets: 5, shards: 10, books: 3 };
+    o.items = [];
+    o.nextItemId = 1;
+    o.mgr = { lv: 1, xp: 0, pts: 0, tal: { atk: 0, def: 0, train: 0, money: 0, nego: 0, chari: 0 } };
+    o.stats = Object.assign({ scouted: 0, skills: 0, bestGrade: 'N' }, o.stats);
+    o.fin = { cur: emptyFin(), prev: null };
+    if (o.live) o.live.skillUse = o.live.skillUse || {};
+    if (o.live) o.live.scorers = o.live.scorers || {};
+    o.v = 2;
+    o.news = o.news || [];
+    pushNews(o, 'big', 'RPG 업데이트! 선수 등급·레벨·스킬·장비와 감독 특성이 생겼습니다. 보상으로 티켓 5장을 드립니다');
+    return o;
+  }
+
   function serialize(s) { return JSON.stringify(s); }
   function deserialize(str) {
-    const o = typeof str === 'string' ? JSON.parse(str) : str;
+    let o = typeof str === 'string' ? JSON.parse(str) : str;
     if (!o || typeof o !== 'object') throw new Error('저장 데이터가 비어 있어요');
+    if (o.v === 1) o = migrateV1(o);
     if (o.v !== SAVE_VERSION) throw new Error('지원하지 않는 저장 버전이에요');
-    const need = ['club', 'players', 'league', 'fac', 'stats', 'fin'];
+    const need = ['club', 'players', 'league', 'fac', 'stats', 'fin', 'mgr', 'mat'];
     for (const k of need) if (!o[k]) throw new Error('저장 데이터가 손상됐어요 (' + k + ')');
     if (!Array.isArray(o.players) || !Array.isArray(o.league.fixtures)) throw new Error('저장 데이터가 손상됐어요');
     if (!Number.isFinite(o.money) || !Number.isFinite(o.fans)) throw new Error('저장 데이터가 손상됐어요 (자금)');
@@ -1348,23 +1858,40 @@
     o.ach = o.ach || {};
     o.trophies = o.trophies || {};
     o.youth = o.youth || [];
-    o.market = o.market || [];
+    o.items = o.items || [];
     o.news = o.news || [];
     o.history = o.history || [];
+    o.nextItemId = o.nextItemId || 1;
+    o.prestige = o.prestige || 0;
+    o.mgr.tal = Object.assign({ atk: 0, def: 0, train: 0, money: 0, nego: 0, chari: 0 }, o.mgr.tal);
+    for (const k of ['tickets', 'shards', 'books']) if (!Number.isFinite(o.mat[k])) o.mat[k] = 0;
+    for (const p of o.players) {
+      if (!GRADES[p.grade]) p.grade = 'N';
+      if (!SKILLS[p.skill]) p.skill = pickSkill(p.pos);
+      p.star = clamp(p.star || 1, 1, MAX_STAR);
+      p.lv = clamp(p.lv || 1, 1, levelCap(p.star));
+      p.slv = clamp(p.slv || 1, 1, MAX_SKILL);
+    }
+    refreshAll(o);
     return o;
   }
 
   return {
     SAVE_VERSION, T, ROUND_SECONDS, SPEEDS, OFFLINE_CAP, OFFLINE_RATE,
-    TIERS, ECON, FORMATIONS, TACTICS, ORDERS, ORDERS_PER_MATCH, KITS, KIT_KEYS,
+    TIERS, ECON, FORMATIONS, tierAI, scaleOf, TACTICS, ORDERS, ORDERS_PER_MATCH, KITS, KIT_KEYS,
     FACILITIES, FAC_KEYS, FAC_MAX, STADIUM_CAP, POSITIONS, POS_NAME, SQUAD_MAX, SQUAD_MIN,
-    ACHIEVEMENTS, PRIZE_SHARE,
+    ACHIEVEMENTS, PRIZE_SHARE, GRADES, GRADE_KEYS, SKILLS, SLOTS, SLOT_KEYS, TALENTS, TALENT_KEYS,
+    MAX_STAR, MAX_SKILL, MAX_PLUS, INVENTORY_MAX, SCOUTS, STAR_SHARDS,
     setRandom, seeded,
     newGame, tick, applyOffline, serialize, deserialize,
-    lineup, teamRating, rateXI, xg, outcomeProbs, matchPreview, standings, leaguePos, myFixture, teamById,
-    incomeRates, roundEconomy, expectedAttendance, stadiumCap, squadWages, facilityCost, describeFacility,
-    playerValue, playerWage, sellPrice, effOf, ovrOf, totalTrophies, objectiveLabel, refreshCost, minuteAt,
-    buyPlayer, sellPlayer, promoteYouth, releaseYouth, upgradeFacility, refreshMarket, toggleRest,
+    lineup, teamRating, rateXI, skillBonus, xg, outcomeProbs, matchPreview, standings, leaguePos, myFixture, teamById,
+    incomeRates, roundEconomy, expectedAttendance, stadiumCap, facilityCost, describeFacility,
+    effOf, ovrOf, totalTrophies, objectiveLabel, minuteAt, ordersPerMatch,
+    levelCap, xpNeed, levelCost, starCost, skillCost, releaseValue, itemBonus, gearOf, gearBonus,
+    enhanceCost, dismantleValue, scoutOdds, scoutPrice, mgrXpNeed, mgrTitle, respecCost, youthOdds,
+    levelUp, levelUpTeam, starUp, skillUp, releasePlayer, promoteYouth, releaseYouth,
+    equipItem, unequipItem, autoEquip, enhanceItem, dismantleItem, dismantleBelow,
+    scout, addTalent, resetTalents, upgradeFacility, toggleRest,
     setFormation, setTactic, setSpeed, setPaused, renameClub, setKit, skipOffseason, issueOrder,
     fmtMoney, fmtInt, josa, hasBatchim, shortName,
   };
