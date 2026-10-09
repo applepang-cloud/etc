@@ -69,9 +69,9 @@ const SILENT_A = 'G4:3 A4 G4:2 | E4:6 | G4:3 A4 G4:2 | E4:6 | D5:4 D5:2 | B4:6 |
 const SILENT_B = `A4:4 A4:2 | C5:3 B4 A4:2 | G4:3 A4 G4:2 | E4:6 | A4:4 A4:2 | C5:3 B4 A4:2 | G4:3 A4 G4:2 | E4:6 |
   D5:4 D5:2 | F5:3 D5 B4:2 | C5:6 | E5:6 | C5:3 G4 E4:2 | G4:3 F4 D4:2 | C4:6 | C4:6`;
 // 미뉴에트 G장조(페촐트)를 다장조로 옮김 (3/4박자)
-const MINUET_A = 'G4:2 C4 D4 E4 F4 | G4:2 C4:2 C4:2 | A4:2 F4 G4 A4 B4 | C5:2 C4:2 C4:2';
-const MINUET_B1 = 'F4:2 G4 F4 E4 D4 | E4:2 F4 E4 D4 C4 | B3:2 C4 D4 E4 C4 | D4:6';
-const MINUET_B2 = 'F4:2 G4 F4 E4 D4 | E4:2 F4 E4 D4 C4 | D4:2 E4 D4 C4 B3 | C4:6';
+export const MINUET_A = 'G4:2 C4 D4 E4 F4 | G4:2 C4:2 C4:2 | A4:2 F4 G4 A4 B4 | C5:2 C4:2 C4:2';
+export const MINUET_B1 = 'F4:2 G4 F4 E4 D4 | E4:2 F4 E4 D4 C4 | B3:2 C4 D4 E4 C4 | D4:6';
+export const MINUET_B2 = 'F4:2 G4 F4 E4 D4 | E4:2 F4 E4 D4 C4 | D4:2 E4 D4 C4 B3 | C4:6';
 // 4분음표 그리드 멜로디를 8분음표 그리드로 (길이 두 배)
 const double = (src) => src.replace(/([A-G][#b]?\d|R)(?::(\d+))?/g, (_, n, len) => `${n}:${(Number(len) || 1) * 2}`);
 

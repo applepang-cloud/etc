@@ -1,7 +1,10 @@
 // 스토리 모드: 비주얼 노벨 엔진 (대사, 선택지 분기, 연주 연동, 미니게임)
 
 import { portrait } from './portraits.js';
-import { CAST, CHAPTER1 } from './story-data.js';
+import { CAST, CHAPTER1, DUET } from './story-data.js';
+import { buildSong } from './songs.js';
+import { solfege } from './instruments.js';
+import { rrect } from './draw.js';
 
 const SAVE_KEY = 'pb.story.v2'; // 설정이 바뀌면 버전을 올려 예전 저장을 쓰지 않는다
 const TYPE_MS = 28;
@@ -200,7 +203,7 @@ export class Story {
       return true;
     }
     if (s.minigame) {
-      const result = await this.sneak(run);
+      const result = s.minigame === 'duet' ? await this.duet(run) : await this.sneak(run);
       if (run !== this.run) return true;
       this.queue.unshift(...(s[result] || []));
     }
@@ -250,7 +253,7 @@ export class Story {
     this.el.bg.classList.add('fade');
     await wait(this.skipping ? 60 : 260);
     this.el.bg.dataset.bg = name;
-    this.el.art.innerHTML = ['academy', 'night', 'hall', 'station'].includes(name) ? pianoSvg : '';
+    this.el.art.innerHTML = ['academy', 'night', 'hall', 'station', 'party'].includes(name) ? pianoSvg : '';
     this.el.bg.classList.remove('fade');
     await wait(this.skipping ? 40 : 200);
   }
@@ -490,6 +493,7 @@ export class Story {
     this.skipping = false;
     this.el.skip.classList.remove('on');
     const m = this.el.mini;
+    m.classList.remove('duet');
     m.innerHTML = `
       <div class="mini-top">
         <h3>들키지 마!</h3>
@@ -649,6 +653,418 @@ export class Story {
         ui.time.style.width = `${Math.max(0, 1 - elapsed / LIMIT) * 100}%`;
         if (love >= 100) return finish('success', '마음이 전해졌다');
         if (elapsed >= LIMIT) return finish('timeout', '시간 초과');
+        requestAnimationFrame(frame);
+      };
+      requestAnimationFrame(frame);
+    });
+  }
+  // ---------- 미니게임: 비밀 연탄곡 ----------
+  // 왼쪽 레인 = 멜로디 건반(맞추면 그 음이 울리고, 놓치면 소리가 빈다). 오른쪽 레인 = ♥ 신호.
+  // 태준이 안 볼 때 ♥를 받으면 마음 게이지가 차고, 보는 중에 받으면 들킨다(3번이면 실패).
+  // 건반을 놓치면 소리가 비어 태준이 곧 돌아본다. 결과: success | caught | shy, st.duet = { result, accuracy }
+  duet(run) {
+    this.skipping = false;
+    this.el.skip.classList.remove('on');
+    const m = this.el.mini;
+    m.classList.add('duet');
+    m.innerHTML = `
+      <div class="mini-top">
+        <h3>비밀 연탄곡</h3>
+        <div class="mini-strikes" aria-label="들킨 횟수"><b></b><b></b><b></b></div>
+      </div>
+      <div class="mini-bars">
+        <div class="mini-bar love"><span>마음</span><i></i></div>
+        <div class="mini-bar time"><span>${DUET.title}</span><i></i></div>
+      </div>
+      <div class="duet-scene">
+        <div class="duet-her"></div>
+        <div class="mini-door table"><div class="mini-watch"></div><div class="mini-state"></div></div>
+        <div class="mini-fx"></div>
+      </div>
+      <div class="duet-lanes"><canvas></canvas><div class="mini-msg"></div></div>
+      <p class="mini-hint">태준이 <b>안 볼 때</b>만 ♥를 받아요. 건반을 놓치면 소리가 비어 시선이 쏠려요</p>
+      <div class="duet-pads">
+        <button type="button" class="duet-pad key"><b>건반</b><small>멜로디</small></button>
+        <button type="button" class="duet-pad love"><b>♥ 신호</b><small>눈 맞추기</small></button>
+      </div>`;
+    m.hidden = false;
+    const q = (sel) => m.querySelector(sel);
+    const ui = {
+      her: q('.duet-her'),
+      door: q('.mini-door'),
+      watch: q('.mini-watch'),
+      state: q('.mini-state'),
+      fx: q('.mini-fx'),
+      lanes: q('.duet-lanes'),
+      cv: q('canvas'),
+      msg: q('.mini-msg'),
+      love: q('.love i'),
+      time: q('.time i'),
+      strikes: [...m.querySelectorAll('.mini-strikes b')],
+      pads: [...m.querySelectorAll('.duet-pad')],
+    };
+    const g = ui.cv.getContext('2d');
+    const audio = this.hooks.audio;
+    audio.ensure();
+
+    // 악보
+    const sec = DUET.stepSec;
+    const beat = sec * 2;
+    const bar = DUET.stepsPerBar;
+    const melody = buildSong({ parts: { piano: [DUET.melody] } }).parts[0].notes;
+    const harmony = DUET.harmony.split(' ');
+    const totalSteps = harmony.length * bar;
+    const CHORD = { C: [36, 52, 55], F: [41, 53, 57], G: [43, 55, 59] }; // [베이스, 화음]
+    // 마디마다 멜로디가 쉬는 칸(가운데에 가까운 곳)에 ♥, 첫 마디는 연습
+    const hearts = [];
+    for (let b = 1; b < harmony.length; b++) {
+      const on = new Set(melody.filter((n) => n.start >= b * bar && n.start < (b + 1) * bar).map((n) => n.start - b * bar));
+      const free = [...Array(bar).keys()].filter((i) => !on.has(i)).sort((x, y) => Math.abs(x - 3) - Math.abs(y - 3));
+      if (free.length) hearts.push(b * bar + free[0]);
+      const far = free.find((i) => Math.abs(i - free[0]) >= 3);
+      if (free.length >= 3 && far != null) hearts.push(b * bar + far);
+    }
+    hearts.sort((a, b) => a - b);
+    const LOVE = 100 / 8; // ♥ 8개면 가득
+
+    const t0 = audio.now + 0.4 + beat * 3; // 세 박 카운트인
+    const songEnd = t0 + totalSteps * sec;
+    const lanes = [
+      melody.map((n) => ({ t: t0 + n.start * sec, pitch: n.key, len: n.len, state: null })),
+      hearts.map((st) => ({ t: t0 + st * sec, state: null })),
+    ];
+    const acc = [];
+    harmony.forEach((name, b) => {
+      const [bass, ...chord] = CHORD[name];
+      const at = t0 + b * bar * sec;
+      acc.push({ t: at, pitch: bass, dur: bar * sec * 0.95, vel: 0.5 });
+      for (const k of [2, 4]) for (const p of chord) acc.push({ t: at + k * sec, pitch: p, dur: sec * 1.6, vel: 0.28 });
+    });
+    for (let i = 0; i < 3; i++) audio.tick(t0 - (3 - i) * beat, i === 0);
+
+    const PERFECT = 0.08;
+    const GOOD = 0.16;
+    const AHEAD = 1.6; // 몇 초 앞까지 보이나
+    let hits = 0;
+    let love = 0;
+    let strikes = 0;
+    let ai = 0;
+    let lastNow = audio.now;
+    let done = false;
+    let alertUntil = 0;
+    const judge = [null, null];
+    const flashAt = [0, 0];
+
+    // 태준: away(손님과 건배) → warn(!) → look(보는 중)
+    let phase = 'away';
+    let phaseLeft = t0 - audio.now + beat * 4;
+    let tickLeft = 0;
+    let lastHer = '';
+    let lastWatch = '';
+    let herUntil = 0;
+    const setHer = (e) => e !== lastHer && (ui.her.innerHTML = portrait('seoyun', (lastHer = e)));
+    const setWatch = (e) => e !== lastWatch && (ui.watch.innerHTML = portrait('taejun', (lastWatch = e)));
+    const setPhase = (p) => {
+      phase = p;
+      ui.door.dataset.phase = p;
+      if (p === 'away') {
+        phaseLeft = beat * (3 + Math.floor(Math.random() * 4));
+        ui.state.textContent = '손님과 건배 중';
+        setWatch('back');
+      } else if (p === 'warn') {
+        phaseLeft = beat * 2;
+        tickLeft = 0;
+        ui.state.textContent = '!';
+      } else {
+        phaseLeft = beat * (2 + Math.floor(Math.random() * 3));
+        ui.state.textContent = '보는 중';
+        setWatch('serious');
+      }
+    };
+    setHer('smile');
+    setPhase('away');
+    phaseLeft = t0 - audio.now + beat * 4;
+    // 자동 테스트용으로 진행 상태를 노출한다 (게임 동작에는 쓰지 않음)
+    m.duetState = { lanes, phase: () => phase };
+
+    // 캔버스 크기
+    let W = 0;
+    let H = 0;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const fit = () => {
+      const r = ui.lanes.getBoundingClientRect();
+      W = r.width;
+      H = r.height;
+      ui.cv.width = Math.round(W * dpr);
+      ui.cv.height = Math.round(H * dpr);
+    };
+    const ro = new ResizeObserver(fit);
+    ro.observe(ui.lanes);
+    fit();
+
+    const heartPath = (x, y, r) => {
+      g.beginPath();
+      g.moveTo(x, y + r * 0.9);
+      g.bezierCurveTo(x - r * 1.6, y - r * 0.1, x - r * 0.8, y - r * 1.25, x, y - r * 0.45);
+      g.bezierCurveTo(x + r * 0.8, y - r * 1.25, x + r * 1.6, y - r * 0.1, x, y + r * 0.9);
+      g.closePath();
+    };
+
+    const draw = (now) => {
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.clearRect(0, 0, W, H);
+      const lw = W / 2;
+      const hitY = H - 34;
+      const pps = (hitY - 8) / AHEAD;
+      const yOf = (t) => hitY - (t - now) * pps;
+      // 레인 바탕: 오른쪽은 태준의 시선에 따라 색이 바뀐다
+      g.fillStyle = '#17131b';
+      g.fillRect(0, 0, lw, H);
+      const blink = Math.floor(now / 0.18) % 2 === 0;
+      g.fillStyle = phase === 'look' ? '#4a1518' : phase === 'warn' ? (blink ? '#4a3a12' : '#2a1a22') : '#2a1622';
+      g.fillRect(lw, 0, lw, H);
+      // 박자선
+      const s0 = Math.floor((now - t0) / sec) - 1;
+      for (let st = Math.max(0, s0); st <= s0 + AHEAD / sec + 2; st++) {
+        if (st % 2 || st > totalSteps) continue;
+        const y = yOf(t0 + st * sec);
+        g.fillStyle = st % bar === 0 ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.05)';
+        g.fillRect(0, y, W, 1);
+      }
+      g.fillStyle = 'rgba(255,255,255,0.08)';
+      g.fillRect(lw - 0.5, 0, 1, H);
+      // 판정선
+      g.fillStyle = 'rgba(255,255,255,0.85)';
+      g.fillRect(0, hitY, W, 2);
+      for (let l = 0; l < 2; l++) {
+        const cx = lw * (l + 0.5);
+        const glow = Math.max(0, 1 - (now - flashAt[l]) / 0.25);
+        if (glow > 0) {
+          g.fillStyle = l ? `rgba(255,122,162,${0.45 * glow})` : `rgba(255,255,255,${0.35 * glow})`;
+          g.fillRect(l * lw, hitY - 26, lw, 52);
+        }
+        g.strokeStyle = l ? 'rgba(255,179,207,0.7)' : 'rgba(255,255,255,0.5)';
+        g.lineWidth = 2;
+        if (l) {
+          heartPath(cx, hitY, 13);
+          g.stroke();
+        } else {
+          g.strokeRect(cx - lw * 0.32, hitY - 9, lw * 0.64, 18);
+        }
+      }
+      // 멜로디 노트
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.font = '600 12px "IBM Plex Sans KR", sans-serif';
+      // 한 번 누르는 건반 타일 + 음 길이만큼 옅은 꼬리
+      for (const n of lanes[0]) {
+        if (n.state && n.state !== 'miss') continue;
+        const y = yOf(n.t);
+        const tail = Math.max(0, n.len * sec * pps - 4);
+        if (y < -4 || y - tail > H) continue;
+        const x = lw * 0.18;
+        const w = lw * 0.64;
+        if (tail > 24) {
+          g.fillStyle = 'rgba(243,245,247,0.12)';
+          g.fillRect(x + w * 0.3, y - tail, w * 0.4, tail);
+        }
+        g.fillStyle = n.state === 'miss' ? 'rgba(140,140,150,0.35)' : '#f3f5f7';
+        rrect(g, x, y - 22, w, 22, 5);
+        g.fill();
+        if (!n.state) {
+          g.fillStyle = '#c9ced6';
+          g.fillRect(x + 2, y - 5, w - 4, 4);
+          g.fillStyle = '#1b1f24';
+          g.fillText(solfege(n.pitch) || '', x + w / 2, y - 12);
+        }
+      }
+      // ♥ 노트
+      for (const n of lanes[1]) {
+        if (n.state && n.state !== 'miss') continue;
+        const y = yOf(n.t);
+        if (y < -20 || y > H + 20) continue;
+        heartPath(lw * 1.5, y, 13);
+        g.fillStyle = n.state === 'miss' ? 'rgba(160,120,135,0.35)' : phase === 'look' ? '#ff5d6c' : '#ff8fb3';
+        g.fill();
+      }
+      // 판정 글자
+      g.font = '22px "Black Han Sans", sans-serif';
+      judge.forEach((j, l) => {
+        if (!j) return;
+        const k = (now - j.at) / 0.55;
+        if (k > 1) return;
+        g.globalAlpha = 1 - k;
+        g.fillStyle = j.color;
+        g.fillText(j.text, lw * (l + 0.5), hitY - 44 - k * 12);
+        g.globalAlpha = 1;
+      });
+      // 시선 표시
+      if (phase !== 'away') {
+        g.font = '18px "Black Han Sans", sans-serif';
+        g.fillStyle = phase === 'look' ? '#ffb0b0' : '#ffe08a';
+        g.fillText(phase === 'look' ? '태준이 보는 중!' : '! 돌아본다', lw * 1.5, 22);
+      }
+      if (now < alertUntil) {
+        g.font = '15px "Black Han Sans", sans-serif';
+        g.fillStyle = '#ffe08a';
+        g.fillText('음이 비었다! 시선이 쏠린다', lw * 0.5, 22);
+      }
+      // 카운트인
+      if (now < t0) {
+        const n = Math.ceil((t0 - now) / beat);
+        if (n <= 3) {
+          g.font = '56px "Black Han Sans", sans-serif';
+          g.fillStyle = 'rgba(255,255,255,0.9)';
+          g.fillText(String(n), W / 2, H * 0.42);
+        }
+      }
+    };
+
+    const setJudge = (l, text, color, now) => (judge[l] = { text, color, at: now });
+    const popHeart = () => {
+      const h = document.createElement('span');
+      h.className = 'vn-heart small';
+      h.innerHTML = heartIcon;
+      h.style.left = `${20 + Math.random() * 30}%`;
+      ui.fx.appendChild(h);
+      setTimeout(() => h.remove(), 1400);
+    };
+
+    return new Promise((resolve) => {
+      const cleanup = () => {
+        ro.disconnect();
+        window.removeEventListener('keydown', onKey);
+        document.removeEventListener('visibilitychange', onVis);
+      };
+      const finish = (result, text) => {
+        if (done) return;
+        done = true;
+        cleanup();
+        ui.pads.forEach((b) => (b.disabled = true));
+        if (result === 'caught') audio.resetBus();
+        const accuracy = Math.round((hits / lanes[0].length) * 100) / 100;
+        this.st.duet = { result, accuracy };
+        ui.msg.innerHTML = `<span></span><small>연주 ${Math.round(accuracy * 100)}%</small>`;
+        ui.msg.firstChild.textContent = text;
+        ui.msg.className = `mini-msg show ${result === 'shy' ? 'timeout' : result}`;
+        if (result === 'success') audio.sparkle();
+        else audio.thud();
+        setHer(result === 'success' ? 'blush' : result === 'caught' ? 'surprise' : 'sad');
+        setTimeout(() => {
+          m.hidden = true;
+          m.classList.remove('duet');
+          if (run === this.run) resolve(result);
+        }, 1900);
+      };
+
+      const press = (l) => {
+        if (done) return;
+        const now = audio.now;
+        const pad = ui.pads[l];
+        pad.classList.add('down');
+        setTimeout(() => pad.classList.remove('down'), 90);
+        let best = null;
+        for (const n of lanes[l]) {
+          if (n.t > now + GOOD) break;
+          if (n.state || Math.abs(n.t - now) > GOOD) continue;
+          if (!best || Math.abs(n.t - now) < Math.abs(best.t - now)) best = n;
+        }
+        if (!best) return;
+        const perfect = Math.abs(best.t - now) <= PERFECT;
+        best.state = perfect ? 'perfect' : 'good';
+        flashAt[l] = now;
+        if (l === 0) {
+          hits++;
+          audio.note(best.pitch, now, Math.max(0.2, best.len * sec * 0.95), 0.85);
+          setJudge(0, perfect ? 'PERFECT' : 'GOOD', perfect ? '#ffd76a' : '#ffffff', now);
+          return;
+        }
+        if (phase === 'look') {
+          strikes++;
+          ui.strikes.forEach((b, i) => b.classList.toggle('on', i < strikes));
+          m.classList.remove('hit');
+          void m.offsetWidth;
+          m.classList.add('hit');
+          audio.thud();
+          setHer('surprise');
+          herUntil = now + 0.9;
+          setJudge(1, '들켰다!', '#ff6b5e', now);
+          if (strikes >= 3) finish('caught', '들켰다…!');
+          return;
+        }
+        love = Math.min(100, love + LOVE);
+        audio.note(84, now, 0.3, 0.3);
+        audio.note(88, now + 0.07, 0.4, 0.26);
+        setHer('blush');
+        herUntil = now + 0.9;
+        popHeart();
+        setJudge(1, '♥', '#ffb3cf', now);
+      };
+      ui.pads.forEach((b, l) =>
+        b.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          press(l);
+        }),
+      );
+      const onKey = (e) => {
+        if (e.repeat) return;
+        if (['ArrowLeft', 'KeyF', 'KeyD'].includes(e.code)) press(0);
+        else if (['ArrowRight', 'KeyJ', 'KeyK'].includes(e.code)) press(1);
+        else return;
+        e.preventDefault();
+      };
+      // 화면을 벗어나면 시계(오디오)를 멈춘다
+      const onVis = () => (document.hidden ? audio.suspend() : audio.resume());
+      window.addEventListener('keydown', onKey);
+      document.addEventListener('visibilitychange', onVis);
+
+      const frame = () => {
+        if (done) return;
+        if (run !== this.run) {
+          cleanup();
+          audio.resetBus();
+          return;
+        }
+        const now = audio.now;
+        const dt = Math.max(0, Math.min(0.1, now - lastNow));
+        lastNow = now;
+        // 반주 예약
+        while (ai < acc.length && acc[ai].t < now + 0.3) {
+          const a = acc[ai++];
+          audio.note(a.pitch, a.t, a.dur, a.vel);
+        }
+        // 태준
+        phaseLeft -= dt;
+        if (phaseLeft <= 0) setPhase(phase === 'away' ? 'warn' : phase === 'warn' ? 'look' : 'away');
+        if (phase === 'warn' && (tickLeft -= dt) <= 0) {
+          tickLeft = beat / 2;
+          audio.tick(now, false);
+        }
+        // 놓친 노트
+        for (const n of lanes[0]) {
+          if (n.t > now - GOOD) break;
+          if (n.state) continue;
+          n.state = 'miss';
+          setJudge(0, 'MISS', '#9aa0aa', now);
+          // 소리가 비면 태준이 곧 돌아본다
+          if (phase === 'away' && phaseLeft > beat) {
+            phaseLeft = beat * 0.5;
+            alertUntil = now + 1.2;
+          }
+        }
+        for (const n of lanes[1]) {
+          if (n.t > now - GOOD) break;
+          if (!n.state) n.state = 'miss';
+        }
+        if (now > herUntil) setHer(phase === 'look' ? 'serious' : 'smile');
+        ui.love.style.width = `${love}%`;
+        ui.time.style.width = `${Math.max(0, Math.min(1, (now - t0) / (songEnd - t0))) * 100}%`;
+        draw(now);
+        if (now > songEnd + 0.5) {
+          if (love >= 99.9) finish('success', '마음이 전해졌다');
+          else finish('shy', '끝내 눈을 못 맞췄다');
+          return;
+        }
         requestAnimationFrame(frame);
       };
       requestAnimationFrame(frame);

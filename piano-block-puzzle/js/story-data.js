@@ -10,9 +10,21 @@
 //   { play: 곡 id }                연습 연주 (결과는 st.last 에 저장)
 //   { pick: true }                 결선 곡 고르기 (st.picked)
 //   { contest: { rival, win, lose } }  결선 연주 → 심사 → 장면 이동
-//   { minigame: 'sneak', success: [...], caught: [...], timeout: [...] }
+//   { minigame: 'sneak', success: [...], caught: [...], timeout: [...] }   들키지 마! (쳐다보기)
+//   { minigame: 'duet', success: [...], caught: [...], shy: [...] }       비밀 연탄곡 (리듬, 결과는 st.duet)
 //   { fx: 'flash' | 'shake' | 'heart' }   { sfx: 'elise' | 'twinkle' | 'chime' }
 //   { add: { aff, skill } }  { go: 장면 }  { end: true }
+
+import { MINUET_A, MINUET_B1, MINUET_B2 } from './songs.js';
+
+// 미니게임 「비밀 연탄곡」: 페촐트 미뉴에트(다장조로 옮김). 도현 = 멜로디, 서윤 = 반주(마디마다 화음 이름)
+export const DUET = {
+  title: '미뉴에트 · 연탄',
+  stepSec: 0.36, // 8분음표 한 칸
+  stepsPerBar: 6, // 3/4박자
+  melody: `${MINUET_A} | ${MINUET_B1} | ${MINUET_A} | ${MINUET_B2}`,
+  harmony: 'C C F C F C G G C C F C F C G C',
+};
 
 export const CAST = {
   seoyun: { name: '한서윤', color: '#f48fb6' },
@@ -247,6 +259,97 @@ export const CHAPTER1 = {
         ],
       },
       { hide: 'chaea' },
+      { go: 'party' },
+    ],
+
+    party: [
+      { bg: 'party' },
+      { hide: 'seoyun' },
+      { show: ['dohyun', 'normal', 'left'] },
+      { n: '대회 닷새 전, 토요일 밤. 한국대 강 이사장의 저택에서 서윤 선생님과 강태준의 약혼 발표 파티가 열렸다.' },
+      { n: '샹들리에 아래, 빌려 입은 정장이 어색했다. 나는 샴페인 잔만 쥔 채 벽 쪽에 서 있었다.' },
+      { show: ['taejun', 'smile', 'right'] },
+      { s: ['taejun', '와 줬네, 편의점 피아니스트. 오늘 손님들 앞에서 서윤 씨랑 한 곡 쳐 줘. 아버님이 그 「천재 학생」 소리를 꼭 듣고 싶으시대.'] },
+      { s: ['dohyun', '…연탄곡이요? 선생님이랑 둘이서요?', 'surprise'] },
+      { s: ['taejun', '피아노 한 대에 나란히. 축하 무대로 딱이잖아. 아, 실수하면 서윤 씨 체면이 깎이니까 조심하고.', 'serious'] },
+      { hide: 'taejun' },
+      { show: ['seoyun', 'serious', 'right'] },
+      { s: ['seoyun', '(작게) 미안해요. 거절하려 했는데… 아빠가 벌써 약속해 버렸어요.'] },
+      { s: ['seoyun', '곡은 미뉴에트예요. 내가 반주, 도현 씨가 멜로디. 연습실에서 하던 대로만 해요.', 'normal'] },
+      {
+        choice: [
+          { t: '"선생님 옆이면 어디서든 칠 수 있어요."', aff: 1, then: [{ s: ['seoyun', '…그런 말은 무대 끝나고 해요. 지금 얼굴 빨개지면 안 되니까.', 'blush'] }] },
+          { t: '"손목은 괜찮으세요?"', aff: 1, flag: 'care', then: [{ s: ['seoyun', '반주는 짧아서 괜찮아요. …걱정해 줘서 고마워요.', 'smile'] }] },
+          { t: '"한 음도 안 틀릴게요."', skill: 1, then: [{ s: ['seoyun', '알아요. 당신 소리는 내가 제일 잘 아니까.', 'smile'] }] },
+        ],
+      },
+      { n: '그랜드 피아노 앞, 의자 하나에 둘이 나란히 앉았다. 어깨가 닿을 듯한 거리. 맨 앞 테이블에서 강태준이 잔을 들고 이쪽을 보고 있었다.' },
+      { s: ['seoyun', '(아주 작게) …치는 동안 신호 보낼게요. 태준 씨가 안 볼 때만, 받아 줘요.', 'blush'] },
+      { s: ['dohyun', '(건반은 틀리지 않게. 마음은 들키지 않게.)'] },
+      {
+        minigame: 'duet',
+        success: [
+          { fx: 'heart' },
+          { n: '태준이 손님들과 건배하는 틈마다, 건반 위에서 눈이 마주쳤다. 마지막 화음이 끝나고 박수가 쏟아지는 사이, 그녀가 아무도 모르게 내 새끼손가락을 살짝 눌렀다.' },
+          { s: ['seoyun', '…들었어요? 마지막 화음, 우리 둘만 아는 대답이에요.', 'blush'] },
+          { add: { aff: 2, flag: 'duet' } },
+        ],
+        caught: [
+          { show: ['taejun', 'serious', 'center'] },
+          { fx: 'shake' },
+          { s: ['taejun', '두 사람, 연주 중에 눈을 꽤 자주 마주치던데. 선생님과 학생이 원래 그렇게 다정한가?'] },
+          { s: ['seoyun', '박자를 맞추려면 서로 봐야 해요. 연탄곡은 원래 그래요.', 'serious'] },
+          { s: ['taejun', '그렇다면 다행이고. 서윤 씨, 오늘 같은 날 오해 살 일은 만들지 말자.'] },
+          { hide: 'taejun' },
+          { n: '파티가 끝날 때까지, 태준의 시선이 등 뒤에 꽂혀 있는 것 같았다.' },
+          { add: { flag: 'suspect' } },
+        ],
+        shy: [
+          { n: '태준의 시선이 무서워, 끝내 한 번도 그녀 쪽을 돌아보지 못했다. 박수 속에서 그녀가 작게 웃었다.' },
+          { s: ['seoyun', '…연주는 좋았어요. 다음엔, 나도 좀 봐 줘요.', 'sad'] },
+        ],
+      },
+      {
+        if: (st) => (st.duet?.accuracy || 0) >= 0.8,
+        then: [
+          { show: ['prof', 'normal', 'center'] },
+          { s: ['prof', '…거리 피아노라더니, 박자 감각 하나는 쓸 만하군.'] },
+          { hide: 'prof' },
+          { add: { skill: 1 } },
+        ],
+        else: [{ n: '몇 음이 비었지만, 손님들은 너그럽게 박수를 쳐 주었다.' }],
+      },
+      { go: 'terrace' },
+    ],
+
+    terrace: [
+      { bg: 'terrace' },
+      { hide: 'taejun' },
+      { show: ['dohyun', 'normal', 'left'] },
+      { n: '닫힌 유리문 너머로 파티장 소음이 멀어졌다. 저택 테라스 아래로 도시 불빛이 깔려 있었다.' },
+      { show: ['seoyun', 'normal', 'right'] },
+      { s: ['seoyun', '여기 있었네요. …나도 잠깐, 바람 쐬러 나왔어요.'] },
+      {
+        if: (st) => st.flags.suspect,
+        then: [{ s: ['seoyun', '태준 씨가 뭐라고 했죠? …미안해요. 나 때문에.', 'sad'] }],
+      },
+      { s: ['seoyun', '아까 치면서 알았어요. 내가 다시 무대에 서고 싶었던 건, 혼자가 아니라 누군가와 같이 치고 싶어서였구나.', 'smile'] },
+      {
+        choice: [
+          {
+            t: '"다음 무대에도 같이 서요. 언젠가 세계 무대에서도."',
+            aff: 2,
+            flag: 'stage',
+            then: [{ s: ['seoyun', '…약속은 함부로 하는 거 아니라니까요.', 'blush'] }, { s: ['seoyun', '그래도, 그 약속은 받을게요.', 'smile'] }, { fx: 'heart' }],
+          },
+          { t: '"약혼… 정말 하실 거예요?"', aff: 1, flag: 'ask', then: [{ s: ['seoyun', '…대회 끝나면 말할게요. 지금은 당신 콩쿠르가 먼저예요.', 'sad'] }] },
+          { t: '말없이 옆에 서서 야경을 본다', aff: 1, then: [{ n: '둘 다 아무 말도 하지 않았다. 유리문 너머에서 누군가 그녀의 이름을 부를 때까지.' }] },
+        ],
+      },
+      { n: '「서윤 씨?」 유리문 너머에서 태준의 목소리가 들렸다. 그녀는 한 걸음 물러나, 다시 약혼자의 얼굴로 돌아갔다.' },
+      { s: ['seoyun', '…대회, 꼭 이겨요. 그날은 객석에서 제일 크게 들을게요.', 'smile'] },
+      { hide: 'seoyun' },
+      { s: ['dohyun', '(넘으면 안 되는 선. 오늘 우리는 그 선 위에서 한 곡을 같이 쳤다.)', 'sad'] },
       { go: 'prep' },
     ],
 
@@ -290,6 +393,10 @@ export const CHAPTER1 = {
       { show: ['dohyun', 'normal', 'left'] },
       { show: ['seoyun', 'serious', 'right'] },
       { s: ['seoyun', '긴장돼요? …나도요.'] },
+      {
+        if: (st) => st.flags.duet,
+        then: [{ s: ['seoyun', '파티 때처럼 쳐요. 내가 옆에서 반주하고 있다고 생각하고.', 'smile'] }],
+      },
       {
         choice: [
           {

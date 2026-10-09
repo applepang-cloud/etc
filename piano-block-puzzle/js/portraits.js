@@ -1,5 +1,5 @@
 // 스토리 모드 캐릭터 일러스트 (SVG). 외부 이미지 없이 도형으로 그린다.
-// portrait(id, expr): expr = normal | smile | blush | surprise | sad | serious | back(교수 뒷모습)
+// portrait(id, expr): expr = normal | smile | blush | surprise | sad | serious | back(교수·태준 뒷모습)
 
 const SKIN = '#fde4d4';
 const SKIN_SH = '#efc2ad';
@@ -130,19 +130,22 @@ function chaea(expr) {
   return s;
 }
 
+// 뒷모습 (돌아앉아 있을 때)
+function back(c) {
+  let s = body(c);
+  s += `<ellipse cx="99" cy="190" rx="8" ry="13" fill="${SKIN}"/><ellipse cx="201" cy="190" rx="8" ry="13" fill="${SKIN}"/>`;
+  s += `<path d="M134 250 L134 304 L166 304 L166 250 Z" fill="${SKIN_SH}"/>`;
+  s += `<path d="M98 160 C96 104 120 82 150 82 C182 82 204 104 202 160 C204 214 186 252 150 256 C114 252 96 214 98 160 Z" fill="${c.hair}"/>`;
+  s += `<path d="M120 100 C138 90 166 90 182 102" fill="none" stroke="${c.hairHi}" stroke-width="4" stroke-linecap="round" opacity="0.6"/>`;
+  return s;
+}
+
 function prof(expr) {
   const c = CHARS.prof;
   const tie = '<path d="M146 304 L154 304 L158 316 L150 380 L142 316 Z" fill="#23314f"/>';
   const shirt = `<path d="M128 302 L150 360 L172 302 Z" fill="${c.inner}"/>`;
   const lapel = '<path d="M112 316 L134 302 L150 360 Z M188 316 L166 302 L150 360 Z" fill="#2f333d"/>';
-  if (expr === 'back') {
-    let s = body(c);
-    s += `<ellipse cx="99" cy="190" rx="8" ry="13" fill="${SKIN}"/><ellipse cx="201" cy="190" rx="8" ry="13" fill="${SKIN}"/>`;
-    s += `<path d="M134 250 L134 304 L166 304 L166 250 Z" fill="${SKIN_SH}"/>`;
-    s += `<path d="M98 160 C96 104 120 82 150 82 C182 82 204 104 202 160 C204 214 186 252 150 256 C114 252 96 214 98 160 Z" fill="${c.hair}"/>`;
-    s += `<path d="M120 100 C138 90 166 90 182 102" fill="none" stroke="${c.hairHi}" stroke-width="4" stroke-linecap="round" opacity="0.6"/>`;
-    return s;
-  }
+  if (expr === 'back') return back(c);
   let s = '';
   s += `<path d="M94 166 C92 108 118 80 152 80 C186 80 210 108 206 166 Z" fill="${c.hair}"/>`;
   s += body(c, shirt + tie + lapel);
@@ -156,6 +159,7 @@ function prof(expr) {
 
 function taejun(expr) {
   const c = CHARS.taejun;
+  if (expr === 'back') return back(c);
   let s = '';
   s += `<path d="M92 170 C88 106 116 74 152 74 C188 74 214 106 208 170 Z" fill="${c.hair}"/>`;
   s += body(

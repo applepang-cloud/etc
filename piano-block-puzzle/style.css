@@ -631,6 +631,24 @@ h1 {
     radial-gradient(ellipse at 8% 50%, rgba(255, 186, 110, 0.35), transparent 45%),
     linear-gradient(#141218, #251e27);
 }
+.vn-bg[data-bg="party"] {
+  background:
+    radial-gradient(circle at 50% 8%, rgba(255, 236, 180, 0.9) 0 3%, rgba(255, 214, 140, 0.35) 6%, transparent 22%),
+    radial-gradient(circle at 18% 20%, rgba(255, 220, 150, 0.35) 0 1.5%, transparent 6%),
+    radial-gradient(circle at 82% 22%, rgba(255, 220, 150, 0.35) 0 1.5%, transparent 6%),
+    repeating-linear-gradient(90deg, transparent 0 18%, rgba(255, 210, 140, 0.07) 18% 19%),
+    linear-gradient(#3a2418, #5a3a24 55%, #2a1810);
+}
+.vn-bg[data-bg="terrace"] {
+  background:
+    radial-gradient(circle at 15% 78%, rgba(255, 200, 120, 0.55) 0 0.8%, transparent 2%),
+    radial-gradient(circle at 34% 84%, rgba(150, 190, 255, 0.5) 0 0.7%, transparent 2%),
+    radial-gradient(circle at 58% 80%, rgba(255, 180, 210, 0.5) 0 0.8%, transparent 2%),
+    radial-gradient(circle at 76% 86%, rgba(255, 220, 140, 0.5) 0 0.7%, transparent 2%),
+    radial-gradient(circle at 90% 79%, rgba(170, 210, 255, 0.45) 0 0.8%, transparent 2%),
+    radial-gradient(circle at 80% 14%, #f4f1d8 0 3%, rgba(244, 241, 216, 0.15) 4%, transparent 12%),
+    linear-gradient(#0b1026, #1b1838 62%, #3a2c48 78%, #120f1c);
+}
 .vn-bg-art { position: absolute; left: 50%; bottom: 150px; width: 86%; max-width: 420px; transform: translateX(-50%); opacity: 0.85; }
 .vn-bg[data-bg="station"] .vn-bg-art { left: 30%; width: 60%; opacity: 0.7; }
 .vn-piano { display: block; width: 100%; height: auto; }
@@ -943,3 +961,56 @@ h1 {
 .mini-hold:not(.on) { background: linear-gradient(#6a5a78, #4a3d58); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); }
 .mini-hold.on { transform: scale(0.97); background: linear-gradient(#ffb3cf, #ff7aa2); box-shadow: 0 0 26px rgba(255, 122, 162, 0.85); }
 .mini-hold:disabled { opacity: 0.5; }
+
+/* ---------- 미니게임: 비밀 연탄곡 ---------- */
+
+.vn-mini.duet {
+  gap: 8px;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(255, 214, 140, 0.22), transparent 60%),
+    linear-gradient(#2a1c22, #120d12);
+}
+.vn-mini.duet .mini-top h3 { color: #ffd59a; }
+.duet-scene {
+  position: relative;
+  flex: 0 0 23%;
+  min-height: 110px;
+  overflow: hidden;
+  border-radius: 12px;
+  background:
+    radial-gradient(ellipse at 70% 0%, rgba(255, 220, 150, 0.35), transparent 60%),
+    linear-gradient(#4a3430, #1f1518);
+}
+.duet-her { position: absolute; left: 4%; top: 10%; width: 46%; max-width: 210px; }
+.duet-her svg { display: block; width: 100%; height: auto; }
+.mini-door.table { top: 8px; right: 8px; width: auto; height: calc(100% - 16px); background: linear-gradient(#6b4f36, #2e2219); border-color: #c9a46a; }
+.mini-watch { position: absolute; left: 0; right: 0; bottom: -8%; }
+.mini-watch svg { display: block; width: 100%; height: auto; }
+.duet-lanes { position: relative; flex: 1; min-height: 150px; overflow: hidden; border-radius: 12px; background: #120e14; }
+.duet-lanes canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.mini-msg small { font-family: var(--font-body); font-size: 15px; font-weight: 600; color: #f0e6ee; }
+.mini-msg { flex-direction: column; gap: 6px; }
+.duet-lanes .mini-msg.show { background: rgba(10, 6, 12, 0.62); }
+.duet-pads { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.duet-pad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 66px;
+  border: 0;
+  border-radius: 18px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: #fff;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.duet-pad b { font-weight: 400; line-height: 1.1; }
+.duet-pad small { font-family: var(--font-body); font-size: 11.5px; font-weight: 600; opacity: 0.8; }
+.duet-pad.key { background: linear-gradient(#ffffff, #cfd4db); color: #1b1f24; box-shadow: 0 5px 0 #8c929b; }
+.duet-pad.love { background: linear-gradient(#ff8fb3, #e8608c); box-shadow: 0 5px 0 #a33d62; }
+.duet-pad.down { transform: translateY(4px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4); }
+.duet-pad:disabled { opacity: 0.5; }
