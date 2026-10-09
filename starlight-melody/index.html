@@ -2005,7 +2005,7 @@ function migrate(d) {
   const songs = (d && d.songs) || {};
   if (d && d.stars && !songs.starlight) songs.starlight = { unlocked: d.unlocked || 0, stars: d.stars };
   SONGS.forEach(sg => { const o = songs[sg.id] || { unlocked: 0, stars: [] }; o.stars = sg.stages.map((_, i) => o.stars[i] || 0); songs[sg.id] = o; });
-  return { songs, last: (d && d.last) || 'starlight' };
+  return { songs, last: (d && d.last) || 'starlight', improv: (d && d.improv) || 0 };
 }
 // AI music-map songs (made by music-map-server.js via Codex) are kept apart from the built-in songs
 const customStore = {
@@ -2437,7 +2437,7 @@ function checkClear() {
   G.mode = 'clear'; B.locked = true; expr.base = 'happy'; emote('sparkle', 'hop');
   sfx(!SONG.lesson && (G.stage === STAGES.length - 1 || prog().stars.every(s => s > 0)) ? 'fanfare' : 'clear');
   toast(`${G.stage + 1}소절 완성! ` + '★'.repeat(stars) + '☆'.repeat(3 - stars));
-  if (G.after) { const fn = G.after; G.after = null; say(st.clear, false, [['계속 ▸', () => { stopLoop(); showPlayUI(false); UI.strip = false; fn(stars); }]]); return; }
+  if (G.after) { const fn = G.after; G.after = null; say(st.clear, false, [['계속 ▸', () => { stopLoop(); showPlayUI(false); UI.strip = false; if (G.simLock) G.mode = 'sim'; fn(stars); }]]); return; }
   const last = G.stage === STAGES.length - 1, all = prog().stars.every(s => s > 0);
   say(st.clear, false, SONG.lesson && last ? [['처음으로', mainMenu]] : last || all ? [['처음부터 듣기', playSong]] : [['다음 소절 ▸', () => openStage(G.stage + 1)]]);
 }
@@ -2445,7 +2445,7 @@ function checkClear() {
 /* ---------- dialogue ---------- */
 function say(text, quick, actions) {
   const T = UI.talk; T.text = text; T.t0 = performance.now(); T.quick = reduceMotion || !!quick || G.fast || SET.speed === 2; T.blip = 0;
-  needFont(text); if (actions) { T.actions = actions; focusKey = null; actions.forEach(a => needFont(a[0])); }
+  needFont(text); if (actions) { T.actions = actions; T.autoAt = 0; focusKey = null; actions.forEach(a => needFont(a[0])); }
   srSay(text); speakVoice(G.char, text);
   if (HEROINES.includes(G.char) && text && !text.startsWith('▼')) { const m = moodOf(text); if (m) emote(m[0], m[1]); }
 }
@@ -2535,7 +2535,8 @@ const IMPROV = [
   { name: '어려움', rest: 0.22, extra: [['Q', ['x...x...', '.x..x..x', 'x..x..x.']], ['B', ['x..x..x.', 'xx..x.x.', 'x..xx..x']], ['T', ['.x...x..', '.xx..xx.', 'x.....x.']], ['S', ['..x...x.', '..x...xx', '..x.x.x.']], ['K', ['x..x.x..', 'x...xx..', 'x.x...x.']]], stars: 1 }];
 function makeImprov(lv) {
   const C = IMPROV[lv], MEL = ['A', 'G', 'E', 'D', 'C'], ORDER = ['A', 'G', 'E', 'D', 'C', 'Q', 'B', 'H', 'T', 'P', 'S', 'K'], pick = a => a[Math.floor(Math.random() * a.length)];
-  for (let t = 0; t < 400; t++) {
+  const t0 = performance.now();
+  for (let t = 0; t < 400 && performance.now() - t0 < 1500; t++) {
     let i = Math.floor(Math.random() * 5); const m = {}; MEL.forEach(l => m[l] = '');
     for (let x = 0; x < W; x++) { const on = x === 0 || Math.random() > C.rest; if (on) i = Math.max(0, Math.min(4, i + pick([-1, -1, 0, 1, 1, 2, -2]))); MEL.forEach((l, k) => m[l] += on && k === i ? 'x' : '.'); }
     const rows = MEL.filter(l => m[l].includes('x')).map(l => [l, m[l]]).concat(C.extra.map(([l, ps]) => [l, pick(ps)])).sort((a, b) => ORDER.indexOf(a[0]) - ORDER.indexOf(b[0]));
@@ -2557,10 +2558,11 @@ function improvMenu() {
   say('즉흥 퍼즐. 누를 때마다 처음 보는 소절이 새로 만들어진다. 찍지 않고 숫자만으로 풀리는 판만 나온다.', true,
     IMPROV.map((c, lv) => [`${c.name}\n${['멜로디 + 킥', '멜로디 + 리듬 4줄', '멜로디 + 5줄 · 별 칸 1개'][lv]}`, () => improv(lv)]).concat([['← 곡 고르기', () => freePlay(), true]]));
 }
-function improv(lv) {
-  const st = makeImprov(lv); if (!st) return toast('다시 눌러 주세요.');
+function improv(lv) { setChar('me'); say('새 소절을 만드는 중…', true, []); setTimeout(() => improvGo(lv), 40); }
+function improvGo(lv) {
+  const st = makeImprov(lv); if (!st) { toast('다시 눌러 주세요.'); return improvMenu(); }
   const sg = { id: 'improv', improv: true, title: '즉흥 퍼즐', bpm: 92 + Math.floor(Math.random() * 5) * 8, lead: pick1(Object.keys(LEADS)), singer: 'me', etude: true, ending: ['…즉흥으로 한 소절.'], stages: [st] };
-  const old = SONGS.findIndex(x => x.improv); if (old >= 0) SONGS.splice(old, 1); SONGS.push(sg);
+  const old = SONGS.findIndex(x => x.id === 'improv'); if (old >= 0) SONGS.splice(old, 1); SONGS.push(sg);
   P.songs.improv = { unlocked: 0, stars: [0] };
   selectSong('improv'); UI.strip = true;
   G.after = stars => { P.improv = (P.improv || 0) + 1; persist(); setChar('me'); say(`즉흥 ${P.improv}개째. ${'★'.repeat(stars)} 하나 더 할까?`, true, [['다음 즉흥 ▸', () => improv(lv)], ['난이도 바꾸기', improvMenu], ['← 곡 고르기', () => freePlay(), true]]); };
@@ -2886,6 +2888,7 @@ function hub() {
   const bday = HEROINES.find(h => S.met[h] && BIRTHDAYS[h] && BIRTHDAYS[h].week === S.week && !(S.bday && S.bday[h])); if (bday) return birthday(bday);
   const duo = duoDue(); if (duo) return duoEvent(duo);
   if (S.invite && S.invite.week === S.week && S.ap === AP) return inviteCall();
+  if (!S.tutHub && S.week > 1) S.tutHub = true;
   if (!S.tutHub) { S.tutHub = true; showHub(true); return scene('me', ['#…좋아, 이제부터 1년. 한 주에 할 수 있는 일은 세 번이다.', '#연습으로 실력을 키우고, 둘러보기로 보컬을 찾고, 만나러 가서 이야기를 나눈다.', '#친해지면 합주로 같이 곡을 완성하고, 주말엔 데이트도 할 수 있다.', '#무리하면 컨디션이 떨어진다. 지치면 하루 쉬자.', '#막히면 친구 민준에게 전화해 보자. 소문이라면 모르는 게 없는 녀석이다. 날짜를 누르면 달력도 볼 수 있다.', '#10월엔 학교 축제. 그리고 2월 종업식 날 밤에는… 옥상에 별이 뜬다.'], hub, '시작 ▸'); }
   simStore.save(); setScene('big'); setChar('me'); expr.base = 'idle'; showHub(true);
   UI.stageLabel = `${weekLabel(S.week)} · ${S.week < FESTIVAL ? `축제 D-${FESTIVAL - S.week}주` : S.week === WEEKS ? '마지막 주' : `종업식 D-${WEEKS - S.week}주`}`;
@@ -3110,10 +3113,9 @@ function endWeek() {
   sulky.forEach(h => { S.aff[h] = Math.max(0, S.aff[h] - 3); });
   // being sweet to everyone gets around: three or more close ones each cool a little every week
   const close = HEROINES.filter(h => S.aff[h] >= 70); if (close.length >= 3) { close.forEach(h => { S.aff[h] -= 2; }); S.rumor = S.week; }
-  simStore.save();
-  if (S.week > WEEKS) return finalEnding();
+  if (S.week > WEEKS) { simStore.save(); return finalEnding(); }
   if ((S.week - 1) % 4 === 0) UI.card = { title: MONTHS[(S.week - 1) / 4], sub: seasonOf(S.week), t0: performance.now() }; // a new month
-  textMessage(); queueInvite();
+  textMessage(); queueInvite(); simStore.save();
   toast(sulky.length ? `${CAST[sulky[0]].name}${jong(CAST[sulky[0]].name) ? '이' : '가'} 서운해하는 것 같다…` : S.rumor === S.week ? '여기저기 잘해 준다는 소문이 돌고 있다…' : `${weekLabel(S.week)} · ${seasonOf(S.week)}`); hub();
 }
 const REST = ['#하루 푹 쉬었다. 몸이 가벼워졌다.', '#창가에 누워 좋아하는 음악만 들었다.', '#일찍 잠들었다. 꿈에서 누군가 노래하고 있었다.'];
@@ -3123,7 +3125,7 @@ function practiceMenu() {
     .concat([[`연습곡 퍼즐\n${BOOKS.filter(bookOpen).map(b => `${b.n}권 ${Math.min(12, bookDone(b))}/12`).join(' · ')}`, bookMenu], back]));
 }
 // practice books: 1권 from the start, 2권 from summer (or once 1권 is done), 3권 from winter once 2권 is done
-const BOOKS = [{ n: 1, id: 'etude', key: 'etude', week: 1 }, { n: 2, id: 'etude2', key: 'etude2', week: 18, after: 'etude' }, { n: 3, id: 'etude3', key: 'etude3', week: 36, after: 'etude2' }];
+const BOOKS = [{ n: 1, id: 'etude', key: 'etude', week: 1 }, { n: 2, id: 'etude2', key: 'etude2', week: 13, after: 'etude' }, { n: 3, id: 'etude3', key: 'etude3', week: 37, after: 'etude2' }];
 const bookDone = b => S[b.key] || 0;
 const bookOpen = b => b.n === 1 || (b.n === 2 ? bookDone(BOOKS[0]) >= 12 || S.week >= b.week : bookDone(BOOKS[1]) >= 12 && S.week >= b.week);
 function bookMenu() {
@@ -3358,7 +3360,7 @@ function mainMenu() {
     save ? [`이어 하기\n저장 ${saves.filter(Boolean).length}개`, () => { clearInterval(titleCycle); slotMenu('load'); }] : ['이어 하기\n저장 없음', () => toast('저장된 이야기가 없어요.'), true],
     ['자유 연주\n곡 골라 풀기', () => { clearInterval(titleCycle); freePlay(); }, true],
     ['풀이 연습\n숫자 맞추는 요령', () => { clearInterval(titleCycle); selectSong('lesson'); openStage(0); }, true],
-    [`앨범\nCG ${Object.keys(cgStore.get()).length}/${ALBUM.length}`, () => { clearInterval(titleCycle); album(0); }, true],
+    [`앨범\nCG ${ALBUM.filter(a => cgStore.get()[a[0]]).length}/${ALBUM.length}`, () => { clearInterval(titleCycle); album(0); }, true],
     ['설정\n소리·글자 속도', () => { clearInterval(titleCycle); settings(); }, true]]);
 }
 
