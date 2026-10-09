@@ -13,7 +13,7 @@
 // 시계는 AudioContext.currentTime. 일시정지하면 컨텍스트를 멈춰 시계(제한 시간 포함)도 멈춘다.
 
 import { makeTray } from './pieces.js';
-import { INSTRUMENTS, pianoRows, vocalRows, drumRows, solfege } from './instruments.js';
+import { INSTRUMENTS, pianoRows, vocalRows, drumRows, solfege, isBlack } from './instruments.js';
 import { drawBlock, drawBomb, rrect, shade } from './draw.js';
 
 export const SCENE_TIME = 30; // 정지 모드 한 페이지 제한 시간(초)
@@ -31,6 +31,8 @@ const POINTS_CLEAR = 300;
 const POINTS_PER_SEC = 10;
 
 const KEY = (r, c) => c * 128 + r;
+// 음정(반음 수 % 12)별 어울림: 화음 추천 점수에 쓴다
+const CONSONANCE = [0.4, -2.5, -2, 0.8, 0.8, 0.3, -2.5, 0.8, 0.8, 0.8, -2, -2.5];
 const WHITE = '#f3f5f7';
 const FONT = '"Black Han Sans", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
 
@@ -187,6 +189,10 @@ export class Game {
     this.mode = mode;
     this.free = mode === 'free';
     this.auto = !!opts.auto;
+    // 자유 작곡에서 반투명 추천 블록 표시
+    this.hints = this.free && !!opts.hints;
+    this.hintCache = null;
+    this.pieceSeq = 0;
     // live: 곡 전체가 한 번에 흘러가는 진행 (곡 연주 자동 이동, 자유 작곡 자동 이동)
     this.live = mode === 'flow' || (this.free && this.auto);
     this.stepSec = song.stepSec;
@@ -402,6 +408,110 @@ export class Game {
       }
     }
     return out;
+  }
+
+  // ---------- 자유 작곡 추천 블록 ----------
+
+  // c열에 놓인 음들 (앞서 추천한 블록 virtual 도 놓인 것으로 친다)
+  columnPitches(part, c, virtual) {
+    const out = [];
+    for (let r = 0; r < part.rows.length; r++) {
+      if (part.occupied.has(KEY(r, c)) || virtual?.has(KEY(r, c))) out.push(part.rows[r].key);
+    }
+    return out;
+  }
+
+  // 트레이 블록마다 놓기 좋은 자리 하나 (서로 겹치지 않게). 트레이·블록·범위가 바뀔 때만 다시 계산한다.
+  hintsFor() {
+    if (!this.hints || !this.tray) return [];
+    const range = this.placeRange();
+    if (!range) return [];
+    const part = this.part;
+    const ids = this.tray.map((p) => (p ? (p.hintId ||= ++this.pieceSeq) : 0)).join(',');
+    const key = `${ids}|${part.occupied.size}|${range[0]}|${range[1]}`;
+    if (this.hintCache?.key === key) return this.hintCache.list;
+
+    // 자동 이동에서는 재생선 바로 앞은 옮길 시간이 없으니 건너뛴다
+    const from = this.phase.live ? range[0] + Math.ceil(1.2 / this.stepSec) : range[0];
+    const list = [];
+    const used = new Set();
+    for (let slot = 0; slot < 3; slot++) {
+      const p = this.tray[slot];
+      if (!p || p.bomb) continue;
+      let best = null;
+      for (let c0 = from; c0 + p.w - 1 <= range[1]; c0++) {
+        for (let r0 = 0; r0 + p.h <= part.rows.length; r0++) {
+          if (!this.canPlace(p, r0, c0)) continue;
+          if (p.cells.some(([dr, dc]) => used.has(KEY(r0 + dr, c0 + dc)))) continue;
+          const sc = this.hintScore(part, p, r0, c0, from, used);
+          if (sc > -Infinity && (!best || sc > best.sc)) best = { slot, r0, c0, sc };
+        }
+      }
+      if (!best) continue;
+      list.push(best);
+      for (const [dr, dc] of p.cells) used.add(KEY(best.r0 + dr, best.c0 + dc));
+    }
+    this.hintCache = { key, list };
+    return list;
+  }
+
+  // 음악적으로 그럴듯한 자리일수록 높은 점수: 다장조 흰 건반, 앞 음과 가까운 음정, 어울리는 화음, 빈 박 채우기
+  hintScore(part, p, r0, c0, from, virtual) {
+    const { stepsPerBeat } = this.song;
+    const cells = [];
+    for (const [dr, dc] of p.cells) {
+      const pitch = part.rows[r0 + dr].key;
+      if (isBlack(pitch)) return -Infinity;
+      cells.push({ pitch, c: c0 + dc });
+    }
+    let score = -(c0 - from) * 0.15; // 왼쪽부터 채우기
+    for (const { pitch, c } of cells) {
+      score -= Math.abs(pitch - 67) / 10; // 가운데 음역(솔4) 근처
+      const col = this.columnPitches(part, c, virtual);
+      if (!col.length) score += 1.5;
+      for (const q of col) score += CONSONANCE[Math.abs(pitch - q) % 12];
+      for (const o of cells) if (o.c === c && o.pitch > pitch) score += CONSONANCE[(o.pitch - pitch) % 12]; // 블록 안 화음
+      if (c % stepsPerBeat === 0 && [0, 4, 7].includes(pitch % 12)) score += 0.6; // 박에는 도·미·솔
+    }
+    // 앞에 놓인 음과 이어지는 멜로디
+    const first = cells.reduce((a, b) => (b.c < a.c || (b.c === a.c && b.pitch > a.pitch) ? b : a));
+    for (let c = c0 - 1; c >= Math.max(0, c0 - 8); c--) {
+      const col = this.columnPitches(part, c, virtual);
+      if (!col.length) continue;
+      const d = Math.abs(first.pitch - Math.max(...col));
+      score += d === 0 ? 0.4 : d <= 2 ? 2 : d <= 4 ? 1.3 : d <= 7 ? 0.3 : -1.2;
+      score -= (c0 - c - 1) * 0.25;
+      return score;
+    }
+    return score + (first.pitch % 12 === 0 ? 1 : 0); // 첫 음은 도로 시작
+  }
+
+  drawHints(part) {
+    const hints = this.hintsFor();
+    if (!hints.length) return;
+    const g = this.g;
+    const cw = this.cellW;
+    const ch = part.cellH;
+    const d = this.drag;
+    const pulse = 0.08 * Math.sin(this.now * 4);
+    for (const h of hints) {
+      if (d && d.slot !== h.slot) continue;
+      const p = this.tray[h.slot];
+      if (!p) continue;
+      for (const [dr, dc] of p.cells) {
+        const x = this.xOf(h.c0 + dc);
+        const y = part.top + (h.r0 + dr) * ch;
+        g.globalAlpha = (d ? 0.42 : 0.26) + pulse;
+        drawBlock(g, x, y, cw, ch, p.color);
+        g.globalAlpha = 0.85;
+        g.strokeStyle = p.color;
+        g.lineWidth = 1.5;
+        g.setLineDash([4, 3]);
+        g.strokeRect(x + 1.5, y + 1.5, cw - 3, ch - 3);
+        g.setLineDash([]);
+      }
+    }
+    g.globalAlpha = 1;
   }
 
   // ---------- 페이지 점수 ----------
@@ -1174,6 +1284,7 @@ export class Game {
       }
     }
 
+    this.drawHints(part);
     this.drawGhost(part);
 
     for (const ring of this.rings) {
@@ -1497,7 +1608,7 @@ export class Game {
     if (this.state !== 'playing' || !ph) return;
     let text = '';
     if (ph.type === 'place' && ph.scene === 0 && this.now - (ph.deadline - SCENE_TIME) < 5) {
-      text = this.free ? '블록을 놓으면 그 자리의 음이 연주돼요' : '아래 블록을 끌어서 초록 노트 위에 놓으세요';
+      text = this.free ? (this.hints ? '반투명 블록이 추천 자리예요. 그대로 놓아 보세요' : '블록을 놓으면 그 자리의 음이 연주돼요') : '아래 블록을 끌어서 초록 노트 위에 놓으세요';
     } else if (ph.live && this.pos < (ph.startAt || 0) + this.song.stepsPerBar) {
       text = this.free ? '블록을 놓으면 재생선이 지날 때 그 음이 연주돼요' : '아래 블록을 끌어서 흘러오는 노트 위에 놓으세요';
     }

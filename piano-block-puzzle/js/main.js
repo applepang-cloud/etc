@@ -43,6 +43,7 @@ const MODE_NAME = { stop: '정지 모드', flow: '자동 이동 모드', band: '
 
 const audio = new PianoAudio();
 let playMode = store.get('pb.play', 'stop');
+let hintsOn = store.get('pb.hints', true);
 let current = null; // { song, mode }
 let lastStats = null;
 const shown = {};
@@ -153,6 +154,18 @@ for (const b of document.querySelectorAll('[data-play]')) {
 
 $('#btn-free').addEventListener('click', () => startGame(FREE_SONG, 'free'));
 
+const hintBtn = $('#btn-hint');
+function renderHint() {
+  hintBtn.setAttribute('aria-pressed', String(hintsOn));
+  hintBtn.textContent = hintsOn ? '추천 블록 켬' : '추천 블록 끔';
+}
+hintBtn.addEventListener('click', () => {
+  hintsOn = !hintsOn;
+  store.set('pb.hints', hintsOn);
+  renderHint();
+});
+renderHint();
+
 function startGame(song, mode) {
   // 합주와 자유 작곡도 진행 방식(30초 정지 / 자동 이동)을 따른다.
   const auto = (mode === 'free' || mode === 'band') && playMode === 'flow';
@@ -164,7 +177,7 @@ function startGame(song, mode) {
   el.result.hidden = true;
   el.flowLabel.textContent = mode === 'free' ? '다음 페이지' : '바로 연주';
   for (const k of Object.keys(shown)) delete shown[k];
-  game.start(song, mode, { auto });
+  game.start(song, mode, { auto, hints: hintsOn });
 }
 
 function openMenu() {

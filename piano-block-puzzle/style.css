@@ -306,6 +306,28 @@ h1 {
 .mode-head h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 24px; }
 .mode-desc { margin: -4px 0 2px; color: var(--muted); font-size: 13px; line-height: 1.5; }
 
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.toggle::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border: 2px solid currentColor;
+  border-radius: 2px;
+}
+.toggle[aria-pressed="true"] { border-color: var(--gold); color: var(--gold); }
+.toggle[aria-pressed="true"]::before { background: currentColor; }
+
 .seg { display: flex; padding: 3px; border: 1px solid var(--line); border-radius: 999px; }
 .seg button {
   min-width: 60px;
