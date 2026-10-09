@@ -60,6 +60,18 @@ function buildSong(def) {
 const MARY_Q = 'E4 D4 C4 D4 | E4 E4 E4:2 | D4 D4 D4:2 | E4 G4 G4:2 | E4 D4 C4 D4 | E4 E4 E4 E4 | D4 D4 E4 D4 | C4:4';
 const LIGHTLY_Q = 'G4 E4 E4:2 | F4 D4 D4:2 | C4 D4 E4 F4 | G4 G4 G4:2 | G4 E4 E4:2 | F4 D4 D4:2 | C4 E4 G4 G4 | C4:4';
 const LIGHTLY_Q2 = 'D4 D4 D4 D4 | D4 E4 F4:2 | E4 E4 E4 E4 | E4 F4 G4:2 | G4 E4 E4:2 | F4 D4 D4:2 | C4 E4 G4 G4 | C4:4';
+// 아래는 8분음표 = 1칸
+const FRERE = `C4:2 D4:2 E4:2 C4:2 | C4:2 D4:2 E4:2 C4:2 | E4:2 F4:2 G4:4 | E4:2 F4:2 G4:4 |
+  G4 A4 G4 F4 E4:2 C4:2 | G4 A4 G4 F4 E4:2 C4:2 | C4:2 G3:2 C4:4 | C4:2 G3:2 C4:4`;
+const LONDON = 'G4 A4 G4 F4 E4 F4 G4:2 | D4 E4 F4:2 E4 F4 G4:2 | G4 A4 G4 F4 E4 F4 G4:2 | D4:2 G4:2 E4 C4:3';
+// 고요한 밤 (3/4박자)
+const SILENT_A = 'G4:3 A4 G4:2 | E4:6 | G4:3 A4 G4:2 | E4:6 | D5:4 D5:2 | B4:6 | C5:4 C5:2 | G4:6';
+const SILENT_B = `A4:4 A4:2 | C5:3 B4 A4:2 | G4:3 A4 G4:2 | E4:6 | A4:4 A4:2 | C5:3 B4 A4:2 | G4:3 A4 G4:2 | E4:6 |
+  D5:4 D5:2 | F5:3 D5 B4:2 | C5:6 | E5:6 | C5:3 G4 E4:2 | G4:3 F4 D4:2 | C4:6 | C4:6`;
+// 미뉴에트 G장조(페촐트)를 다장조로 옮김 (3/4박자)
+const MINUET_A = 'G4:2 C4 D4 E4 F4 | G4:2 C4:2 C4:2 | A4:2 F4 G4 A4 B4 | C5:2 C4:2 C4:2';
+const MINUET_B1 = 'F4:2 G4 F4 E4 D4 | E4:2 F4 E4 D4 C4 | B3:2 C4 D4 E4 C4 | D4:6';
+const MINUET_B2 = 'F4:2 G4 F4 E4 D4 | E4:2 F4 E4 D4 C4 | D4:2 E4 D4 C4 B3 | C4:6';
 // 4분음표 그리드 멜로디를 8분음표 그리드로 (길이 두 배)
 const double = (src) => src.replace(/([A-G][#b]?\d|R)(?::(\d+))?/g, (_, n, len) => `${n}:${(Number(len) || 1) * 2}`);
 
@@ -135,6 +147,60 @@ const SONG_DEFS = [
         `R:4 G3 G3 | A3:2 G3:2 C4:2 | B3:4 G3 G3 | A3:2 G3:2 D4:2 | C4:4 G3 G3 |
          G4:2 E4:2 C4:2 | B3:2 A3:2 F4 F4 | E4:2 C4:2 D4:2 | C4:6`,
         'R:6 | C3:6 | B2:6 | B2:6 | C3:6 | C3:6 | F3:6 | C3:2 R:2 B2:2 | C3:6',
+      ],
+    },
+  },
+  {
+    id: 'frere',
+    title: '자크 형제',
+    composer: '프랑스 민요 · Frère Jacques',
+    level: 1,
+    stepSec: 0.3, // 8분음표 = 1칸
+    stepsPerBeat: 2,
+    stepsPerBar: 8,
+    sceneSteps: 12,
+    parts: { piano: [FRERE] },
+  },
+  {
+    id: 'london',
+    title: '런던 다리',
+    composer: '영국 민요 · London Bridge',
+    level: 2,
+    stepSec: 0.3,
+    stepsPerBeat: 2,
+    stepsPerBar: 8,
+    sceneSteps: 12,
+    parts: {
+      piano: [
+        `${LONDON} | ${LONDON}`,
+        'C3:4 C3:4 | G3:4 C3:4 | C3:4 C3:4 | G3:4 C3:4 | C3:4 C3:4 | G3:4 C3:4 | C3:4 C3:4 | G3:4 C3:4',
+      ],
+    },
+  },
+  {
+    id: 'silent',
+    title: '고요한 밤',
+    composer: 'F. X. 그루버',
+    level: 2,
+    stepSec: 0.34, // 8분음표 = 1칸, 3/4박자
+    stepsPerBeat: 2,
+    stepsPerBar: 6,
+    sceneSteps: 12,
+    parts: { piano: [`${SILENT_A} | ${SILENT_B}`] },
+  },
+  {
+    id: 'minuet',
+    title: '미뉴에트',
+    composer: 'C. 페촐트 · 바흐의 미뉴에트',
+    level: 2,
+    stepSec: 0.28, // 8분음표 = 1칸, 3/4박자
+    stepsPerBeat: 2,
+    stepsPerBar: 6,
+    sceneSteps: 12,
+    parts: {
+      piano: [
+        `${MINUET_A} | ${MINUET_B1} | ${MINUET_A} | ${MINUET_B2}`,
+        'C3:6 | C3:6 | F3:6 | C3:6 | F3:6 | C3:6 | G3:6 | G3:6 | C3:6 | C3:6 | F3:6 | C3:6 | F3:6 | C3:6 | G3:6 | C3:6',
       ],
     },
   },
@@ -295,10 +361,116 @@ const BAND_DEFS = [
       ],
     },
   },
+  {
+    id: 'band-frere',
+    title: '자크 형제 밴드',
+    composer: '프랑스 민요 · 행진 편곡',
+    level: 1,
+    band: true,
+    stepSec: 0.32,
+    stepsPerBeat: 2,
+    stepsPerBar: 8,
+    sceneSteps: 8,
+    parts: {
+      piano: [
+        `C3:2 G3:2 C3:2 G3:2 | C3:2 G3:2 C3:2 G3:2 | C3:2 G3:2 C3:2 G3:2 | C3:2 G3:2 C3:2 G3:2 |
+         C3:2 G3:2 C3:2 G3:2 | C3:2 G3:2 C3:2 G3:2 | C3:2 G3:2 C3:2 G3:2 | C3:8`,
+        `R:2 E4+G4:2 R:2 E4+G4:2 | R:2 E4+G4:2 R:2 E4+G4:2 | R:2 E4+G4:2 R:2 E4+G4:2 | R:2 E4+G4:2 R:2 E4+G4:2 |
+         R:2 E4+G4:2 R:2 E4+G4:2 | R:2 E4+G4:2 R:2 E4+G4:2 | R:2 E4+G4:2 R:2 E4+G4:2 | E4+G4:8`,
+      ],
+      drums: [
+        'CR R:7 | R:8 | R:8 | R:8 | CR R:7 | R:8 | R:8 | CR R:7',
+        `R HH HH HH HH HH HH HH | HH HH HH HH HH HH HH HH | HH HH HH HH HH HH HH HH | HH HH HH HH HH HH R:2 |
+         R HH HH HH HH HH HH HH | HH HH HH HH HH HH HH HH | HH HH HH HH HH HH HH HH | R:8`,
+        'R:8 | R:8 | R:8 | R:6 TH TL | R:8 | R:8 | R:8 | R:8',
+        `R:2 SN R:3 SN R | R:2 SN R:3 SN R | R:2 SN R:3 SN R | R:2 SN R:3 SN R |
+         R:2 SN R:3 SN R | R:2 SN R:3 SN R | R:2 SN R:3 SN SN | R:8`,
+        `KK R:3 KK R:3 | KK R:3 KK R:3 | KK R:3 KK R:3 | KK R:3 KK R:3 |
+         KK R:3 KK R:3 | KK R:3 KK R:3 | KK R:3 KK R:3 | KK R:7`,
+      ],
+      vocal: [FRERE],
+    },
+  },
+  {
+    id: 'band-london',
+    title: '런던 다리 밴드',
+    composer: '영국 민요 · 록 편곡',
+    level: 1,
+    band: true,
+    stepSec: 0.3,
+    stepsPerBeat: 2,
+    stepsPerBar: 8,
+    sceneSteps: 8,
+    parts: {
+      piano: [
+        'C3:4 C3:4 | G3:4 C3:4 | C3:4 C3:4 | G3:4 C3:4',
+        'R:2 E4+G4:2 R:2 E4+G4:2 | R:2 D4+F4:2 R:2 E4+G4:2 | R:2 E4+G4:2 R:2 E4+G4:2 | R:2 D4+F4:2 R:2 E4+G4:2',
+      ],
+      drums: [
+        'CR R:7 | R:8 | R:8 | R:8',
+        'R HH HH HH HH HH HH HH | HH HH HH HH HH HH HH HH | HH HH HH HH HH HH HH HH | HH HH HH HH HH HH R:2',
+        'R:8 | R:8 | R:8 | R:6 TH TL',
+        'R:2 SN R:3 SN R | R:2 SN R:3 SN R | R:2 SN R:3 SN R | R:2 SN R:3 SN R',
+        'KK R:3 KK R:3 | KK R:2 KK KK R:3 | KK R:3 KK R:3 | KK R:2 KK KK R:3',
+      ],
+      vocal: [LONDON],
+    },
+  },
+  {
+    id: 'band-minuet',
+    title: '미뉴에트 밴드',
+    composer: 'C. 페촐트 · 왈츠 편곡',
+    level: 2,
+    band: true,
+    stepSec: 0.3,
+    stepsPerBeat: 2,
+    stepsPerBar: 6, // 3/4박자
+    sceneSteps: 6,
+    parts: {
+      piano: [
+        'C3:2 R:4 | C3:2 R:4 | F3:2 R:4 | C3:2 R:4 | F3:2 R:4 | C3:2 R:4 | G3:2 R:4 | C3:6',
+        `R:2 E4+G4:2 E4+G4:2 | R:2 E4+G4:2 E4+G4:2 | R:2 F4+A4:2 F4+A4:2 | R:2 E4+G4:2 E4+G4:2 |
+         R:2 F4+A4:2 F4+A4:2 | R:2 E4+G4:2 E4+G4:2 | R:2 D4+F4:2 D4+F4:2 | E4+G4:6`,
+      ],
+      drums: [
+        'CR R:5 | R:6 | R:6 | R:6 | CR R:5 | R:6 | R:6 | CR R:5',
+        'R:2 HH R HH R | R:2 HH R HH R | R:2 HH R HH R | R:2 HH R:3 | R:2 HH R HH R | R:2 HH R HH R | R:2 HH R HH R | R:6',
+        'R:6 | R:6 | R:6 | R:4 SN SN | R:6 | R:6 | R:2 SN R SN R | R:6',
+        'KK R:5 | KK R:5 | KK R:5 | KK R:5 | KK R:5 | KK R:5 | KK R:3 KK R | KK R:5',
+      ],
+      vocal: [`${MINUET_A} | ${MINUET_B2}`],
+    },
+  },
+  {
+    id: 'band-silent',
+    title: '고요한 밤 밴드',
+    composer: 'F. X. 그루버 · 발라드 편곡',
+    level: 2,
+    band: true,
+    stepSec: 0.36,
+    stepsPerBeat: 2,
+    stepsPerBar: 6, // 3/4박자
+    sceneSteps: 6,
+    parts: {
+      piano: [
+        'C3:6 | C3:6 | C3:6 | C3:6 | G3:6 | G3:6 | C3:6 | C3:6',
+        'R:2 E4+G4:4 | R:2 E4+G4:4 | R:2 E4+G4:4 | R:2 E4+G4:4 | R:2 D4+F4:4 | R:2 D4+F4:4 | R:2 E4+G4:4 | R:2 E4+G4:4',
+      ],
+      drums: [
+        'CR R:5 | R:6 | R:6 | R:6 | R:6 | R:6 | R:6 | R:6',
+        'R:2 HH R HH R | R:2 HH R HH R | R:2 HH R HH R | R:2 HH R HH R | R:2 HH R HH R | R:2 HH R HH R | R:2 HH R HH R | R:2 HH R:3',
+        'R:6 | R:6 | R:6 | R:4 TH TL | R:6 | R:6 | R:6 | R:6',
+        'KK R:5 | KK R:5 | KK R:5 | KK R:5 | KK R:5 | KK R:5 | KK R:5 | KK R:5',
+      ],
+      vocal: [SILENT_A],
+    },
+  },
 ];
 
-export const SONGS = SONG_DEFS.map(buildSong);
-export const BAND_SONGS = BAND_DEFS.map(buildSong);
+// 메뉴에는 쉬운 곡부터 (같은 난이도는 적어 둔 순서대로)
+const byLevel = (a, b) => a.level - b.level;
+export const SONGS = SONG_DEFS.map(buildSong).sort(byLevel);
+export const BAND_SONGS = BAND_DEFS.map(buildSong).sort(byLevel);
 
 // 자유 작곡: 목표 노트 없이 빈 피아노 롤. 길이는 장면을 넘길 때마다 늘어난다.
 export const FREE_SONG = {
