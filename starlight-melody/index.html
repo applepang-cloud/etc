@@ -2149,7 +2149,7 @@ let ac = null, master = null, noise = null;
 function initAudio() {
   if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
   const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-  ac = new AC(); master = ac.createGain(); master.gain.value = G.muted ? 0 : 0.55;
+  ac = new AC(); master = ac.createGain(); master.gain.value = masterGain();
   const comp = ac.createDynamicsCompressor(); master.connect(comp); comp.connect(ac.destination);
   noise = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate); const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   setInterval(tick, 25); loadSamples(); bgmOn = true; bgm(bgmWant);
@@ -2287,6 +2287,11 @@ function cheer(power) {
 
 /* ---------- background music: ElevenLabs Music tracks in bgm/, loaded on demand, crossfaded into themselves to loop ---------- */
 const bgmEls = []; let bgmWant = null, bgmOn = false;
+// settings: four levels each for music, sound (effects + the puzzle band) and voices; text speed
+const LEVELS = [0, 0.5, 1, 1.4], LEVEL_NAME = ['끔', '작게', '보통', '크게'], SPEED_NAME = ['보통', '빠르게', '즉시'], SPEED_MS = [28, 12, 0];
+const SET = Object.assign({ music: 2, sound: 2, voice: 2, speed: 0 }, (() => { try { return JSON.parse(localStorage.getItem('starlight-settings') || '{}'); } catch (e) { return {}; } })());
+const saveSet = () => { try { localStorage.setItem('starlight-settings', JSON.stringify(SET)); } catch (e) {} };
+const masterGain = () => G.muted ? 0 : 0.55 * LEVELS[SET.sound];
 function bgm(name) {
   bgmWant = name; if (!bgmOn) return;
   const cur = bgmEls.find(a => a._live); if (cur && cur._name === name) return;
@@ -2294,9 +2299,9 @@ function bgm(name) {
 }
 function bgmStart(name) { const a = new Audio('bgm/' + name + '.mp3'); a._name = name; a._live = true; a.volume = 0; if (!G.muted && !document.hidden) a.play().catch(() => {}); bgmEls.push(a); }
 // muting and hidden tabs pause the music outright: iOS ignores <audio>.volume, so fading to 0 is not enough
-function bgmHold() { const stop = G.muted || document.hidden; bgmEls.forEach(a => { if (stop) a.pause(); else if (a._live && a.paused) a.play().catch(() => {}); }); }
+function bgmHold() { const stop = G.muted || document.hidden || !SET.music; bgmEls.forEach(a => { if (stop) a.pause(); else if (a._live && a.paused) a.play().catch(() => {}); }); }
 function bgmTick(dt) {
-  const target = G.muted ? 0 : voiceEl ? 0.12 : 0.3; // duck under voices
+  const target = G.muted ? 0 : (voiceEl ? 0.12 : 0.3) * LEVELS[SET.music]; // duck under voices
   for (let i = bgmEls.length - 1; i >= 0; i--) {
     const a = bgmEls[i];
     if (a.error) { bgmEls.splice(i, 1); continue; }
@@ -2415,7 +2420,7 @@ function checkClear() {
 
 /* ---------- dialogue ---------- */
 function say(text, quick, actions) {
-  const T = UI.talk; T.text = text; T.t0 = performance.now(); T.quick = reduceMotion || !!quick || G.fast; T.blip = 0;
+  const T = UI.talk; T.text = text; T.t0 = performance.now(); T.quick = reduceMotion || !!quick || G.fast || SET.speed === 2; T.blip = 0;
   needFont(text); if (actions) { T.actions = actions; focusKey = null; actions.forEach(a => needFont(a[0])); }
   srSay(text); speakVoice(G.char, text);
   if (HEROINES.includes(G.char) && text && !text.startsWith('▼')) { const m = moodOf(text); if (m) emote(m[0], m[1]); }
@@ -2426,7 +2431,8 @@ let voiceEl = null;
 function speakVoice(who, text) {
   if (voiceEl) { voiceEl.pause(); voiceEl = null; }
   if (G.muted || !text || !(HEROINES.includes(who) || who === 'me')) return;
-  const a = new Audio('voice/' + voiceId(who, text) + '.mp3'); a.volume = 0.9; a._id = voiceId(who, text); a._who = who; voiceEl = a;
+  if (!SET.voice) return;
+  const a = new Audio('voice/' + voiceId(who, text) + '.mp3'); a.volume = Math.min(1, 0.65 * LEVELS[SET.voice]); a._id = voiceId(who, text); a._who = who; voiceEl = a;
   a.addEventListener('ended', () => { if (voiceEl === a) voiceEl = null; });
   a.addEventListener('error', () => { if (voiceEl === a) voiceEl = null; });
   a.play().catch(() => { if (voiceEl === a) voiceEl = null; });
@@ -2438,7 +2444,7 @@ function mouthShape(now) { // the mouth for this instant of her voice, or null w
   const c = tr ? tr[Math.min(tr.length - 1, Math.floor(voiceEl.currentTime * 20))] : '1aeoa1'[Math.floor(now / 110) % 6];
   return c === '0' ? null : c;
 }
-const typing = now => !UI.talk.quick && (now - UI.talk.t0) / 28 < UI.talk.text.length;
+const typing = now => !UI.talk.quick && (now - UI.talk.t0) / SPEED_MS[SET.speed] < UI.talk.text.length;
 function finishTyping() { UI.talk.quick = true; }
 function talk(lines, done, lastLabel = '시작 ▸') { let i = 0; const next = () => { if (i >= lines.length) return done(); const last = i === lines.length - 1; say(lines[i++], false, [[last ? lastLabel : '다음 ▸', next]]); }; next(); }
 function setScene(size) { UI.size = size; }
@@ -2550,7 +2556,7 @@ function cycleLead() {
 }
 function toggleFast() { G.fast = !G.fast; UI.talk.quick = UI.talk.quick || G.fast; try { localStorage.setItem('starlight-fast', G.fast ? '1' : '0'); } catch (e) {} }
 function toggleMute() {
-  G.muted = !G.muted; if (master) master.gain.value = G.muted ? 0 : 0.55; if (G.muted && voiceEl) { voiceEl.pause(); voiceEl = null; }
+  G.muted = !G.muted; if (master) master.gain.value = masterGain(); if (G.muted && voiceEl) { voiceEl.pause(); voiceEl = null; }
   bgmHold(); try { localStorage.setItem('starlight-muted', G.muted ? '1' : '0'); } catch (e) {}
 }
 function openHelp() { UI.help = true; focusKey = kbd ? 'help:ok' : null; }
@@ -3061,6 +3067,13 @@ function liveEnd() {
   if (SONG) STAGES = SONG.stages;
 }
 let titleCycle = null;
+function settings() {
+  G.mode = 'settings'; UI.stageLabel = '설정'; setChar('me'); UI.cg = null;
+  const cyc = (k, n) => () => { SET[k] = (SET[k] + 1) % n; saveSet(); if (master) master.gain.value = masterGain(); bgmHold(); if (k === 'voice' && voiceEl && !SET.voice) { voiceEl.pause(); voiceEl = null; } settings(); };
+  say('소리와 글자 속도를 바꿀 수 있어요. 누를 때마다 다음 단계로 바뀌어요.', true, [
+    [`배경 음악\n${LEVEL_NAME[SET.music]}`, cyc('music', 4)], [`효과음·연주\n${LEVEL_NAME[SET.sound]}`, cyc('sound', 4)],
+    [`목소리\n${LEVEL_NAME[SET.voice]}`, cyc('voice', 4)], [`글자 속도\n${SPEED_NAME[SET.speed]}`, cyc('speed', 3)], ['← 타이틀로', mainMenu, true]]);
+}
 // CG gallery: every illustration you have seen once is kept across games
 const cgStore = {
   get() { try { return JSON.parse(localStorage.getItem('starlight-cgs') || '{}'); } catch (e) { return {}; } },
@@ -3091,7 +3104,8 @@ function mainMenu() {
     save ? ['이어 하기\n' + save.name + ' · ' + (save.v === 2 ? (save.week > WEEKS ? '종업식' : weekLabel(save.week)) : '예전 저장'), () => { clearInterval(titleCycle); S = migrateSim(save); CAST.me.name = S.name; G.char = null; S.week > WEEKS ? finalEnding() : hub(); }] : ['이어 하기\n저장 없음', () => toast('저장된 이야기가 없어요.'), true],
     ['자유 연주\n곡 골라 풀기', () => { clearInterval(titleCycle); freePlay(); }, true],
     ['풀이 연습\n숫자 맞추는 요령', () => { clearInterval(titleCycle); selectSong('lesson'); openStage(0); }, true],
-    [`앨범\nCG ${Object.keys(cgStore.get()).length}/${ALBUM.length}`, () => { clearInterval(titleCycle); album(0); }, true]]);
+    [`앨범\nCG ${Object.keys(cgStore.get()).length}/${ALBUM.length}`, () => { clearInterval(titleCycle); album(0); }, true],
+    ['설정\n소리·글자 속도', () => { clearInterval(titleCycle); settings(); }, true]]);
 }
 
 /* =================================================================
@@ -3189,7 +3203,7 @@ function drawTalk(x, y, L, now) {
   if (typing(now)) hit(x, y, L.w, L.h, finishTyping, { key: 'talkbox' });
   const nw = Math.ceil(mw(cs.name, font(12, true))) + 16;
   box(x + 10, y - 11, nw, 19, 3, cs.tag); txt(cs.name, x + 18, y - 1, font(12, true), '#2a0d24');
-  let shown = T.quick ? Infinity : Math.floor((now - T.t0) / 28);
+  let shown = T.quick ? Infinity : Math.floor((now - T.t0) / SPEED_MS[SET.speed]);
   if (ac && !voiceEl && shown < T.text.length && shown >= (T.blip || 0) + 2 && T.text[shown] !== ' ') { T.blip = shown; play('type', ac.currentTime, { gain: 0.16, rate: 0.92 + Math.random() * 0.18 }); } // typing blips when nobody is speaking
   cx.font = L.f; cx.fillStyle = COL.ink; cx.textAlign = 'left'; cx.textBaseline = 'middle';
   L.lines.forEach((line, i) => { if (shown <= 0) return; cx.fillText(shown >= line.length ? line : line.slice(0, shown), x + L.pad, y + L.pad + 4 + i * L.lh + L.lh / 2); shown -= line.length + 1; });
