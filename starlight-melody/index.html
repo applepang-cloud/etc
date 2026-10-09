@@ -2677,6 +2677,7 @@ Object.entries(ROUTE_DATA).forEach(([h, x]) => { SIM[h].talks.push(...x.talks); 
 /* --- the school year: 48 weeks from March to February, three actions a week --- */
 const WEEKS = 48, AP = 3, FESTIVAL = 31;
 const MONTHS = ['3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월', '1월', '2월'];
+const seasonBgm = () => S && S.week >= 13 && S.week <= 24 ? 'summer' : S && S.week >= 37 ? 'winter' : 'school'; // the hub's music follows the season
 const weekLabel = w => `${MONTHS[Math.floor((w - 1) / 4)]} ${(w - 1) % 4 + 1}주`;
 const seasonOf = w => ['봄', '여름', '가을', '겨울'][Math.floor((w - 1) / 12)];
 const TALK_GATE = [0, 8, 18, 30, 42, 55, 66, 78]; // affection each deeper talk waits for
@@ -2778,7 +2779,7 @@ function prologue() {
     '#이 학교에는 전설이 있다. 축제 마지막 곡을 함께 부른 두 사람은, 별빛처럼 오래 이어진다고.', '#…일단 학교부터 둘러보자.'], hub, '시작 ▸');
 }
 function hub() {
-  bgm('school'); UI.bg = null;
+  bgm(seasonBgm()); UI.bg = null;
   G.mode = 'sim'; G.simLock = true; stopLoop();
   if (S.week === FESTIVAL && !S.live) return festival();
   if (EVENTS[S.week] && !S.seen[S.week]) return schoolEvent();
@@ -2801,7 +2802,7 @@ const back = ['← 돌아가기', () => hub(), true];
 const BIRTHDAYS = typeof EXTRA_DATA !== 'undefined' ? EXTRA_DATA.birthdays : {}, TEXTS = typeof EXTRA_DATA !== 'undefined' ? EXTRA_DATA.texts : {};
 function birthday(h) {
   S.bday = S.bday || {}; S.bday[h] = true; const b = BIRTHDAYS[h];
-  showHub(false); UI.strip = false; sfx('event'); UI.stageLabel = `${weekLabel(S.week)} · ${CAST[h].name} 생일 (${b.date})`; UI.bg = PLACE_BG[h];
+  showHub(false); UI.strip = false; sfx('event'); UI.stageLabel = `${weekLabel(S.week)} · ${CAST[h].name} 생일 (${b.date})`; UI.bg = PLACE_BG[h]; bgm('heart');
   scene('me', [b.intro], () => { setChar('me'); say('어떤 선물을 줄까?', true, b.gifts.map(([g, tier]) => [g, () => {
     like(h, { good: 15, ok: 8, bad: 2 }[tier]); scene(h, [b[tier], b.thanks], hub); }, 'choice'])); });
 }
@@ -2821,7 +2822,7 @@ function heartDue() {
 }
 function heartEvent(h, n) {
   S.hearts[h + n] = true; S.hearts[h + 1] = S.hearts[h + 1] || n === 2; const ev = HEARTS[h]['heart' + n];
-  showHub(false); UI.strip = false; sfx('heart'); UI.stageLabel = `${weekLabel(S.week)} · ♥ ${CAST[h].name}`; UI.bg = PLACE_BG[h]; emote('love');
+  showHub(false); UI.strip = false; sfx('heart'); UI.stageLabel = `${weekLabel(S.week)} · ♥ ${CAST[h].name}`; UI.bg = PLACE_BG[h]; bgm('heart'); emote('love');
   scene(h, ev.lines, () => choose(h, ev.opts, hub));
 }
 const tire = n => { S.cond = Math.max(0, Math.min(100, S.cond + n)); };
@@ -2926,7 +2927,7 @@ function datePlace(h) {
     Object.keys(PLACE_NAME).filter(p => p !== 'beach' || summer).map(p => [PLACE_NAME[p], () => date(h, p)]).concat([['← 다시 고르기', dateMenu, true]]));
 }
 function date(h, p) {
-  showHub(false); UI.strip = false; S.dated = S.week; tire(6); UI.bg = p;
+  showHub(false); UI.strip = false; S.dated = S.week; tire(6); UI.bg = p; bgm('date');
   const D = SIM[h].date, tier = (SIM[h].likes && SIM[h].likes[p]) || 'ok', pool = (D && D[tier]) || SIM[h].small;
   scene('me', DATE_PLACES[p] || [`#주말, ${PLACE_NAME[p]}에 갔다.`], () => scene(h, [pool[Math.floor(Math.random() * pool.length)]], () => { like(h, { good: 9, ok: 4, bad: 0 }[tier]); spend(); }));
 }
