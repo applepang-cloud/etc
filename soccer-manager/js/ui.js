@@ -9,6 +9,7 @@
   'use strict';
   const TL = window.TL;
   const Store = window.TLStore;
+  const SND = window.TLAudio;
   const $ = (id) => document.getElementById(id);
   const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ESC[c]);
@@ -65,6 +66,8 @@
     order: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 9.5L6 2l4 7.5z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>',
     skill: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 .8l1.5 3.4 3.7.4-2.8 2.5.8 3.6L6 8.9 2.8 10.7l.8-3.6L.8 4.6l3.7-.4z" fill="var(--g-SSR)"/></svg>',
   };
+  const SPEAKER_ON = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7.5h3l4.5-3.5v12L6 12.5H3z" fill="currentColor"/><path d="M13 7.2a4 4 0 010 5.6M15.3 5a7 7 0 010 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  const SPEAKER_OFF = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7.5h3l4.5-3.5v12L6 12.5H3z" fill="currentColor"/><path d="M13.5 7.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
   const EV_ICON = { goal: ICON.goal, card: ICON.card, injury: ICON.injury, sub: ICON.sub, save: ICON.save, miss: ICON.miss, ko: ICON.whistle, ht: ICON.whistle, ft: ICON.whistle, order: ICON.order, info: ICON.order, skill: ICON.skill };
   const CUP = '<svg viewBox="0 0 34 34" aria-hidden="true"><path class="cup" d="M9 4h16v6c0 5-3.4 8.6-8 8.6S9 15 9 10zM9 6H4.5c0 4.3 2 6.8 5.2 7.3M25 6h4.5c0 4.3-2 6.8-5.2 7.3M14.5 19h5l1 5h-7zM10.5 25h13v4h-13z" stroke-width="1.4"/></svg>';
 
@@ -165,6 +168,15 @@
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
     setText('btn-pause', S.paused ? '재개' : '정지');
+    const muted = SND.muted();
+    if (ui.soundKey !== muted) {
+      ui.soundKey = muted;
+      const b = $('btn-sound');
+      b.innerHTML = muted ? SPEAKER_OFF : SPEAKER_ON;
+      b.setAttribute('aria-pressed', muted ? 'false' : 'true');
+      b.setAttribute('aria-label', muted ? '소리 켜기' : '소리 끄기');
+      b.title = muted ? '소리 켜기' : '소리 끄기';
+    }
   }
 
   /* ---------------------------------------------------------------- 매치데이 */
@@ -953,6 +965,7 @@
     return `<section class="card"><h2>구단 정보</h2><div class="set-grid">` +
       `<form class="form-row" id="rename-form"><label for="club-name">구단 이름</label><input class="input" id="club-name" maxlength="20" value="${esc(name)}" autocomplete="off"><button type="submit" class="btn">이름 바꾸기</button></form>` +
       `<div class="form-row"><span class="ctl-k">홈 유니폼</span><div class="swatches" role="group" aria-label="홈 유니폼 색">${swatches()}</div></div></div></section>` +
+      soundCard() +
       `<section class="card"><h2>저장</h2><div class="set-grid"><p class="hint">5초마다 자동 저장합니다. ${cloudTxt}</p>` +
       `<div><label class="ctl-k" for="export-code">저장 코드 (복사해 두면 어디서든 불러올 수 있어요)</label><textarea class="code-box" id="export-code" readonly>${esc(code)}</textarea>` +
       `<div class="form-row"><button type="button" class="btn" data-act="copy" data-key="copy">저장 코드 복사</button></div></div>` +
@@ -960,6 +973,18 @@
       `<div class="form-row"><button type="button" class="btn" data-act="import" data-key="import">이 코드로 불러오기</button><span class="hint">지금 진행 중인 구단은 덮어씁니다</span></div></div></div></section>` +
       `<section class="card"><h2>새 게임</h2><p class="hint" style="margin-bottom:10px">지금 구단을 지우고 5부 리그부터 다시 시작합니다. 되돌릴 수 없어요.</p>` +
       `<button type="button" class="btn ${resetting ? 'btn-confirm' : ''}" data-act="reset" data-key="reset">${resetting ? '한 번 더 누르면 처음부터 시작합니다' : '새 게임 시작'}</button></section>`;
+  }
+
+  function soundCard() {
+    if (!SND.supported) return '<section class="card"><h2>소리</h2><p class="hint">이 브라우저는 Web Audio를 지원하지 않아 소리를 낼 수 없어요.</p></section>';
+    const p = SND.prefs();
+    const row = (key, vkey, label) => {
+      const v = Math.round(p[vkey] * 100);
+      return `<div class="vol-row"><button type="button" class="btn btn-sm ${p[key] ? 'btn-primary' : ''}" data-act="audio-toggle" data-k="${key}" data-key="snd-${key}" aria-pressed="${p[key]}">${label} ${p[key] ? '켜짐' : '꺼짐'}</button>` +
+        `<input type="range" id="vol-${vkey}" min="0" max="100" step="5" value="${v}" data-vol="${vkey}" aria-label="${label} 볼륨"><output id="vol-${vkey}-out" for="vol-${vkey}">${v}%</output></div>`;
+    };
+    return `<section class="card"><h2>소리</h2><div class="set-grid">${row('music', 'mv', '배경음악')}${row('sfx', 'sv', '효과음·관중')}` +
+      `<p class="hint">모든 소리는 브라우저에서 직접 합성합니다. 경기 중에는 배경음악이 작아지고 관중 함성이 깔립니다. 브라우저 정책상 화면을 한 번 누른 뒤부터 소리가 나요.</p></div></section>`;
   }
 
   /* ---------------------------------------------------------------- 모달 */
@@ -1057,21 +1082,40 @@
       if (e.kind === 'goal') {
         ui.flash = { mine: e.mine, side: S.live ? (e.mine === S.live.home ? 'h' : 'a') : 'h', until: Date.now() + 1800 };
         if (e.mine) toast(`${e.minute}' 골! ${e.scorer}`, 'goal');
+        SND.play('goal', e.mine);
       } else if (e.kind === 'skill') {
         ui.skillFlash = { skill: e.skill, name: e.name, until: Date.now() + 1600 };
+        SND.play('skill');
+      } else if (e.kind === 'kickoff') {
+        SND.play('kickoff');
+      } else if (e.kind === 'halftime') {
+        SND.play('halftime');
+      } else if (e.kind === 'fulltime') {
+        SND.play('fulltime');
+        if (e.res === 'W') setTimeout(() => SND.cheer(0.5), 900);
+      } else if (e.kind === 'chance') {
+        SND.play('chance');
+      } else if (e.kind === 'card') {
+        SND.play('card');
       } else if (e.kind === 'achievement') {
+        SND.play('achievement');
         const rw = [];
         if (e.reward) rw.push(M(e.reward));
         if (e.tickets) rw.push(`티켓 ${e.tickets}`);
         toast(`업적 달성: ${e.name}${rw.length ? ' +' + rw.join(', ') : ''}`, 'ach');
       } else if (e.kind === 'mgrLevel') {
         toast(`감독 레벨 ${e.lv}! 특성 포인트 +1`, 'ach');
+        SND.play('level');
       } else if (e.kind === 'loot' && !e.auto && TL.GRADE_KEYS.indexOf(e.item.grade) >= 2) {
         toast(`장비 획득: ${TL.GRADES[e.item.grade].name} ${e.item.name}`, 'ach');
+        SND.play('coin');
       } else if (e.kind === 'injury') {
         toast(`${e.name} 부상 (${e.rounds}경기)`, 'err');
+        SND.play('injury');
       } else if (e.kind === 'seasonEnd') {
         seasonModal(e.summary);
+        const sm = e.summary;
+        setTimeout(() => SND.play(sm.move > 0 ? 'relegation' : (sm.move < 0 || sm.champion) ? 'promotion' : 'achievement'), 1200);
         save(true);
       }
     }
@@ -1097,9 +1141,10 @@
     S.rev++;
   }
 
-  function result(r) {
+  function result(r, sound) {
     if (!r) return;
     toast(r.msg, r.ok ? '' : 'err');
+    SND.play(r.ok ? (sound || 'click') : 'error');
     if (r.events) handleEvents(r.events, false);
   }
 
@@ -1128,40 +1173,51 @@
     const id = Number(d.id);
     const item = Number(d.item);
     switch (name) {
-      case 'tab': setTab(d.tab); if (ui.modal) closeModal(); return;
-      case 'pause': TL.setPaused(S, !S.paused); renderTop(); return;
-      case 'speed': TL.setSpeed(S, Number(d.v)); renderTop(); return;
-      case 'order': result(TL.issueOrder(S, d.k)); ui.orderKey = ''; ui.evCount = -1; break;
-      case 'player': openPlayer(id); return;
-      case 'lvup': result(TL.levelUp(S, id, Number(d.n) || 1)); break;
-      case 'lvteam': result(TL.levelUpTeam(S)); break;
-      case 'star': result(TL.starUp(S, id)); break;
-      case 'skillup': result(TL.skillUp(S, id)); break;
-      case 'release-p': confirmThen('release-p', id, () => { const r = TL.releasePlayer(S, id); result(r); if (r.ok) closeModal(); }); break;
-      case 'release-y': confirmThen('release-y', id, () => result(TL.releaseYouth(S, id))); break;
-      case 'promote': result(TL.promoteYouth(S, id)); break;
-      case 'rest': result(TL.toggleRest(S, id)); break;
-      case 'equip': result(TL.equipItem(S, item, id)); break;
-      case 'unequip': result(TL.unequipItem(S, item)); break;
-      case 'autoequip': result(TL.autoEquip(S)); break;
-      case 'enhance': result(TL.enhanceItem(S, item)); break;
-      case 'dismantle': confirmThen('dismantle', item, () => result(TL.dismantleItem(S, item))); break;
-      case 'dismantle-below': result(TL.dismantleBelow(S, d.g)); break;
-      case 'scout': {
-        const r = TL.scout(S, d.kind, Number(d.n));
-        if (!r.ok) { toast(r.msg, 'err'); return; }
-        if (r.events) handleEvents(r.events, false);
-        scoutModal(r);
+      case 'tab': SND.play('click'); setTab(d.tab); if (ui.modal) closeModal(); return;
+      case 'pause': SND.play('click'); TL.setPaused(S, !S.paused); renderTop(); return;
+      case 'speed': SND.play('click'); TL.setSpeed(S, Number(d.v)); renderTop(); return;
+      case 'sound': SND.unlock(); SND.setMuted(!SND.muted()); renderTop(); if (ui.tab === 'settings') renderPanel(); return;
+      case 'audio-toggle': SND.unlock(); SND.setPref(d.k, !SND.prefs()[d.k]); renderTop(); renderPanel(); return;
+      case 'order': {
+        const r = TL.issueOrder(S, d.k);
+        result(r, 'card');
+        if (r.ok) SND.cheer(0.35);
+        ui.orderKey = ''; ui.evCount = -1;
         break;
       }
-      case 'talent': result(TL.addTalent(S, d.k)); break;
-      case 'respec': confirmThen('respec', 0, () => result(TL.resetTalents(S))); break;
-      case 'upgrade': result(TL.upgradeFacility(S, d.fac)); break;
-      case 'formation': TL.setFormation(S, d.f); break;
-      case 'tactic': TL.setTactic(S, d.t); break;
-      case 'kit': TL.setKit(S, d.kit); applyKit(); ui.sbKey = ''; break;
-      case 'skip': TL.skipOffseason(S); if (ui.modal) closeModal(); break;
-      case 'close': closeModal(); break;
+      case 'player': SND.play('click'); openPlayer(id); return;
+      case 'lvup': result(TL.levelUp(S, id, Number(d.n) || 1), 'level'); break;
+      case 'lvteam': result(TL.levelUpTeam(S), 'level'); break;
+      case 'star': result(TL.starUp(S, id), 'star'); break;
+      case 'skillup': result(TL.skillUp(S, id), 'skill'); break;
+      case 'release-p': confirmThen('release-p', id, () => { const r = TL.releasePlayer(S, id); result(r, 'coin'); if (r.ok) closeModal(); }); break;
+      case 'release-y': confirmThen('release-y', id, () => result(TL.releaseYouth(S, id), 'coin')); break;
+      case 'promote': result(TL.promoteYouth(S, id), 'level'); break;
+      case 'rest': result(TL.toggleRest(S, id)); break;
+      case 'equip': result(TL.equipItem(S, item, id), 'enhance'); break;
+      case 'unequip': result(TL.unequipItem(S, item)); break;
+      case 'autoequip': result(TL.autoEquip(S), 'enhance'); break;
+      case 'enhance': result(TL.enhanceItem(S, item), 'enhance'); break;
+      case 'dismantle': confirmThen('dismantle', item, () => result(TL.dismantleItem(S, item), 'coin')); break;
+      case 'dismantle-below': result(TL.dismantleBelow(S, d.g), 'coin'); break;
+      case 'scout': {
+        const r = TL.scout(S, d.kind, Number(d.n));
+        if (!r.ok) { toast(r.msg, 'err'); SND.play('error'); return; }
+        const best = r.results.reduce((b, x) => Math.max(b, TL.GRADE_KEYS.indexOf(x.player.grade)), 0);
+        SND.play('drumroll', 0.65);
+        setTimeout(() => SND.play('reveal', TL.GRADE_KEYS[best]), 650);
+        scoutModal(r);
+        if (r.events) setTimeout(() => handleEvents(r.events, false), 1200);
+        break;
+      }
+      case 'talent': result(TL.addTalent(S, d.k), 'level'); break;
+      case 'respec': confirmThen('respec', 0, () => result(TL.resetTalents(S), 'coin')); break;
+      case 'upgrade': result(TL.upgradeFacility(S, d.fac), 'build'); break;
+      case 'formation': SND.play('click'); TL.setFormation(S, d.f); break;
+      case 'tactic': SND.play('click'); TL.setTactic(S, d.t); break;
+      case 'kit': SND.play('click'); TL.setKit(S, d.kit); applyKit(); ui.sbKey = ''; break;
+      case 'skip': SND.play('kickoff'); TL.skipOffseason(S); if (ui.modal) closeModal(); break;
+      case 'close': SND.play('click'); closeModal(); break;
       case 'season-report': if (ui.offlineSeason) seasonModal(ui.offlineSeason); return;
       case 'copy': copyExport(); return;
       case 'import': importCode(); return;
@@ -1279,6 +1335,7 @@
       handleEvents(TL.tick(S, dt), false);
     }
     if (ui.offline) flushOffline();
+    SND.setScene(S.phase === 'match' && !S.paused ? 'match' : 'menu');
     renderTop();
     renderMatchday(now);
     maybeRenderPanel(now);
@@ -1339,7 +1396,17 @@
     document.addEventListener('change', onChange);
     document.addEventListener('input', (e) => {
       if (e.target.id === 'welcome-name' || e.target.id === 'club-name') ui.draftName = e.target.value;
+      const vol = e.target.getAttribute && e.target.getAttribute('data-vol');
+      if (vol) {
+        SND.setPref(vol, Number(e.target.value) / 100);
+        const out = $(e.target.id + '-out');
+        if (out) out.textContent = e.target.value + '%';
+      }
     });
+    // 브라우저는 사용자가 한 번 누른 뒤에야 소리를 허락한다
+    const unlockAudio = () => { if (!SND.isUnlocked()) SND.unlock(); };
+    document.addEventListener('pointerdown', unlockAudio, true);
+    document.addEventListener('keydown', unlockAudio, true);
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && ui.modal) closeModal();
       if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && e.target.classList && e.target.classList.contains('tab')) {

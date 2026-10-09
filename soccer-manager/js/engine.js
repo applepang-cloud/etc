@@ -1054,10 +1054,12 @@
         liveEvent(s, { m, t: 'miss', side, text: pick(MISS_LINES)(sh.name) });
       }
       L.mom = clamp(L.mom + (side === 'h' ? 0.35 : -0.35), -1, 1);
+      out.push({ kind: 'chance', mine: side === mySide });
     } else if (!happened && chance(0.045)) {
       const side = chance(0.5) ? 'h' : 'a';
       const c = nameFor(side, 'card');
       liveEvent(s, { m, t: 'card', side, text: pick(CARD_LINES)(c.name) });
+      out.push({ kind: 'card' });
     }
 
     // 우리 선수 부상
@@ -1122,7 +1124,10 @@
     while (L.minute < target) {
       L.minute++;
       simMinute(s, L.minute, out);
-      if (L.minute === 45) liveEvent(s, { m: 45, t: 'ht', side: '', text: `하프타임 ${L.hg} : ${L.ag}` });
+      if (L.minute === 45) {
+        liveEvent(s, { m: 45, t: 'ht', side: '', text: `하프타임 ${L.hg} : ${L.ag}` });
+        out.push({ kind: 'halftime' });
+      }
     }
     if (L.clock >= T.match + T.half && L.minute >= 90) endMatch(s, out);
   }

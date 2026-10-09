@@ -25,12 +25,15 @@
       <div class="tb-stat"><dt>돌파석</dt><dd id="tb-shards">—</dd></div>
       <div class="tb-stat"><dt>스킬북</dt><dd id="tb-books">—</dd></div>
     </dl>
-    <div class="seg speed" role="group" aria-label="게임 속도" id="speed">
-      <button type="button" class="seg-b" data-act="pause" id="btn-pause" aria-pressed="false">정지</button>
-      <button type="button" class="seg-b" data-act="speed" data-v="1" aria-pressed="false">1×</button>
-      <button type="button" class="seg-b" data-act="speed" data-v="2" aria-pressed="false">2×</button>
-      <button type="button" class="seg-b" data-act="speed" data-v="4" aria-pressed="false">4×</button>
-      <button type="button" class="seg-b" data-act="speed" data-v="8" aria-pressed="false">8×</button>
+    <div class="tb-ctl">
+      <div class="seg speed" role="group" aria-label="게임 속도" id="speed">
+        <button type="button" class="seg-b" data-act="pause" id="btn-pause" aria-pressed="false">정지</button>
+        <button type="button" class="seg-b" data-act="speed" data-v="1" aria-pressed="false">1×</button>
+        <button type="button" class="seg-b" data-act="speed" data-v="2" aria-pressed="false">2×</button>
+        <button type="button" class="seg-b" data-act="speed" data-v="4" aria-pressed="false">4×</button>
+        <button type="button" class="seg-b" data-act="speed" data-v="8" aria-pressed="false">8×</button>
+      </div>
+      <button type="button" class="icon-btn" id="btn-sound" data-act="sound" aria-pressed="true" aria-label="소리 끄기" title="소리 끄기"></button>
     </div>
   </div>
 </header>
@@ -52,6 +55,7 @@
 
 <script src="js/engine.js"></script>
 <script src="js/storage.js"></script>
+<script src="js/audio.js"></script>
 <script src="js/ui.js"></script>
 </body>
 </html>

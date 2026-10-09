@@ -193,6 +193,25 @@ h1, h2, h3 { text-wrap: balance; }
 .seg-b:hover { color: var(--ink); }
 .seg-b[aria-pressed="true"] { background: var(--club); color: var(--on-club); }
 .speed .seg-b[data-act="pause"][aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.tb-ctl { display: flex; gap: 8px; align-items: stretch; }
+.icon-btn {
+  appearance: none;
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+.icon-btn:hover { border-color: var(--ink); }
+.icon-btn svg { width: 18px; height: 18px; }
+.icon-btn[aria-pressed="false"] { color: var(--muted); }
+.vol-row { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr) 3rem; gap: 10px; align-items: center; }
+.vol-row input[type="range"] { width: 100%; accent-color: var(--club); }
+.vol-row output { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: .82rem; }
 
 .btn {
   appearance: none;
@@ -967,8 +986,10 @@ button.p-name { font-weight: 600; max-width: 100%; }
 @media (max-width: 560px) {
   .tb-stats { gap: 16px; }
   .tb-name { font-size: 1.2rem; }
-  .speed { width: 100%; justify-content: space-between; }
+  .tb-ctl { width: 100%; }
+  .speed { flex: 1; justify-content: space-between; }
   .speed .seg-b { flex: 1; }
+  .vol-row { grid-template-columns: 6.5rem minmax(0, 1fr) 2.6rem; }
   .led-score { font-size: 2.4rem; }
   .card { padding: 14px; }
 }
