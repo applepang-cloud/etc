@@ -430,6 +430,25 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
 .status.warn { color: #ff9a8a; }
 .status.muted { color: var(--ink-dim); }
 .create-card.result { border-color: rgba(245, 197, 24, 0.45); }
+.ai-results { display: flex; flex-direction: column; gap: calc(var(--u) * 8); }
+.ai-results:empty { display: none; }
+.ai-pick {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 2);
+  text-align: left;
+  padding: calc(var(--u) * 12) calc(var(--u) * 16);
+  border-radius: calc(var(--u) * 14);
+  border: calc(var(--u) * 1) solid var(--line);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+}
+.ai-pick:hover { border-color: rgba(245, 197, 24, 0.5); }
+.ai-pick:disabled { opacity: 0.45; }
+.ai-pick.picked { border-color: var(--accent); opacity: 1; }
+.ai-pick .t { font-weight: 800; font-size: calc(var(--u) * 17); }
+.ai-pick .s { color: var(--ink-dim); font-size: calc(var(--u) * 14); }
+.create-card code { font-size: 0.92em; color: var(--ink); background: rgba(255, 255, 255, 0.08); padding: 0 calc(var(--u) * 4); border-radius: calc(var(--u) * 4); }
 #made-preview { width: 100%; height: auto; border-radius: calc(var(--u) * 10); background: #111214; }
 .create-card.result .row .btn { flex: 1 1 40%; }
   </style>
@@ -467,7 +486,8 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
           <summary>게임 방법</summary>
           <ul>
             <li>화면 위쪽을 눌러 <b>조준</b>하고, 손을 떼면 <b>발판</b> 위의 공이 <b>발사</b>돼요.</li>
-            <li>공이 날아가는 동안 화면을 좌우로 밀어 <b>발판</b>으로 공을 받아내세요. 놓친 공은 사라져요.</li>
+            <li>공이 날아가는 동안 아래쪽을 좌우로 밀어 <b>발판</b>으로 공을 받아내세요. 놓친 공은 사라져요.</li>
+            <li>공이 날아가는 중에도 보드를 눌러 조준하고 떼면 <b>추가 발사</b>할 수 있어요. 발사 횟수를 1번 써요.</li>
             <li>쏜 공을 모두 놓치거나 <b>8초</b>가 지나면 그 발사 턴이 끝나요. 오래 버틸수록 공이 빨라져요.</li>
             <li><b>흰 블럭</b>은 원곡 멜로디예요. 공이 튕기고 깨지지 않아요. <b>검은 블럭</b>(검은 건반 음)은 공이 그냥 지나가요.</li>
             <li><b>컬러 블럭</b>은 방해 음이에요. 적힌 <b>숫자만큼</b> 맞혀야 깨져요.</li>
@@ -508,13 +528,14 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
       </header>
       <div class="create-body">
         <div class="create-card">
-          <h3>노래 제목으로</h3>
-          <p class="hint">제목(과 가수)을 적으면 Claude가 멜로디를 받아 적어 맵을 만들어요.</p>
+          <h3>노래 찾기</h3>
+          <p id="ai-hint" class="hint">아무 노래나 제목·가수·기억나는 가사로 찾으면 Codex가 웹에서 곡을 찾고, 고른 곡의 멜로디를 받아 적어 맵을 만들어요.</p>
           <form id="ai-form" class="row">
-            <input id="title-input" type="text" placeholder="예: 아이유 좋은 날" maxlength="80" autocomplete="off" aria-label="노래 제목">
-            <button id="btn-ai" class="btn primary" type="submit">만들기</button>
+            <input id="title-input" type="text" placeholder="예: 아이유 좋은 날" maxlength="80" autocomplete="off" aria-label="찾을 노래">
+            <button id="btn-ai" class="btn primary" type="submit">찾기</button>
           </form>
           <p id="ai-status" class="status" aria-live="polite"></p>
+          <div id="ai-results" class="ai-results" role="list" aria-label="찾은 노래"></div>
         </div>
 
         <div class="create-card">
@@ -2211,6 +2232,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     keyDir: 0,
     pointer: null,
     padDrag: false,
+    reaim: false, // aiming another launch while balls fly
     seq: null, // song melody played by block hits
     seqIdx: 0,
     play: null,
@@ -2318,6 +2340,24 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     G.mode = 'shoot';
   }
 
+  // While balls are flying, another launch can go out from the paddle; it uses up one of the
+  // stage's launches and gives the turn a fresh time limit.
+  const canFireMore = () => G.mode === 'shoot' && !G.allClear && G.turn < C.TURNS;
+
+  function fireMore() {
+    if (!canFireMore() || !G.aim || !G.aim.valid) return false;
+    G.turn++;
+    G.dir = { dx: G.aim.dx, dy: G.aim.dy };
+    G.aim = null;
+    G.reaim = false;
+    G.toLaunch += G.perLaunch;
+    G.launchT = Math.min(G.launchT, 0);
+    G.turnT = 0;
+    G.settle = 0;
+    floater('추가 발사', G.pad.x, C.LAUNCH_Y - 30, YELLOW);
+    return true;
+  }
+
   function randomUp() {
     const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.6;
     return { dx: Math.cos(a), dy: Math.sin(a) };
@@ -2359,7 +2399,8 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
       if (obj.hp <= 0) {
         obj.alive = false;
         G.score += 100;
-        burst(cx, cy, obj.color);
+        shatter(cx, cy, CW - 2, G.st.rows.h - 2, obj.color);
+        G.shake = Math.max(G.shake, 0.18); // a small jolt when a block breaks
         floater('+100', cx, cy, '#fff');
         SND.sparkle();
         if (obj.item) giveItem(obj.item, cx, cy);
@@ -2427,6 +2468,10 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
       }
     }
     G.balls = G.balls.filter((b) => b.active);
+    for (const b of G.balls) {
+      (b.trail || (b.trail = [])).push({ x: b.x, y: b.y });
+      if (b.trail.length > TRAIL_LEN) b.trail.shift();
+    }
     updateItems(dt);
     if (G.turnT >= C.TURN_LIMIT && G.balls.length) {
       // Time's up: the balls still in play vanish and the turn ends.
@@ -2443,6 +2488,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
 
   function endVolley() {
     G.balls = [];
+    G.reaim = false;
     G.speedMult = 1;
     if (aliveCount() === 0) return startPlay(true);
     if (G.turn >= C.TURNS) return startPlay(false);
@@ -2618,6 +2664,42 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     }
   }
 
+  function shatter(cx, cy, w, h, color) {
+    const cols = 3, rows = 3, pw = w / cols, ph = h / rows;
+    for (let i = 0; i < cols; i++) {
+      for (let j = 0; j < rows; j++) {
+        const x = cx - w / 2 + (i + 0.5) * pw, y = cy - h / 2 + (j + 0.5) * ph;
+        const ang = Math.atan2(y - cy, x - cx) + (Math.random() - 0.5) * 0.8;
+        const sp = 120 + Math.random() * 220;
+        G.particles.push({
+          x, y,
+          vx: Math.cos(ang) * sp + (Math.random() - 0.5) * 80,
+          vy: Math.sin(ang) * sp - 140 - Math.random() * 160,
+          w: pw * (0.75 + Math.random() * 0.4),
+          h: ph * (0.75 + Math.random() * 0.4),
+          rot: (Math.random() - 0.5) * 0.6,
+          vr: (Math.random() - 0.5) * 16,
+          t: 0,
+          life: 0.7 + Math.random() * 0.4,
+          color,
+          chunk: true
+        });
+      }
+    }
+    for (let i = 0; i < 8; i++) {
+      G.particles.push({
+        x: cx, y: cy,
+        vx: (Math.random() - 0.5) * 420,
+        vy: (Math.random() - 0.5) * 420 - 80,
+        s: 1.5 + Math.random() * 2,
+        rot: 0, vr: 0, t: 0,
+        life: 0.3 + Math.random() * 0.25,
+        color: '#ffffff',
+        spark: true
+      });
+    }
+  }
+
   function floater(text, x, y, color) {
     G.floaters.push({ text, x, y, t: 0, life: 0.8, color });
   }
@@ -2634,7 +2716,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     }
     G.particles = G.particles.filter((p) => {
       p.t += dt;
-      p.vy += 900 * dt;
+      p.vy += (p.spark ? 300 : 900) * dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.rot += p.vr * dt;
@@ -3067,6 +3149,27 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     ctx.fillRect(0, C.ROLL_BOTTOM, C.W * left, 5);
   }
 
+  // Fading comet tail behind a flying ball.
+  const TRAIL_LEN = 12;
+  function drawTrail(b) {
+    const t = b.trail;
+    if (!t || t.length < 2) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (let i = 1; i < t.length; i++) {
+      const k = i / t.length; // 0 = oldest, 1 = newest
+      if (Math.abs(t[i].x - t[i - 1].x) + Math.abs(t[i].y - t[i - 1].y) > 80) continue; // skip jumps
+      ctx.globalAlpha = k * 0.55;
+      ctx.strokeStyle = k > 0.6 ? '#ffffff' : '#bfe9ff';
+      ctx.lineWidth = C.BALL_R * 2 * (0.25 + k * 0.75);
+      ctx.beginPath();
+      ctx.moveTo(t[i - 1].x, t[i - 1].y);
+      ctx.lineTo(t[i].x, t[i].y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function drawBall(x, y) {
     ctx.save();
     ctx.shadowColor = 'rgba(255,255,255,0.8)';
@@ -3132,6 +3235,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
         ctx.fillText('×' + n, G.pad.x + (right ? -14 : 14), C.LAUNCH_Y - 14);
       }
     }
+    for (const b of G.balls) drawTrail(b);
     for (const b of G.balls) drawBall(b.x, b.y);
     drawFallingItems();
     if (G.mode === 'shoot' && G.speedMult > 1) {
@@ -3144,7 +3248,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
   }
 
   function drawAim() {
-    if (G.mode !== 'aim' || !G.aim || !G.aim.valid) return;
+    if (!(G.mode === 'aim' || (G.mode === 'shoot' && G.reaim)) || !G.aim || !G.aim.valid) return;
     const pts = G.aim.pts;
     const spacing = 16;
     let carry = (G.time * 50) % spacing;
@@ -3169,11 +3273,28 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
   function drawParticles() {
     for (const p of G.particles) {
       ctx.save();
-      ctx.globalAlpha = 1 - p.t / p.life;
+      const fade = 1 - p.t / p.life;
+      ctx.globalAlpha = p.chunk ? Math.min(1, fade * 1.6) : fade;
       ctx.translate(p.x, p.y);
       ctx.rotate(p.rot);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s);
+      if (p.chunk) {
+        // a piece of the block: its colour, a dark rim and a light top edge
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, Math.min(2, p.h * 0.25));
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-p.w / 2 + 0.5, -p.h / 2 + 0.5, p.w - 1, p.h - 1);
+      } else if (p.spark) {
+        ctx.shadowColor = '#fff';
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s);
+      } else {
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s);
+      }
       ctx.restore();
     }
     ctx.textAlign = 'center';
@@ -3482,13 +3603,21 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
 
   function bindInput() {
     // Aim mode: press above the paddle to aim (release fires), press on the paddle row to slide it.
-    // Shoot mode: the paddle follows the finger / mouse horizontally.
+    // Shoot mode: press on the board to aim another launch (release fires, uses a launch);
+    // press in the paddle area and the paddle follows the finger / mouse horizontally.
     canvas.addEventListener('pointerdown', (e) => {
       SND.unlock();
       const p = toLogical(e);
       if (G.mode === 'shoot') {
         G.pointer = e.pointerId;
-        movePaddle(p.x);
+        if (p.y < C.ROLL_BOTTOM && canFireMore()) {
+          e.preventDefault();
+          try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+          G.reaim = true;
+          aimAt(p);
+        } else {
+          movePaddle(p.x);
+        }
         return;
       }
       if (G.mode !== 'aim') return;
@@ -3507,7 +3636,11 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     canvas.addEventListener('pointermove', (e) => {
       const p = toLogical(e);
       if (G.mode === 'shoot') {
-        if (G.pointer === e.pointerId || e.pointerType === 'mouse') movePaddle(p.x);
+        if (G.reaim) {
+          if (G.pointer === e.pointerId) aimAt(p);
+        } else if (G.pointer === e.pointerId || e.pointerType === 'mouse') {
+          movePaddle(p.x);
+        }
         return;
       }
       if (G.pointer !== e.pointerId || G.mode !== 'aim') return;
@@ -3517,6 +3650,12 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     canvas.addEventListener('pointerup', (e) => {
       if (G.pointer !== e.pointerId) return;
       G.pointer = null;
+      if (G.mode === 'shoot' && G.reaim) {
+        aimAt(toLogical(e));
+        if (!fireMore()) G.aim = null;
+        G.reaim = false;
+        return;
+      }
       if (G.mode !== 'aim') return;
       if (G.padDrag) {
         G.padDrag = false;
@@ -3529,10 +3668,13 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     canvas.addEventListener('pointercancel', () => {
       G.pointer = null;
       G.padDrag = false;
+      if (G.reaim) G.aim = null;
+      G.reaim = false;
       if (G.mode === 'aim') G.aim = null;
     });
 
-    // Keyboard: ← → aim (aim mode) or move the paddle (shoot mode); Space / Enter fires.
+    // Keyboard: ← → aim (aim mode) or move the paddle (shoot mode); Space / Enter fires
+    // (in shoot mode it fires another launch at the last aim angle).
     window.addEventListener('keydown', (e) => {
       SND.unlock();
       if (G.mode !== 'aim' && G.mode !== 'shoot') return;
@@ -3540,9 +3682,11 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
         G.keyDir = e.key === 'ArrowLeft' ? -1 : 1;
         if (G.mode === 'aim' && (!G.aim || !G.aim.valid)) setAimAngle(G.aimAngle);
         e.preventDefault();
-      } else if (G.mode === 'aim' && (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowUp')) {
+      } else if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowUp') {
+        if (G.mode === 'shoot' && !canFireMore()) return;
         if (!G.aim || !G.aim.valid) setAimAngle(G.aimAngle);
-        fire();
+        if (G.mode === 'aim') fire();
+        else fireMore();
         e.preventDefault();
       }
     });
@@ -3651,8 +3795,9 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
 
 /* ===== js/create.js ===== */
 /* Piano Bricks — the 새 곡 만들기 screen.
- * A song title goes to Claude (when the page runs as a claude.ai artifact);
- * a file is read as MIDI or analysed as audio. Either way PB.maker builds the map. */
+ * 노래 찾기: Codex (through codex-bridge.mjs running on this PC) searches the web for the song,
+ * the player picks one, and Codex transcribes its melody. Without the bridge, a claude.ai artifact
+ * falls back to Claude. A file is read as MIDI or analysed as audio. PB.maker builds the map. */
 (function (PB) {
   'use strict';
 
@@ -3662,6 +3807,10 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
   let aiChecked = false; // claude.use('sample') has answered
   let aiCtl = null;
   let madeId = null;
+  // Codex bridge (codex-bridge.mjs) on this PC; uses the PC's Codex login.
+  const BRIDGE = 'http://127.0.0.1:8788';
+  let codex = false;
+  let codexChecked = false;
 
   const AI_ERRORS = {
     not_granted: 'Claude 사용을 허용하지 않아서 만들 수 없어요.',
@@ -3720,52 +3869,149 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
+  const syncAiButton = () => { $('btn-ai').textContent = aiCtl ? '멈추기' : codex || !sample ? '찾기' : '만들기'; };
+
   function syncAi() {
     const el = $('ai-status');
-    if (sample) setStatus(el, '');
-    else if (window.claude && !aiChecked) setStatus(el, 'Claude 연결을 확인하는 중…', 'muted');
-    else setStatus(el, '제목으로 만들기는 claude.ai에서 이 게임을 열었을 때만 쓸 수 있어요. 아래 음악 파일로 만들어 보세요.', 'muted');
+    syncAiButton();
+    if (aiCtl) return;
+    if (codex) {
+      $('ai-hint').textContent = '아무 노래나 제목·가수·기억나는 가사로 찾으면 Codex가 웹에서 곡을 찾고, 고른 곡의 멜로디를 받아 적어 맵을 만들어요.';
+      if (!el.textContent || el.classList.contains('muted')) setStatus(el, 'Codex 연결됨', 'ok');
+    } else if (sample) {
+      $('ai-hint').textContent = '제목(과 가수)을 적으면 Claude가 멜로디를 받아 적어 맵을 만들어요.';
+      setStatus(el, '');
+    } else if (!codexChecked || (window.claude && !aiChecked)) {
+      setStatus(el, 'Codex 연결을 확인하는 중…', 'muted');
+    } else {
+      el.className = 'status muted';
+      el.innerHTML = 'Codex 연결이 꺼져 있어요. 이 PC에서 <code>piano-bricks/codex-bridge.cmd</code>를 실행한 뒤 다시 들어오세요. (Codex 앱에 로그인돼 있어야 해요)';
+    }
+  }
+
+  async function checkCodex() {
+    try {
+      const r = await fetch(BRIDGE + '/health', { signal: AbortSignal.timeout(1500) });
+      codex = r.ok && (await r.json()).ok === true;
+    } catch (e) {
+      codex = false;
+    }
+    codexChecked = true;
+    syncAi();
+  }
+
+  async function bridge(path, body, signal) {
+    let r;
+    try {
+      r = await fetch(BRIDGE + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal });
+    } catch (e) {
+      if (e.name === 'AbortError') throw e;
+      codex = false;
+      throw new Error('Codex 연결이 끊겼어요. codex-bridge.cmd 창이 켜져 있는지 확인해 주세요.');
+    }
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || 'Codex가 답하지 못했어요.');
+    return data;
+  }
+
+  // Runs a slow step with a ticking status and a 멈추기 button; returns null when stopped or failed.
+  async function withProgress(label, fn) {
+    const el = $('ai-status');
+    aiCtl = new AbortController();
+    syncAiButton();
+    $('ai-results').querySelectorAll('.ai-pick').forEach((b) => { b.disabled = true; });
+    const t0 = Date.now();
+    const tick = () => setStatus(el, label + ' ' + Math.round((Date.now() - t0) / 1000) + '초');
+    tick();
+    const timer = setInterval(tick, 1000);
+    try {
+      return await fn(aiCtl.signal);
+    } catch (err) {
+      if (err && (err.name === 'AbortError' || err.code === 'cancelled')) setStatus(el, '멈췄어요.');
+      else if (err && err.code) setStatus(el, AI_ERRORS[err.code] || '만들지 못했어요. 잠시 뒤 다시 해 보세요.', 'warn');
+      else setStatus(el, (err && err.message) || '만들지 못했어요.', 'warn');
+      if (err && ['not_granted', 'sampling_disabled', 'capability_disabled'].includes(err.code)) sample = null;
+      return null;
+    } finally {
+      clearInterval(timer);
+      aiCtl = null;
+      $('ai-results').querySelectorAll('.ai-pick').forEach((b) => { b.disabled = false; });
+      syncAiButton();
+    }
+  }
+
+  function finishSong(src, fallbackTitle) {
+    if (!src.title) src.title = fallbackTitle;
+    if (!src.notes.length) throw new Error('멜로디가 비어 있어요. 다른 곡을 골라 보세요.');
+    showMade(M.buildSong(src, options()));
+    setStatus($('ai-status'), '맵을 만들었어요! 아래에서 바로 플레이할 수 있어요.', 'ok');
+  }
+
+  async function pickSong(item, btn) {
+    $('ai-results').querySelectorAll('.ai-pick').forEach((b) => b.classList.toggle('picked', b === btn));
+    await withProgress('Codex가 「' + item.title + '」 멜로디를 받아 적는 중…', async (signal) => {
+      const data = await bridge('/transcribe', { title: item.title, artist: item.artist }, signal);
+      finishSong(M.fromClaude(data), item.title);
+      return true;
+    });
+  }
+
+  function showResults(list) {
+    const box = $('ai-results');
+    box.textContent = '';
+    list.forEach((item) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ai-pick';
+      b.setAttribute('role', 'listitem');
+      const t = document.createElement('span');
+      t.className = 't';
+      t.textContent = item.title;
+      const sub = document.createElement('span');
+      sub.className = 's';
+      sub.textContent = [item.artist, item.year, item.note].filter(Boolean).join(' · ');
+      b.append(t, sub);
+      b.addEventListener('click', () => { if (!aiCtl) pickSong(item, b); });
+      box.appendChild(b);
+    });
   }
 
   async function makeFromTitle(e) {
     e.preventDefault();
-    const el = $('ai-status'), btn = $('btn-ai');
+    const el = $('ai-status');
     if (aiCtl) {
       aiCtl.abort();
       return;
     }
     const title = $('title-input').value.trim();
     if (!title) {
-      setStatus(el, '노래 제목을 적어 주세요.', 'warn');
+      setStatus(el, '찾을 노래를 적어 주세요.', 'warn');
+      return;
+    }
+    if (!codex && !sample) await checkCodex();
+    if (codex) {
+      $('ai-results').textContent = '';
+      const data = await withProgress('Codex가 웹에서 노래를 찾는 중…', (signal) => bridge('/search', { query: title }, signal));
+      if (!data) return;
+      const list = (data.results || []).filter((r) => r && r.title);
+      if (!list.length) {
+        setStatus(el, '맞는 노래를 찾지 못했어요. 제목이나 가수를 바꿔 보세요.', 'warn');
+        return;
+      }
+      showResults(list);
+      setStatus(el, list.length + '곡을 찾았어요. 만들 곡을 고르세요.', 'ok');
       return;
     }
     if (!sample) {
       syncAi();
       return;
     }
-    aiCtl = new AbortController();
-    btn.textContent = '멈추기';
-    const t0 = Date.now();
-    const tick = () => setStatus(el, 'Claude가 멜로디를 받아 적는 중… ' + Math.round((Date.now() - t0) / 1000) + '초');
-    tick();
-    const timer = setInterval(tick, 1000);
-    try {
+    await withProgress('Claude가 멜로디를 받아 적는 중…', async (signal) => {
       // The same title within a day replays the stored answer instead of asking again.
-      const data = await sample.json(M.claudePrompt(title), { signal: aiCtl.signal, cache: { gcTime: 24 * 3600e3 } });
-      const src = M.fromClaude(data);
-      if (!src.title) src.title = title;
-      showMade(M.buildSong(src, options()));
-      setStatus(el, '맵을 만들었어요! 아래에서 바로 플레이할 수 있어요.', 'ok');
-    } catch (err) {
-      if (err && err.code === 'cancelled') setStatus(el, '멈췄어요.');
-      else if (err && err.code) setStatus(el, AI_ERRORS[err.code] || '만들지 못했어요. 잠시 뒤 다시 해 보세요.', 'warn');
-      else setStatus(el, (err && err.message) || '만들지 못했어요.', 'warn');
-      if (err && ['not_granted', 'sampling_disabled', 'capability_disabled'].includes(err.code)) sample = null;
-    } finally {
-      clearInterval(timer);
-      aiCtl = null;
-      btn.textContent = '만들기';
-    }
+      const data = await sample.json(M.claudePrompt(title), { signal, cache: { gcTime: 24 * 3600e3 } });
+      finishSong(M.fromClaude(data), title);
+      return true;
+    });
   }
 
   async function decodeAudio(buf) {
@@ -3832,6 +4078,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     setStatus($('file-status'), '');
     syncAi();
     PB.game.showScreen('create');
+    checkCodex();
   }
 
   function init() {
