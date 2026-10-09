@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "piano-block",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8123", "-d", "piano-block-puzzle"],
+      "port": 8123
+    },
+    {
+      "name": "piano-block-single",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8124", "-d", "."],
+      "port": 8124
+    }
+  ]
+}

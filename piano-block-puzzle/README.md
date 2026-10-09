@@ -90,6 +90,14 @@ npx serve piano-block-puzzle
 python3 -m http.server -d piano-block-puzzle 8000
 ```
 
+### 단일 HTML 파일
+
+서버 없이 더블클릭으로 여는 한 파일짜리 버전을 만든다. CSS와 모든 JS 모듈이 안에 들어간다(글꼴만 Google Fonts에서 받고, 오프라인이면 기본 글꼴로 보인다). 소스를 고친 뒤 다시 실행하면 된다.
+
+```bash
+node piano-block-puzzle/build-single.mjs   # → piano-block.html
+```
+
 ## 구조
 
 ```
