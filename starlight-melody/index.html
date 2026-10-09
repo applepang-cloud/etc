@@ -3025,12 +3025,24 @@ function liveEnd() {
   if (SONG) STAGES = SONG.stages;
 }
 let titleCycle = null;
-function album(i) { // endings you have reached, with their CG and her last line
-  const got = simStore.endings(), h = HEROINES[i], seen = !!got[h];
-  G.mode = 'album'; bgm('ending'); showHub(false); UI.strip = false; setScene('big'); UI.stageLabel = `앨범 · ${i + 1}/6`;
-  UI.cg = seen && CGS[h] ? h : null; setChar(seen ? h : 'me');
-  say(seen ? (SIM[h].final || SIM[h].love).slice(-1)[0] : `${CAST[h].name} 엔딩은 아직 보지 못했다.`, false, [
-    ['◀ 이전', () => album((i + 5) % 6)], ['다음 ▶', () => album((i + 1) % 6)], ['← 타이틀로', mainMenu, true]]);
+// CG gallery: every illustration you have seen once is kept across games
+const cgStore = {
+  get() { try { return JSON.parse(localStorage.getItem('starlight-cgs') || '{}'); } catch (e) { return {}; } },
+  add(k) { const d = cgStore.get(); if (d[k]) return; d[k] = true; try { localStorage.setItem('starlight-cgs', JSON.stringify(d)); } catch (e) {} }
+};
+const cgNoted = new Set();
+const ALBUM = HEROINES.flatMap(h => [['heart_' + h, h, '두근'], ['live_' + h, h, '축제 라이브'], [h, h, '엔딩']]);
+function cgCaption(key, h) {
+  if (key.startsWith('heart_')) { const ls = HEARTS[h] && HEARTS[h].heart2 ? HEARTS[h].heart2.lines.filter(l => !l.startsWith('#')) : []; return ls[ls.length - 1] || SIM[h].small[0]; }
+  if (key.startsWith('live_')) return SIM[h].live[0];
+  return (SIM[h].final || SIM[h].love).slice(-1)[0];
+}
+function album(i) {
+  const [key, h, kind] = ALBUM[i], seen = !!cgStore.get()[key] && CGS[key], n = ALBUM.length;
+  G.mode = 'album'; bgm('ending'); showHub(false); UI.strip = false; UI.bg = null; setScene('big'); UI.stageLabel = `앨범 · ${i + 1}/${n} · ${CAST[h].name} ${kind}`;
+  UI.cg = seen ? key : null; setChar(seen ? h : 'me');
+  say(seen ? fmt(cgCaption(key, h)) : `${CAST[h].name}의 ${kind} 장면은 아직 보지 못했다.`, true, [
+    ['◀ 이전', () => album((i + n - 1) % n)], ['다음 ▶', () => album((i + 1) % n)], ['← 타이틀로', mainMenu, true]]);
 }
 function mainMenu() {
   UI.cg = null; UI.bg = null; bgm('title'); G.mode = 'title'; G.simLock = false; G.after = G.afterSong = null; stopLoop(); liveEnd(); setScene('big'); showHub(false); showPlayUI(false); UI.strip = false;
@@ -3043,7 +3055,7 @@ function mainMenu() {
     save ? ['이어 하기\n' + save.name + ' · ' + (save.v === 2 ? (save.week > WEEKS ? '종업식' : weekLabel(save.week)) : '예전 저장'), () => { clearInterval(titleCycle); S = migrateSim(save); CAST.me.name = S.name; G.char = null; S.week > WEEKS ? finalEnding() : hub(); }] : ['이어 하기\n저장 없음', () => toast('저장된 이야기가 없어요.'), true],
     ['자유 연주\n곡 골라 풀기', () => { clearInterval(titleCycle); freePlay(); }, true],
     ['풀이 연습\n숫자 맞추는 요령', () => { clearInterval(titleCycle); selectSong('lesson'); openStage(0); }, true],
-    [`앨범\n엔딩 CG ${ends}/6`, () => { clearInterval(titleCycle); album(0); }, true]]);
+    [`앨범\nCG ${Object.keys(cgStore.get()).length}/${ALBUM.length}`, () => { clearInterval(titleCycle); album(0); }, true]]);
 }
 
 /* =================================================================
@@ -3185,6 +3197,7 @@ function drawScene(x, y, w, h, now, tFull, tSide, narr, crowdH) {
 }
 function drawCG(x, y, w, h) { // ending illustration, fitted to the space above the talk box
   const im = CGS[UI.cg]; if (!im || !im.complete || h < 40) return;
+  if (!cgNoted.has(UI.cg)) { cgNoted.add(UI.cg); cgStore.add(UI.cg); }
   const s = Math.min((w - 16) / im.width, h / im.height), dw = im.width * s, dh = im.height * s, dx = x + (w - dw) / 2, dy = y + Math.max(6, (h - dh) / 2);
   cx.save(); cx.imageSmoothingEnabled = false; rr(dx, dy, dw, dh, 8); cx.clip(); cx.drawImage(im, dx, dy, dw, dh); cx.restore();
   box(dx, dy, dw, dh, 8, null, COL.gold, 2);
