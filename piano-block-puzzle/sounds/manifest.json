@@ -154,5 +154,404 @@
     "key": "sparkle",
     "seconds": 1.1,
     "gain": 1.64
+  },
+  "bass_1": {
+    "group": "inst",
+    "inst": "bass",
+    "midi": 35.953,
+    "seconds": 2.2,
+    "gain": 0.79
+  },
+  "bass_2": {
+    "group": "inst",
+    "inst": "bass",
+    "midi": 37.981,
+    "seconds": 2.2,
+    "gain": 0.66
+  },
+  "bass_3": {
+    "group": "inst",
+    "inst": "bass",
+    "midi": 39.957,
+    "seconds": 2.2,
+    "gain": 0.66
+  },
+  "bass_4": {
+    "group": "inst",
+    "inst": "bass",
+    "midi": 40.938,
+    "seconds": 2.2,
+    "gain": 0.58
+  },
+  "bass_5": {
+    "group": "inst",
+    "inst": "bass",
+    "midi": 42.995,
+    "seconds": 2.2,
+    "gain": 0.57
+  },
+  "bass_6": {
+    "group": "inst",
+    "inst": "bass",
+    "midi": 45.048,
+    "seconds": 2.2,
+    "gain": 0.66
+  },
+  "bass_7": {
+    "group": "inst",
+    "inst": "bass",
+    "midi": 47.88,
+    "seconds": 2.2,
+    "gain": 0.66
+  },
+  "bass_8": {
+    "group": "inst",
+    "inst": "bass",
+    "midi": 48.995,
+    "seconds": 2.2,
+    "gain": 2.04
+  },
+  "bass_9": {
+    "group": "inst",
+    "inst": "bass",
+    "midi": 49.997,
+    "seconds": 2.2,
+    "gain": 0.78
+  },
+  "bass_10": {
+    "group": "inst",
+    "inst": "bass",
+    "midi": 53.114,
+    "seconds": 2.2,
+    "gain": 0.87
+  },
+  "violin_1": {
+    "group": "inst",
+    "inst": "violin",
+    "midi": 54.963,
+    "seconds": 2.4,
+    "gain": 1.52
+  },
+  "violin_2": {
+    "group": "inst",
+    "inst": "violin",
+    "midi": 59.858,
+    "seconds": 2.4,
+    "gain": 0.68
+  },
+  "violin_3": {
+    "group": "inst",
+    "inst": "violin",
+    "midi": 65.013,
+    "seconds": 2.4,
+    "gain": 1.98
+  },
+  "violin_4": {
+    "group": "inst",
+    "inst": "violin",
+    "midi": 69.032,
+    "seconds": 2.4,
+    "gain": 0.65
+  },
+  "violin_5": {
+    "group": "inst",
+    "inst": "violin",
+    "midi": 72.066,
+    "seconds": 2.4,
+    "gain": 4.33
+  },
+  "violin_6": {
+    "group": "inst",
+    "inst": "violin",
+    "midi": 74.026,
+    "seconds": 2.4,
+    "gain": 3.14
+  },
+  "violin_7": {
+    "group": "inst",
+    "inst": "violin",
+    "midi": 79.012,
+    "seconds": 2.4,
+    "gain": 0.64
+  },
+  "violin_8": {
+    "group": "inst",
+    "inst": "violin",
+    "midi": 85.039,
+    "seconds": 2.4,
+    "gain": 0.63
+  },
+  "cello_1": {
+    "group": "inst",
+    "inst": "cello",
+    "midi": 38.082,
+    "seconds": 2.4,
+    "gain": 6.55
+  },
+  "cello_2": {
+    "group": "inst",
+    "inst": "cello",
+    "midi": 43.01,
+    "seconds": 2.4,
+    "gain": 1.26
+  },
+  "cello_3": {
+    "group": "inst",
+    "inst": "cello",
+    "midi": 53.055,
+    "seconds": 2.4,
+    "gain": 8.69
+  },
+  "cello_4": {
+    "group": "inst",
+    "inst": "cello",
+    "midi": 55.141,
+    "seconds": 2.4,
+    "gain": 0.72
+  },
+  "cello_5": {
+    "group": "inst",
+    "inst": "cello",
+    "midi": 56.042,
+    "seconds": 2.4,
+    "gain": 0.92
+  },
+  "cello_6": {
+    "group": "inst",
+    "inst": "cello",
+    "midi": 57.061,
+    "seconds": 2.4,
+    "gain": 0.68
+  },
+  "cello_7": {
+    "group": "inst",
+    "inst": "cello",
+    "midi": 59.773,
+    "seconds": 2.4,
+    "gain": 0.98
+  },
+  "cello_8": {
+    "group": "inst",
+    "inst": "cello",
+    "midi": 61.932,
+    "seconds": 2.4,
+    "gain": 0.65
+  },
+  "flute_1": {
+    "group": "inst",
+    "inst": "flute",
+    "midi": 60.058,
+    "seconds": 2.4,
+    "gain": 0.66
+  },
+  "flute_2": {
+    "group": "inst",
+    "inst": "flute",
+    "midi": 65.102,
+    "seconds": 2.4,
+    "gain": 0.73
+  },
+  "flute_3": {
+    "group": "inst",
+    "inst": "flute",
+    "midi": 69.002,
+    "seconds": 2.4,
+    "gain": 1.08
+  },
+  "flute_4": {
+    "group": "inst",
+    "inst": "flute",
+    "midi": 71.991,
+    "seconds": 2.4,
+    "gain": 0.65
+  },
+  "flute_5": {
+    "group": "inst",
+    "inst": "flute",
+    "midi": 74.001,
+    "seconds": 2.4,
+    "gain": 0.83
+  },
+  "flute_6": {
+    "group": "inst",
+    "inst": "flute",
+    "midi": 80.006,
+    "seconds": 2.4,
+    "gain": 1.14
+  },
+  "flute_7": {
+    "group": "inst",
+    "inst": "flute",
+    "midi": 85.015,
+    "seconds": 2.4,
+    "gain": 0.63
+  },
+  "flute_8": {
+    "group": "inst",
+    "inst": "flute",
+    "midi": 89.094,
+    "seconds": 2.4,
+    "gain": 0.8
+  },
+  "synth_1": {
+    "group": "inst",
+    "inst": "synth",
+    "midi": 53.027,
+    "seconds": 2.2,
+    "gain": 0.66
+  },
+  "synth_2": {
+    "group": "inst",
+    "inst": "synth",
+    "midi": 59.979,
+    "seconds": 2.2,
+    "gain": 0.62
+  },
+  "synth_3": {
+    "group": "inst",
+    "inst": "synth",
+    "midi": 65.065,
+    "seconds": 2.2,
+    "gain": 0.65
+  },
+  "synth_4": {
+    "group": "inst",
+    "inst": "synth",
+    "midi": 71.989,
+    "seconds": 2.2,
+    "gain": 0.63
+  },
+  "synth_5": {
+    "group": "inst",
+    "inst": "synth",
+    "midi": 77.023,
+    "seconds": 2.2,
+    "gain": 1.85
+  },
+  "guitar_1": {
+    "group": "inst",
+    "inst": "guitar",
+    "midi": 43.21,
+    "seconds": 2.6,
+    "gain": 1.96
+  },
+  "guitar_2": {
+    "group": "inst",
+    "inst": "guitar",
+    "midi": 47.96,
+    "seconds": 2.6,
+    "gain": 1.39
+  },
+  "guitar_3": {
+    "group": "inst",
+    "inst": "guitar",
+    "midi": 52.111,
+    "seconds": 2.6,
+    "gain": 1
+  },
+  "guitar_4": {
+    "group": "inst",
+    "inst": "guitar",
+    "midi": 55.02,
+    "seconds": 2.6,
+    "gain": 5.73
+  },
+  "guitar_5": {
+    "group": "inst",
+    "inst": "guitar",
+    "midi": 59.992,
+    "seconds": 2.6,
+    "gain": 3
+  },
+  "guitar_6": {
+    "group": "inst",
+    "inst": "guitar",
+    "midi": 62.029,
+    "seconds": 2.6,
+    "gain": 2.08
+  },
+  "guitar_7": {
+    "group": "inst",
+    "inst": "guitar",
+    "midi": 65.013,
+    "seconds": 2.6,
+    "gain": 2.02
+  },
+  "guitar_8": {
+    "group": "inst",
+    "inst": "guitar",
+    "midi": 67.029,
+    "seconds": 2.6,
+    "gain": 1.94
+  },
+  "guitar_9": {
+    "group": "inst",
+    "inst": "guitar",
+    "midi": 73.049,
+    "seconds": 2.6,
+    "gain": 1.56
+  },
+  "guitar_10": {
+    "group": "inst",
+    "inst": "guitar",
+    "midi": 77.073,
+    "seconds": 2.6,
+    "gain": 1.93
+  },
+  "trumpet_1": {
+    "group": "inst",
+    "inst": "trumpet",
+    "midi": 54.983,
+    "seconds": 2.2,
+    "gain": 0.68
+  },
+  "trumpet_2": {
+    "group": "inst",
+    "inst": "trumpet",
+    "midi": 60.007,
+    "seconds": 2.2,
+    "gain": 0.67
+  },
+  "trumpet_3": {
+    "group": "inst",
+    "inst": "trumpet",
+    "midi": 62.038,
+    "seconds": 2.2,
+    "gain": 0.66
+  },
+  "trumpet_4": {
+    "group": "inst",
+    "inst": "trumpet",
+    "midi": 65.293,
+    "seconds": 2.2,
+    "gain": 0.65
+  },
+  "trumpet_5": {
+    "group": "inst",
+    "inst": "trumpet",
+    "midi": 66.996,
+    "seconds": 2.2,
+    "gain": 0.64
+  },
+  "trumpet_6": {
+    "group": "inst",
+    "inst": "trumpet",
+    "midi": 70.011,
+    "seconds": 2.2,
+    "gain": 0.64
+  },
+  "trumpet_7": {
+    "group": "inst",
+    "inst": "trumpet",
+    "midi": 71.875,
+    "seconds": 2.2,
+    "gain": 0.64
+  },
+  "trumpet_8": {
+    "group": "inst",
+    "inst": "trumpet",
+    "midi": 73.99,
+    "seconds": 2.2,
+    "gain": 0.63
   }
 }

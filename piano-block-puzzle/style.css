@@ -1014,3 +1014,15 @@ h1 {
 .duet-pad.love { background: linear-gradient(#ff8fb3, #e8608c); box-shadow: 0 5px 0 #a33d62; }
 .duet-pad.down { transform: translateY(4px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4); }
 .duet-pad:disabled { opacity: 0.5; }
+
+/* 악기 고르기 */
+.inst-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.inst-chip {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 4px; border: 1px solid var(--line); border-radius: 12px;
+  background: transparent; color: var(--text); font: inherit; font-size: 14px; cursor: pointer;
+}
+.inst-chip .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--chip); flex: none; }
+.inst-chip:hover { border-color: var(--chip); }
+.inst-chip:focus-visible { outline: 2px solid var(--chip); outline-offset: 2px; }
+.inst-chip[aria-checked="true"] { border-color: var(--chip); background: color-mix(in srgb, var(--chip) 22%, transparent); font-weight: 600; }

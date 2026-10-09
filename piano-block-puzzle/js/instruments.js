@@ -18,6 +18,26 @@ export const INSTRUMENTS = {
 
 export const PART_ORDER = ['piano', 'drums', 'vocal'];
 
+// 건반형(피아노) 파트를 연주할 멜로디 악기. 배치는 피아노 롤 그대로, 소리·색·이름만 바뀐다.
+// octave: 실제로 울릴 때 옮기는 반음 수 (베이스·첼로는 한 옥타브 아래, 플루트는 위)
+// sustain: 활·숨으로 끄는 악기는 노트 길이만큼 이어지고 짧게 끊긴다
+export const MELODIC = {
+  piano: { name: '피아노', color: '#34a853', edge: '#1b6430', top: '#62cf7c', octave: 0, release: 0.12 },
+  guitar: { name: '기타', color: '#d9a05b', edge: '#8a5a22', top: '#f3c98f', octave: 0, release: 0.15 },
+  bass: { name: '베이스', color: '#6c7bd9', edge: '#333f91', top: '#9ea9f2', octave: -12, release: 0.1 },
+  violin: { name: '바이올린', color: '#e2725b', edge: '#93382a', top: '#f5a493', octave: 0, release: 0.09, sustain: true },
+  cello: { name: '첼로', color: '#b5634b', edge: '#6b3020', top: '#de9580', octave: -12, release: 0.1, sustain: true },
+  flute: { name: '플루트', color: '#4fc3c8', edge: '#1f7a7e', top: '#8ee3e6', octave: 12, release: 0.07, sustain: true },
+  trumpet: { name: '트럼펫', color: '#f2c335', edge: '#9a7612', top: '#fde27f', octave: 0, release: 0.07, sustain: true },
+  synth: { name: '신스', color: '#a35ee0', edge: '#5e2b91', top: '#c99bf3', octave: 0, release: 0.08, sustain: true },
+};
+
+// 피아노 파트를 고른 악기로 바꾼 정보 (id 는 'piano' 그대로 두어 배치 코드가 건반형으로 다룬다)
+export function melodicInst(timbre = 'piano') {
+  const m = MELODIC[timbre] ?? MELODIC.piano;
+  return { ...INSTRUMENTS.piano, name: m.name, color: m.color, edge: m.edge, top: m.top, timbre: MELODIC[timbre] ? timbre : 'piano' };
+}
+
 const BLACK = [false, true, false, true, false, false, true, false, true, false, true, false];
 const SOLFEGE = ['도', '', '레', '', '미', '파', '', '솔', '', '라', '', '시'];
 

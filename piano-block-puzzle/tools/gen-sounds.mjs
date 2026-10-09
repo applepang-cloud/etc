@@ -38,6 +38,26 @@ for (const m of [60, 64, 67, 71, 74]) {
     text: `${m >= 70 ? 'High soprano head voice, bright and light, well above middle C: ' : ''}A solo female pop singer sings one steady sustained "aah" vowel on the note ${spoken(m)}, soft clear tone, gentle vibrato, dry studio vocal, single pitch held, no lyrics, no music, no other sounds`,
   });
 }
+// 멜로디 악기: 목표 음마다 후보를 만들고, 잰 음정을 모두 모아 음역을 고르게 덮는 샘플만 남긴다.
+// range 는 실제로 울릴 음역(octave 옮김 반영).
+const INSTR = {
+  guitar: { range: [45, 81], targets: [40, 43, 47, 48, 52, 53, 55, 58, 63, 68, 73, 78], seconds: 3, keep: 2.6, fade: 0.6, influence: 0.75,
+    text: (n, m) => `${m < 57 ? 'A low note on the bass strings of the guitar, well below middle C: ' : ''}One single note ${n} plucked on a nylon-string classical acoustic guitar, warm and clear, let ring, close-miked studio recording, dry, no other notes, no strumming, no background noise` },
+  bass: { range: [33, 67], targets: [36, 41, 46, 51, 56, 61, 66], seconds: 2.5, keep: 2.2, fade: 0.5, influence: 0.75, fmin: 35,
+    text: (n) => `One single deep note ${n} on an electric bass guitar played fingerstyle, round warm tone, let ring, dry studio recording, no other notes, no background noise` },
+  violin: { range: [52, 88], targets: [55, 60, 65, 70, 75, 80, 85], seconds: 3, keep: 2.4, fade: 0.35, influence: 0.75,
+    text: (n) => `One single sustained note ${n} bowed on a solo violin, smooth steady legato bow, gentle vibrato, single pitch held, close-miked studio recording, dry, no other notes, no accompaniment` },
+  cello: { range: [36, 72], targets: [38, 43, 48, 53, 58, 63, 68], seconds: 3, keep: 2.4, fade: 0.35, influence: 0.75, fmin: 40,
+    text: (n) => `One single sustained note ${n} bowed on a solo cello, rich warm tone, smooth steady bow, gentle vibrato, single pitch held, close-miked studio recording, dry, no other notes` },
+  flute: { range: [57, 93], targets: [60, 65, 70, 75, 80, 85, 90], seconds: 3, keep: 2.4, fade: 0.35, influence: 0.75, fmax: 2400,
+    text: (n) => `One single sustained note ${n} played on a concert flute, pure airy tone, steady breath, single pitch held, close-miked studio recording, dry, no other notes, no accompaniment` },
+  trumpet: { range: [52, 84], targets: [55, 60, 65, 70, 72, 75, 77, 80, 82], seconds: 3, keep: 2.2, fade: 0.3, influence: 0.75,
+    text: (n, m) => `${m >= 70 ? 'A high bright note in the upper register of the trumpet, well above middle C: ' : ''}One single sustained note ${n} played on a solo trumpet, warm bright brass tone, steady, single pitch held, close-miked studio recording, dry, no other notes, no accompaniment` },
+  synth: { range: [45, 88], targets: [48, 54, 60, 66, 72, 78, 84], seconds: 2.5, keep: 2.2, fade: 0.3, influence: 0.75,
+    text: (n) => `One single sustained note ${n} on a warm analog synthesizer lead, smooth sawtooth with gentle filter, steady pitch, no vibrato, dry, no other notes, no effects, no background noise` },
+};
+const INSTR_TRIES = 3;
+
 const DRUMS = {
   KK: ['Single punchy acoustic kick drum hit, tight low thump, dry studio drum sample, one hit only', 0.5],
   SN: ['Single crisp acoustic snare drum hit, bright crack with short snares rattle, dry studio drum sample, one hit only', 0.6],
@@ -109,6 +129,47 @@ async function make(s, use = null) {
   saveManifest();
 }
 
+// 멜로디 악기 하나: 후보 생성 → 음정 측정 → 음역을 덮는 최소 조합 선택 → 다듬어 저장
+async function makeInstrument(id, def) {
+  console.log(id);
+  const opts = { fmin: def.fmin ?? 60, fmax: def.fmax ?? 1400 };
+  const cands = [];
+  for (const t of def.targets) {
+    for (let i = 0; i < INSTR_TRIES; i++) {
+      const raw = join(RAW, `${id}_t${t}_${i}.mp3`);
+      if (!existsSync(raw)) await generate(def.text(spoken(t), t), def.seconds, raw, def.influence);
+      const p = pitch(decode(raw), opts);
+      const ok = p && p.stable >= 0.8;
+      console.log(`  ${noteName(t)} #${i + 1}: ${p ? `${noteName(p.nearest)} ${p.off >= 0 ? '+' : ''}${p.off}c, 안정 ${(p.stable * 100) | 0}%` : '음정 못 잼'}${ok ? '' : ' (버림)'}`);
+      if (ok) cands.push({ raw, midi: p.midi, stable: p.stable });
+      if (ok && Math.abs(p.midi - t) < 0.5) break;
+    }
+  }
+  if (!cands.length) throw new Error(`${id}: 쓸 만한 후보가 없다`);
+  // 음역의 반음마다 가장 가까운 후보를 고르고, 거의 같은 음은 하나만
+  const chosen = new Set();
+  let worst = 0;
+  for (let m = def.range[0]; m <= def.range[1]; m++) {
+    let best = cands[0];
+    for (const c of cands) if (Math.abs(c.midi - m) < Math.abs(best.midi - m)) best = c;
+    worst = Math.max(worst, Math.abs(best.midi - m));
+    chosen.add(best);
+  }
+  const picked = [...chosen].sort((a, b) => a.midi - b.midi)
+    .filter((c, i, arr) => i === 0 || c.midi - arr[i - 1].midi > 0.6);
+  for (const k of Object.keys(manifest)) if (manifest[k].group === 'inst' && manifest[k].inst === id) {
+    delete manifest[k];
+    rmSync(join(OUT, `${k}.mp3`), { force: true });
+  }
+  picked.forEach((c, i) => {
+    const name = `${id}_${i + 1}`;
+    const info = finish(c.raw, { group: 'inst', keep: def.keep, fade: def.fade }, join(OUT, `${name}.mp3`));
+    manifest[name] = { group: 'inst', inst: id, midi: +c.midi.toFixed(3), ...info };
+  });
+  saveManifest();
+  console.log(`  → ${picked.map((c) => noteName(Math.round(c.midi))).join(' ')} (최대 ${worst.toFixed(1)}반음 옮김)`);
+}
+
 function embed() {
   const entries = SOUNDS.filter((s) => manifest[s.name] && existsSync(join(OUT, `${s.name}.mp3`)));
   const b64 = (s) => readFileSync(join(OUT, `${s.name}.mp3`)).toString('base64');
@@ -116,6 +177,13 @@ function embed() {
     .map((s) => `    { midi: ${manifest[s.name].midi}, data: '${b64(s)}' },`).join('\n');
   const keyed = (g) => entries.filter((s) => s.group === g)
     .map((s) => `    ${s.key}: '${b64(s)}',`).join('\n');
+  const instBlock = Object.keys(INSTR).map((id) => {
+    const rows = Object.entries(manifest)
+      .filter(([name, m]) => m.group === 'inst' && m.inst === id && existsSync(join(OUT, `${name}.mp3`)))
+      .sort((a, b) => a[1].midi - b[1].midi)
+      .map(([name, m]) => `      { midi: ${m.midi}, data: '${b64({ name })}' },`);
+    return `    ${id}: [\n${rows.join('\n')}\n    ],`;
+  }).join('\n');
   const js = `// tools/gen-sounds.mjs 가 만든 파일. 직접 고치지 말 것.
 // 일레븐랩스 효과음 생성으로 만든 mp3 를 base64 로 담는다. midi 는 실제로 잰 음정.
 export const SAMPLES = {
@@ -130,6 +198,9 @@ ${keyed('drums')}
   },
   sfx: {
 ${keyed('sfx')}
+  },
+  inst: {
+${instBlock}
   },
 };
 `;
@@ -156,6 +227,11 @@ if (!args.includes('--embed')) {
     if (redo) for (let i = 0; i < TRIES; i++) rmSync(join(RAW, `${s.name}_${i}.mp3`), { force: true });
     console.log(s.name);
     await make(s);
+  }
+  for (const [id, def] of Object.entries(INSTR)) {
+    const have = Object.values(manifest).some((m) => m.group === 'inst' && m.inst === id);
+    if (only.length ? !only.includes(id) : have) continue;
+    await makeInstrument(id, def);
   }
 }
 embed();

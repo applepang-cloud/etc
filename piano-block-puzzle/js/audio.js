@@ -1,6 +1,7 @@
 // Web Audio 악기. 일레븐랩스로 만든 샘플(samples.js)로 소리를 내고,
 // 샘플을 아직 못 읽었거나 디코딩에 실패하면 배음 합성으로 대신한다.
 import { SAMPLES } from './samples.js';
+import { MELODIC } from './instruments.js';
 
 // [배음 배수, 세기]
 const PARTIALS = [
@@ -15,6 +16,7 @@ const PARTIALS = [
 
 // 샘플은 모두 -1 dBFS 로 맞춰 두었으니 악기별 음량은 여기서 고른다
 const DRUM_GAIN = { KK: 0.85, SN: 0.6, HH: 0.35, CR: 0.4, TH: 0.6, TL: 0.65 };
+const INST_GAIN = { piano: 0.6, guitar: 0.62, bass: 0.75, violin: 0.45, cello: 0.5, flute: 0.45, trumpet: 0.42, synth: 0.38 };
 
 export class PianoAudio {
   constructor() {
@@ -36,8 +38,13 @@ export class PianoAudio {
       .then((xs) => xs.filter((x) => x.buf).sort((a, b) => a.midi - b.midi));
     const keyed = (obj) => Promise.all(Object.entries(obj).map(async ([k, d]) => [k, await dec(d)]))
       .then((xs) => Object.fromEntries(xs.filter(([, b]) => b)));
-    Promise.all([pitched(SAMPLES.piano), pitched(SAMPLES.vocal), keyed(SAMPLES.drums), keyed(SAMPLES.sfx)])
-      .then(([piano, vocal, drums, sfx]) => { this.smp = { piano, vocal, drums, sfx }; })
+    const instIds = Object.keys(SAMPLES.inst || {});
+    Promise.all([pitched(SAMPLES.piano), pitched(SAMPLES.vocal), keyed(SAMPLES.drums), keyed(SAMPLES.sfx),
+      Promise.all(instIds.map((id) => pitched(SAMPLES.inst[id])))])
+      .then(([piano, vocal, drums, sfx, insts]) => {
+        const inst = Object.fromEntries(instIds.map((id, i) => [id, insts[i]]));
+        this.smp = { piano, vocal, drums, sfx, inst };
+      })
       .catch(() => {});
   }
 
@@ -160,11 +167,14 @@ export class PianoAudio {
     return buf;
   }
 
-  note(midi, when, dur, vel = 0.8) {
+  // timbre: MELODIC 의 악기 id. 그 악기 샘플이 없으면 피아노 샘플, 그것도 없으면 합성음.
+  note(midi, when, dur, vel = 0.8, timbre = 'piano') {
     const ctx = this.ctx;
     if (!ctx) return;
     when = Math.max(when, ctx.currentTime);
-    if (this.playPitched(this.smp?.piano, midi, when, dur, 0.6 * vel, 0.12)) return;
+    const m = MELODIC[timbre];
+    if (m && timbre !== 'piano' && this.playPitched(this.smp?.inst?.[timbre], midi + m.octave, when, dur, INST_GAIN[timbre] * vel, m.release)) return;
+    if (this.playPitched(this.smp?.piano, midi, when, dur, INST_GAIN.piano * vel, 0.12)) return;
     const f = 440 * Math.pow(2, (midi - 69) / 12);
     const end = when + dur;
 
@@ -347,10 +357,11 @@ export class PianoAudio {
   }
 
   // 블록을 노트 위에 놓았을 때 짧게 들려주는 소리
-  preview(pitches) {
+  preview(pitches, timbre = 'piano') {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    pitches.forEach((p, i) => this.note(p, t + i * 0.035, 0.18, 0.42));
+    const dur = MELODIC[timbre]?.sustain ? 0.3 : 0.18;
+    pitches.forEach((p, i) => this.note(p, t + i * 0.035, dur, 0.42, timbre));
   }
 
   // 빈칸에 놓았을 때

@@ -13,7 +13,7 @@
 // 시계는 AudioContext.currentTime. 일시정지하면 컨텍스트를 멈춰 시계(제한 시간 포함)도 멈춘다.
 
 import { makeTray } from './pieces.js';
-import { INSTRUMENTS, pianoRows, vocalRows, drumRows, solfege, isBlack } from './instruments.js';
+import { INSTRUMENTS, melodicInst, pianoRows, vocalRows, drumRows, solfege, isBlack } from './instruments.js';
 import { drawBlock, drawBomb, rrect, shade } from './draw.js';
 
 export const SCENE_TIME = 30; // 정지 모드 한 페이지 제한 시간(초)
@@ -203,7 +203,7 @@ export class Game {
     this.stepSec = song.stepSec;
     this.length = this.free ? (this.live ? FREE_LIVE_STEPS : song.sceneSteps) : song.length;
     this.parts = song.parts.map((src) => ({
-      inst: INSTRUMENTS[src.inst],
+      inst: src.inst === 'piano' ? melodicInst(opts.timbre) : INSTRUMENTS[src.inst],
       src,
       notes: src.notes.map((n) => ({ ...n })),
       rows: null,
@@ -804,7 +804,7 @@ export class Game {
     const dur = run * this.stepSec * 0.97;
     if (part.inst.id === 'drums') this.audio.drum(key, t, 0.9);
     else if (part.inst.id === 'vocal') this.audio.voice(key, t, dur, 0.85);
-    else this.audio.note(key, t, dur, 0.85);
+    else this.audio.note(key, t, dur, 0.85, part.inst.timbre);
   }
 
   // 재생선이 c열에 닿기 직전에 한 번 호출. 덮인 노트와 노트 밖에 놓인 블록(그 줄의 음)이 소리를 낸다.
@@ -1028,7 +1028,7 @@ export class Game {
     const id = part.inst.id;
     if (id === 'drums') keys.forEach((k, i) => this.audio.drum(k, this.now + i * 0.03, 0.6));
     else if (id === 'vocal') keys.forEach((k, i) => this.audio.voice(k, this.now + i * 0.04, 0.22, 0.6));
-    else this.audio.preview(keys.sort((a, b) => a - b));
+    else this.audio.preview(keys.sort((a, b) => a - b), part.inst.timbre);
     if (bad) this.audio.thud();
   }
 

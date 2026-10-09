@@ -4,6 +4,7 @@ import { PianoAudio } from './audio.js';
 import { Game } from './game.js';
 import { Story } from './story.js';
 import { portrait } from './portraits.js';
+import { MELODIC } from './instruments.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -53,6 +54,30 @@ const MODE_NAME = { stop: '정지 모드', flow: '자동 이동 모드', band: '
 const audio = new PianoAudio();
 let playMode = store.get('pb.play', 'stop');
 let hintsOn = store.get('pb.hints', true);
+let timbre = MELODIC[store.get('pb.timbre', 'piano')] ? store.get('pb.timbre', 'piano') : 'piano';
+
+// 악기 고르기 (멜로디 악기 8가지)
+function renderInst() {
+  const grid = $('#inst-grid');
+  grid.innerHTML = '';
+  for (const [id, m] of Object.entries(MELODIC)) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'inst-chip';
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(id === timbre));
+    b.style.setProperty('--chip', m.color);
+    b.innerHTML = `<span class="dot"></span>${m.name}`;
+    b.addEventListener('click', () => {
+      timbre = id;
+      store.set('pb.timbre', id);
+      renderInst();
+      audio.ensure();
+      audio.preview([60, 64, 67], id);
+    });
+    grid.appendChild(b);
+  }
+}
 let current = null; // { song, mode }
 let lastStats = null;
 const shown = {};
@@ -168,6 +193,7 @@ for (const b of document.querySelectorAll('[data-play]')) {
 }
 
 $('#btn-free').addEventListener('click', () => startGame(FREE_SONG, 'free'));
+renderInst();
 
 // ---------- 노래 제목으로 레벨 만들기 ----------
 
@@ -344,7 +370,8 @@ function startGame(song, mode, extra = {}) {
   el.result.hidden = true;
   el.flowLabel.textContent = mode === 'free' ? '다음' : '연주';
   for (const k of Object.keys(shown)) delete shown[k];
-  game.start(song, mode, { auto, hints: hintsOn });
+  // 스토리는 피아노 이야기라서 늘 피아노로 연주한다
+  game.start(song, mode, { auto, hints: hintsOn, timbre: extra.story ? 'piano' : timbre });
 }
 
 function openMenu() {
