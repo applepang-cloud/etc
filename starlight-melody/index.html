@@ -1986,7 +1986,7 @@ const persist = () => store.save(P);
 window.claude?.hot?.snapshot?.(() => ({ progress: P }));
 
 /* ---------- game state ---------- */
-const G = { char: 'ria', mode: 'title', stage: 0, cells: null, sol: null, misses: 0, tool: 'fill', playing: false, muted: false, songBar: 0 };
+const G = { char: 'ria', mode: 'title', stage: 0, cells: null, sol: null, misses: 0, tool: 'fill', playing: false, muted: (() => { try { return localStorage.getItem('starlight-muted') === '1'; } catch (e) { return false; } })(), songBar: 0 };
 SONGS.forEach(sg => sg.stages.concat(sg.encore || []).forEach(s => { s.sol = s.lanes.map(l => [...s.pattern[l]].map(c => c === 'x')); }));
 const clueOf = line => { const r = []; let n = 0; line.forEach(v => { if (v) n++; else if (n) { r.push(n); n = 0; } }); if (n) r.push(n); return r.length ? r : [0]; };
 
@@ -2262,13 +2262,15 @@ function bgm(name) {
   const cur = bgmEls.find(a => a._live); if (cur && cur._name === name) return;
   bgmEls.forEach(a => { a._live = false; }); if (name) bgmStart(name);
 }
-function bgmStart(name) { const a = new Audio('bgm/' + name + '.mp3'); a._name = name; a._live = true; a.volume = 0; a.play().catch(() => {}); bgmEls.push(a); }
+function bgmStart(name) { const a = new Audio('bgm/' + name + '.mp3'); a._name = name; a._live = true; a.volume = 0; if (!G.muted && !document.hidden) a.play().catch(() => {}); bgmEls.push(a); }
+// muting and hidden tabs pause the music outright: iOS ignores <audio>.volume, so fading to 0 is not enough
+function bgmHold() { const stop = G.muted || document.hidden; bgmEls.forEach(a => { if (stop) a.pause(); else if (a._live && a.paused) a.play().catch(() => {}); }); }
 function bgmTick(dt) {
   const target = G.muted ? 0 : voiceEl ? 0.12 : 0.3; // duck under voices
   for (let i = bgmEls.length - 1; i >= 0; i--) {
     const a = bgmEls[i];
     if (a.error) { bgmEls.splice(i, 1); continue; }
-    if (a._live && a.duration && a.duration - a.currentTime < 2.5) { a._live = false; bgmStart(a._name); }
+    if (a._live && !a.paused && a.duration && a.duration - a.currentTime < 2.5) { a._live = false; bgmStart(a._name); }
     const goal = a._live ? target : 0, step = Math.min(Math.abs(goal - a.volume), dt * 0.45);
     a.volume = Math.max(0, Math.min(1, a.volume + Math.sign(goal - a.volume) * step));
     if (!a._live && a.volume <= 0.001) { a.pause(); bgmEls.splice(i, 1); }
@@ -2514,10 +2516,13 @@ function cycleLead() {
   const keys = Object.keys(LEADS), cur = leadKind(); G.lead = keys[(keys.indexOf(cur) + 1) % keys.length]; initAudio();
   if (ac) lead(leadKind(), 76, ac.currentTime + 0.01, 0.9, master); toast('멜로디 악기: ' + LEADS[leadKind()]);
 }
-function toggleMute() { G.muted = !G.muted; if (master) master.gain.value = G.muted ? 0 : 0.55; if (G.muted && voiceEl) { voiceEl.pause(); voiceEl = null; } }
+function toggleMute() {
+  G.muted = !G.muted; if (master) master.gain.value = G.muted ? 0 : 0.55; if (G.muted && voiceEl) { voiceEl.pause(); voiceEl = null; }
+  bgmHold(); try { localStorage.setItem('starlight-muted', G.muted ? '1' : '0'); } catch (e) {}
+}
 function openHelp() { UI.help = true; focusKey = kbd ? 'help:ok' : null; }
 function closeHelp() { UI.help = false; focusKey = kbd ? 'ctl:help' : null; }
-document.addEventListener('visibilitychange', () => { if (document.hidden && G.playing && G.mode !== 'song') stopLoop(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && G.playing && G.mode !== 'song') stopLoop(); if (document.hidden && voiceEl) { voiceEl.pause(); voiceEl = null; } bgmHold(); });
 
 function boot(data) { if (data && data.progress) Object.assign(P, migrate(data.progress)); selectSong(P.last); mainMenu(); resize(); requestAnimationFrame(frame); }
 
@@ -2930,7 +2935,7 @@ function drawTop() {
   txt('★ STARLIGHT', PADX, 18, font(13, true), COL.pink); cx.font = font(13, true); const w1 = cx.measureText('★ STARLIGHT ').width;
   txt('MELODY', PADX + w1, 18, font(13, true), COL.gold); const brandW = w1 + cx.measureText('MELODY').width;
   cx.restore();
-  const label = G.muted ? '소리 끔' : '소리 켬', bw = Math.ceil(mw(label, font(13))) + 18, bx = VW - PADX - bw;
+  const label = G.muted ? '소리 켜기' : '소리 끄기', bw = Math.ceil(mw(label, font(13))) + 18, bx = VW - PADX - bw;
   drawBtn('mute', bx, 6, bw, 24, toggleMute, 'icon', label, null, { f: font(13) });
   const room = bx - 10 - (PADX + brandW + 12);
   if (room > 20) txt(ellipsize(UI.stageLabel, font(13), room), bx - 10, 18, font(13), COL.dim, 'right');
