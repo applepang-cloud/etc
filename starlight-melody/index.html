@@ -1254,7 +1254,7 @@ function schoolEvent() {
   const after = () => { if (ev.stat) S.stats[ev.stat] = Math.min(10, S.stats[ev.stat] + 1); scene('me', [ev.after + (ev.stat ? ` (${STATS[ev.stat]} +1)` : '')], hub, '이번 주로 ▸'); };
   showHub(false); UI.strip = false; sfx('event'); UI.stageLabel = `${weekLabel(S.week)} · ${ev.title}`; UI.bg = EVENT_BG[S.week] || null;
   const jam = () => { // 즉석 합주: replay a bar of her song you have already finished
-    const pool = []; for (let i = 0; i < S.bars[h]; i++) pool.push([SIM[h].song, i]); for (let i = 0; i < (S.bars2[h] || 0); i++) pool.push([SIM[h].song2, i]);
+    const pool = []; for (let i = 0; i < S.bars[h]; i++) pool.push([SIM[h].song, i]); for (let i = 0; i < (S.week === WEEKS ? 0 : S.bars2[h] || 0); i++) pool.push([SIM[h].song2, i]);
     if (!EVENT_JAM[S.week] || !pool.length) return after();
     const [id, bar] = pool[Math.floor(Math.random() * pool.length)];
     scene('me', ['#' + EVENT_JAM[S.week]], () => {
@@ -1513,7 +1513,8 @@ function ideaPuzzle(o, st) { // a melody idea: catch it as an improv bar; finish
     const old = SONGS.findIndex(x => x.id === 'idea'); if (old >= 0) SONGS.splice(old, 1); SONGS.push(sg); P.songs.idea = { unlocked: 0, stars: [0] };
     selectSong('idea'); UI.strip = true; tire(o.fx.cond || 0);
     G.after = stars => {
-      const got = []; Object.keys(STATS).forEach(k => { const n = (o.fx[k] || 0) + (k === 'sense' && stars === 3 ? 1 : 0); if (n) { S.stats[k] = Math.min(10, S.stats[k] + n); got.push(`${STATS[k]} +${n}`); } });
+      const got = []; Object.keys(STATS).forEach(k => { const n = (o.fx[k] || 0) + (k === 'sense' && stars === 3 ? 1 : 0), was = S.stats[k]; S.stats[k] = Math.min(10, was + n); if (S.stats[k] > was) got.push(`${STATS[k]} +${S.stats[k] - was}`); });
+      if (o.fx.cond) got.push(`컨디션 ${o.fx.cond > 0 ? '+' : ''}${o.fx.cond}`);
       if (got.length) toast(got.join(' · ')); hub();
     };
     openStage(0);
@@ -1706,10 +1707,10 @@ function festival() {
   bgm('festival');
   G.mode = 'sim'; G.simLock = true; stopLoop(); showHub(false); UI.strip = false; setScene('big'); setChar('me');
   UI.stageLabel = '10월 3주 · 학교 축제'; UI.bg = 'stage';
-  const ready = HEROINES.filter(h => S.met[h] && (S.aff[h] >= 45 || S.bars[h] >= 5)).sort((a, b) => S.aff[b] - S.aff[a] || S.bars[b] - S.bars[a]);
   const intro = ['#그리고, 축제 날.', '#교문부터 노점이 줄지어 있고, 어디선가 솜사탕 냄새가 났다.', '#강당은 생각보다 훨씬 많은 사람으로 가득 찼다.'];
   const solo = () => { S.live = { who: null, grade: null }; scene('me', ['#결국 혼자 무대에 섰다.', '#박수는 작았지만, 끝까지 내 노래였다.', '#…다음엔 꼭, 누군가와 함께.'], endWeek); };
   const stage = () => { UI.bg = 'stage';
+    const ready = HEROINES.filter(h => S.met[h] && (S.aff[h] >= 45 || S.bars[h] >= 5)).sort((a, b) => S.aff[b] - S.aff[a] || S.bars[b] - S.bars[a]);
     if (!ready.length) return scene('me', [intro[2]], solo);
     scene('me', [intro[2], '#무대 뒤. 마지막 곡을 누구와 함께 부를까?'], () => say('마지막 곡을 함께 부를 사람은…', true,
       ready.map(h => [`${CAST[h].name} · ${SONGS.find(sg => sg.id === SIM[h].song).title}\n${hearts(S.aff[h])} ${level(S.aff[h])} · ♪${S.bars[h]}/5`, () => startLive(h), 'choice'])
