@@ -2770,6 +2770,7 @@ function hub() {
   if (S.week === FESTIVAL && !S.live) return festival();
   if (EVENTS[S.week] && !S.seen[S.week]) return schoolEvent();
   const heart = heartDue(); if (heart) return heartEvent(...heart);
+  const bday = HEROINES.find(h => S.met[h] && BIRTHDAYS[h] && BIRTHDAYS[h].week === S.week && !(S.bday && S.bday[h])); if (bday) return birthday(bday);
   if (!S.tutHub) { S.tutHub = true; showHub(true); return scene('me', ['#…좋아, 이제부터 1년. 한 주에 할 수 있는 일은 세 번이다.', '#연습으로 실력을 키우고, 둘러보기로 보컬을 찾고, 만나러 가서 이야기를 나눈다.', '#친해지면 합주로 같이 곡을 완성하고, 주말엔 데이트도 할 수 있다.', '#무리하면 컨디션이 떨어진다. 지치면 하루 쉬자.', '#10월엔 학교 축제. 그리고 2월 종업식 날 밤에는… 옥상에 별이 뜬다.'], hub, '시작 ▸'); }
   simStore.save(); setScene('big'); setChar('me'); expr.base = 'idle'; showHub(true);
   UI.stageLabel = `${weekLabel(S.week)} · ${S.week < FESTIVAL ? `축제 D-${FESTIVAL - S.week}주` : S.week === WEEKS ? '마지막 주' : `종업식 D-${WEEKS - S.week}주`}`;
@@ -2783,6 +2784,20 @@ function hub() {
     ['쉬기\n컨디션 회복', rest]]);
 }
 const back = ['← 돌아가기', () => hub(), true];
+/* --- birthdays (a gift she loves, likes or merely accepts) and the odd text message from someone close --- */
+const BIRTHDAYS = typeof EXTRA_DATA !== 'undefined' ? EXTRA_DATA.birthdays : {}, TEXTS = typeof EXTRA_DATA !== 'undefined' ? EXTRA_DATA.texts : {};
+function birthday(h) {
+  S.bday = S.bday || {}; S.bday[h] = true; const b = BIRTHDAYS[h];
+  showHub(false); UI.strip = false; sfx('event'); UI.stageLabel = `${weekLabel(S.week)} · ${CAST[h].name} 생일 (${b.date})`;
+  scene('me', [b.intro], () => { setChar('me'); say('어떤 선물을 줄까?', true, b.gifts.map(([g, tier]) => [g, () => {
+    like(h, { good: 15, ok: 8, bad: 2 }[tier]); scene(h, [b[tier], b.thanks], hub); }, 'choice'])); });
+}
+function textMessage() { // at most one a week, from someone who likes you a little
+  S.texted = S.texted || {};
+  const h = HEROINES.find(k => S.met[k] && S.aff[k] >= 20 && (TEXTS[k] || []).some(t => t.week === S.week) && !S.texted[k + S.week]);
+  if (!h) return; S.texted[h + S.week] = true;
+  UI.phone = { who: h, text: TEXTS[h].find(t => t.week === S.week).text, t0: performance.now() }; sfx('mark');
+}
 /* --- 두근 events: the first time her affection reaches 50 and 75, a scene alone with her (no action spent) --- */
 const HEARTS = typeof HEART_DATA !== 'undefined' ? HEART_DATA : {};
 function heartDue() {
@@ -2817,6 +2832,7 @@ function endWeek() {
   simStore.save();
   if (S.week > WEEKS) return finalEnding();
   if ((S.week - 1) % 4 === 0) UI.card = { title: MONTHS[(S.week - 1) / 4], sub: seasonOf(S.week), t0: performance.now() }; // a new month
+  textMessage();
   toast(sulky.length ? `${CAST[sulky[0]].name}${jong(CAST[sulky[0]].name) ? '이' : '가'} 서운해하는 것 같다…` : `${weekLabel(S.week)} · ${seasonOf(S.week)}`); hub();
 }
 const REST = ['#하루 푹 쉬었다. 몸이 가벼워졌다.', '#창가에 누워 좋아하는 음악만 들었다.', '#일찍 잠들었다. 꿈에서 누군가 노래하고 있었다.'];
@@ -3036,6 +3052,7 @@ function render(now) {
   if (hintLines) hintLines.forEach((l, i) => txt(l, PADX + 2, y + 8 + i * 17, font(12), COL.dim));
   if (G.guide && G.mode === 'play' && UI.board && B.geom) drawSpotlight(now);
   drawCard(now);
+  drawPhone(now);
   drawToast(now);
   if (UI.help) { hits = []; drawHelp(); }
   placeNameInput();
@@ -3318,6 +3335,17 @@ function drawCard(now) { // month title card: fades in, holds, fades out
   txt(C.title, VW / 2 + 2, y - 6 + 2, font(34), COL.shadow, 'center'); txt(C.title, VW / 2, y - 6, font(34), COL.ink, 'center');
   if ('letterSpacing' in cx) cx.letterSpacing = '4px'; txt(C.sub, VW / 2, y + 26, font(13, true), SEASON_COL[C.sub] || COL.gold, 'center');
   cx.restore();
+}
+function drawPhone(now) { // a text message slides in under the top bar
+  const M = UI.phone; if (!M) return; const t = (now - M.t0) / 5200; if (t >= 1) { UI.phone = null; return; }
+  const a = reduceMotion ? 1 : t < .06 ? t / .06 : t > .9 ? (1 - t) / .1 : 1, f = font(13), lines = wrap(M.text, f, VW - 96), h = 30 + lines.length * 18;
+  const x = 16, y = 40 - (1 - a) * 20, w = VW - 32, tag = CAST[M.who].tag;
+  cx.save(); cx.globalAlpha = a;
+  box(x + 2, y + 3, w, h, 10, 'rgba(11,9,32,.5)'); box(x, y, w, h, 10, '#fffaff'); box(x, y, 6, h, 3, tag);
+  txt('✉ ' + CAST[M.who].name, x + 16, y + 13, font(12, true), '#6b5a9a');
+  lines.forEach((l, i) => txt(l, x + 16, y + 31 + i * 18, f, '#2a1f62'));
+  cx.restore();
+  hit(x, y, w, h, () => { UI.phone = null; }, { key: 'phone', nokbd: true });
 }
 function drawToast(now) {
   const T = UI.toast; if (!T) return; const e = now - T.t0; if (e > 2500) { UI.toast = null; return; }
