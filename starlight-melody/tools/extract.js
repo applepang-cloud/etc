@@ -15,6 +15,8 @@ HER.forEach(w => { const s = SIM[w];
   s.small.forEach(t => add(w, t)); s.love.forEach(t => add(w, t)); add(w, s.friend); s.stage.forEach(t => add(w, t)); s.live.forEach(t => add(w, t));
   Object.values(EVENTS).forEach(ev => add(w, ev.who[w]));
   (s.final || []).forEach(t => add(w, t)); (s.finalFriend || []).forEach(t => add(w, t));
+  (s.chats || []).forEach(c => { c.lines.forEach(t => add(w, t)); c.opts.forEach(o => add(w, o[2])); });
+  Object.values(s.places || {}).forEach(ls => ls.forEach(t => add(w, t)));
   if (s.date) Object.values(s.date).forEach(ls => ls.forEach(t => add(w, t)));
   if (s.seasonal) Object.values(s.seasonal).forEach(t => add(w, t));
   ['love', 'friend'].forEach(k => (((EXTRA_DATA.epilogue || {})[k] || {})[w] || []).forEach(t => add(w, t)));
