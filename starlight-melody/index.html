@@ -2292,6 +2292,7 @@ const LEVELS = [0, 0.5, 1, 1.4], LEVEL_NAME = ['끔', '작게', '보통', '크�
 const SET = Object.assign({ music: 2, sound: 2, voice: 2, speed: 0 }, (() => { try { return JSON.parse(localStorage.getItem('starlight-settings') || '{}'); } catch (e) { return {}; } })());
 const saveSet = () => { try { localStorage.setItem('starlight-settings', JSON.stringify(SET)); } catch (e) {} };
 const masterGain = () => G.muted ? 0 : 0.55 * LEVELS[SET.sound];
+SET.auto = SET.auto || 0;
 function bgm(name) {
   bgmWant = name; if (!bgmOn) return;
   const cur = bgmEls.find(a => a._live); if (cur && cur._name === name) return;
@@ -2329,6 +2330,11 @@ function tick() {
     if (step === 0 && song) { G.songBar++; if (G.songBar >= STAGES.length) { G.songBar = 0; visQ.push({ t: nextT, end: true }); G.playing = false; break; } }
   }
 }
+function autoTick(now) { // 자동 넘기기: a lone 다음 ▸ in a story scene goes on by itself once the line is read and spoken
+  const a = UI.talk.actions, T = UI.talk;
+  if (!SET.auto || UI.help || UI.nameEntry || !['sim', 'intro', 'ending'].includes(G.mode) || !a || a.length !== 1 || a[0][2] || !/▸$/.test(a[0][0]) || typing(now) || talking()) { T.autoAt = 0; return; }
+  if (!T.autoAt) T.autoAt = now + 1300; else if (now >= T.autoAt) { T.autoAt = 0; a[0][1](); }
+}
 function frame(now) {
   if (ac) while (visQ.length && visQ[0].t <= ac.currentTime) {
     const v = visQ.shift();
@@ -2339,7 +2345,7 @@ function frame(now) {
     if (v.mel) { const st = STAGES[v.bar]; st.lanes.forEach((l, y) => { if (MELODY.has(l) && st.sol[y][v.step]) spawnNote(LANES[l].c); }); }
     if (v.step % 2 === 0 && !reduceMotion) bobUntil = now + 110;
   }
-  liveTick(now); bgmTick(Math.min(0.1, (now - (frame.last || now)) / 1000)); frame.last = now; render(now);
+  autoTick(now); liveTick(now); bgmTick(Math.min(0.1, (now - (frame.last || now)) / 1000)); frame.last = now; render(now);
   requestAnimationFrame(frame);
 }
 
@@ -2714,10 +2720,11 @@ function schoolEvent() {
 }
 const PRACTICE = { play: '건반 앞에서 손가락이 저릴 때까지 연습했다.', comp: '노트에 멜로디를 적고 지우기를 몇 번이고 반복했다.', sense: '잡지와 영상을 보며 무대 연출을 연구했다.' };
 let S = null;
+const slotKey = n => n > 1 ? 'starlight-sim-' + n : 'starlight-sim';
 const simStore = {
-  load() { try { return JSON.parse(localStorage.getItem('starlight-sim') || 'null'); } catch (e) { return null; } },
-  save() { try { localStorage.setItem('starlight-sim', JSON.stringify(S)); } catch (e) {} },
-  clear() { try { localStorage.removeItem('starlight-sim'); } catch (e) {} },
+  load(n = G.slot || 1) { try { return JSON.parse(localStorage.getItem(slotKey(n)) || 'null'); } catch (e) { return null; } },
+  save() { try { localStorage.setItem(slotKey(G.slot || 1), JSON.stringify(S)); } catch (e) {} },
+  clear() { try { localStorage.removeItem(slotKey(G.slot || 1)); } catch (e) {} },
   endings() { try { return JSON.parse(localStorage.getItem('starlight-endings') || '{}'); } catch (e) { return {}; } },
   addEnding(k) { const e = simStore.endings(); e[k] = true; try { localStorage.setItem('starlight-endings', JSON.stringify(e)); } catch (_) {} }
 };
@@ -3067,12 +3074,21 @@ function liveEnd() {
   if (SONG) STAGES = SONG.stages;
 }
 let titleCycle = null;
+const slotLabel = d => d ? `${d.name} · ${d.v === 2 ? (d.week > WEEKS ? '종업식' : weekLabel(d.week)) : '예전 저장'}` : '비어 있음';
+function slotMenu(mode) { // three stories side by side: pick where to write or which to continue
+  say(mode === 'new' ? '어느 슬롯에 새 이야기를 쓸까?' : '어느 이야기를 이어 할까?', true, [1, 2, 3].map(n => { const d = simStore.load(n);
+    return [`${n}번 슬롯\n${slotLabel(d)}`, () => {
+      if (mode === 'load') { if (!d) return toast('비어 있는 슬롯이에요.'); G.slot = n; S = migrateSim(d); CAST.me.name = S.name; G.char = null; return S.week > WEEKS ? finalEnding() : hub(); }
+      if (!d) { G.slot = n; return simStart(); }
+      say(`${n}번 슬롯의 이야기(${slotLabel(d)})가 지워져요. 새로 시작할까요?`, true, [['새로 시작', () => { G.slot = n; simStart(); }], ['← 다시 고르기', () => slotMenu(mode), true]]);
+    }, mode === 'load' && !d ? true : false]; }).concat([['← 타이틀로', mainMenu, true]]));
+}
 function settings() {
   G.mode = 'settings'; UI.stageLabel = '설정'; setChar('me'); UI.cg = null;
   const cyc = (k, n) => () => { SET[k] = (SET[k] + 1) % n; saveSet(); if (master) master.gain.value = masterGain(); bgmHold(); if (k === 'voice' && voiceEl && !SET.voice) { voiceEl.pause(); voiceEl = null; } settings(); };
   say('소리와 글자 속도를 바꿀 수 있어요. 누를 때마다 다음 단계로 바뀌어요.', true, [
     [`배경 음악\n${LEVEL_NAME[SET.music]}`, cyc('music', 4)], [`효과음·연주\n${LEVEL_NAME[SET.sound]}`, cyc('sound', 4)],
-    [`목소리\n${LEVEL_NAME[SET.voice]}`, cyc('voice', 4)], [`글자 속도\n${SPEED_NAME[SET.speed]}`, cyc('speed', 3)], ['← 타이틀로', mainMenu, true]]);
+    [`목소리\n${LEVEL_NAME[SET.voice]}`, cyc('voice', 4)], [`글자 속도\n${SPEED_NAME[SET.speed]}`, cyc('speed', 3)], [`자동 넘기기\n${SET.auto ? '켬' : '끔'}`, cyc('auto', 2)], ['← 타이틀로', mainMenu, true]]);
 }
 // CG gallery: every illustration you have seen once is kept across games
 const cgStore = {
@@ -3098,10 +3114,10 @@ function mainMenu() {
   UI.stageLabel = '별빛 멜로디'; expr.base = 'idle';
   let k = 0; setChar(HEROINES[0]); clearInterval(titleCycle);
   titleCycle = setInterval(() => { if (G.mode !== 'title') return clearInterval(titleCycle); k = (k + 1) % HEROINES.length; setChar(HEROINES[k]); }, 2600);
-  const save = simStore.load(), ends = Object.keys(simStore.endings()).filter(k => HEROINES.includes(k)).length;
+  const saves = [1, 2, 3].map(n => simStore.load(n)), save = saves.find(Boolean), ends = Object.keys(simStore.endings()).filter(k => HEROINES.includes(k)).length;
   say(`봄부터 겨울까지 1년. 여섯 명의 보컬 중, 누구와 별빛 아래 서게 될까? (연애 엔딩 ${ends}/6)`, true, [
-    ['새 게임\n1년의 이야기', () => { clearInterval(titleCycle); if (!save) return simStart(); say(`저장된 이야기(${save.name} · ${save.v === 2 ? weekLabel(Math.min(WEEKS, save.week)) : '예전 저장'})가 지워져요. 새로 시작할까요?`, true, [['새로 시작', simStart], ['← 돌아가기', mainMenu, true]]); }],
-    save ? ['이어 하기\n' + save.name + ' · ' + (save.v === 2 ? (save.week > WEEKS ? '종업식' : weekLabel(save.week)) : '예전 저장'), () => { clearInterval(titleCycle); S = migrateSim(save); CAST.me.name = S.name; G.char = null; S.week > WEEKS ? finalEnding() : hub(); }] : ['이어 하기\n저장 없음', () => toast('저장된 이야기가 없어요.'), true],
+    ['새 게임\n1년의 이야기', () => { clearInterval(titleCycle); slotMenu('new'); }],
+    save ? [`이어 하기\n저장 ${saves.filter(Boolean).length}개`, () => { clearInterval(titleCycle); slotMenu('load'); }] : ['이어 하기\n저장 없음', () => toast('저장된 이야기가 없어요.'), true],
     ['자유 연주\n곡 골라 풀기', () => { clearInterval(titleCycle); freePlay(); }, true],
     ['풀이 연습\n숫자 맞추는 요령', () => { clearInterval(titleCycle); selectSong('lesson'); openStage(0); }, true],
     [`앨범\nCG ${Object.keys(cgStore.get()).length}/${ALBUM.length}`, () => { clearInterval(titleCycle); album(0); }, true],
