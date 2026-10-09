@@ -434,8 +434,8 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
 .ai-results:empty { display: none; }
 .ai-pick {
   display: flex;
-  flex-direction: column;
-  gap: calc(var(--u) * 2);
+  align-items: center;
+  gap: calc(var(--u) * 12);
   text-align: left;
   padding: calc(var(--u) * 12) calc(var(--u) * 16);
   border-radius: calc(var(--u) * 14);
@@ -446,7 +446,19 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
 .ai-pick:hover { border-color: rgba(245, 197, 24, 0.5); }
 .ai-pick:disabled { opacity: 0.45; }
 .ai-pick.picked { border-color: var(--accent); opacity: 1; }
+.ai-pick .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: calc(var(--u) * 2); }
 .ai-pick .t { font-weight: 800; font-size: calc(var(--u) * 17); }
+.ai-pick .go {
+  flex: none;
+  padding: calc(var(--u) * 9) calc(var(--u) * 14);
+  border-radius: calc(var(--u) * 999);
+  background: var(--accent);
+  color: #151515;
+  font-weight: 800;
+  font-size: calc(var(--u) * 15);
+  white-space: nowrap;
+}
+.ai-pick.picked .go { background: rgba(255, 255, 255, 0.85); }
 .ai-pick .s { color: var(--ink-dim); font-size: calc(var(--u) * 14); }
 .create-card code { font-size: 0.92em; color: var(--ink); background: rgba(255, 255, 255, 0.08); padding: 0 calc(var(--u) * 4); border-radius: calc(var(--u) * 4); }
 #made-preview { width: 100%; height: auto; border-radius: calc(var(--u) * 10); background: #111214; }
@@ -4054,7 +4066,14 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
       const sub = document.createElement('span');
       sub.className = 's';
       sub.textContent = [item.artist, item.year, item.note].filter(Boolean).join(' · ');
-      b.append(t, sub);
+      const info = document.createElement('span');
+      info.className = 'info';
+      info.append(t, sub);
+      const go = document.createElement('span');
+      go.className = 'go';
+      go.textContent = '만들기 ▶';
+      b.append(info, go);
+      b.setAttribute('aria-label', item.title + ' 맵 만들기');
       b.addEventListener('click', () => { if (!aiCtl) pickSong(item, b); });
       box.appendChild(b);
     });
@@ -4083,7 +4102,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
         return;
       }
       showResults(list);
-      setStatus(el, list.length + '곡을 찾았어요. 만들 곡을 고르세요.', 'ok');
+      setStatus(el, list.length + '곡을 찾았어요. 난이도·길이를 고른 뒤 만들 곡의 「만들기」를 누르세요.', 'ok');
       return;
     }
     if (!sample) {
