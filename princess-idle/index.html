@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>방치형 공주 키우기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<!-- app:start -->
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-name">공주 키우기</span>
+      <span class="brand-tag">방치형 육성</span>
+    </div>
+    <dl class="purse">
+      <div class="coin coin-gold"><dt>골드</dt><dd id="hud-gold">0</dd></div>
+      <div class="coin"><dt>명성</dt><dd id="hud-fame">0</dd></div>
+      <div class="coin coin-star"><dt>왕관 별</dt><dd id="hud-stars">0</dd></div>
+    </dl>
+    <div class="top-actions">
+      <span class="speed" id="hud-speed" hidden></span>
+      <button type="button" class="btn btn-ghost" id="btn-pause" aria-pressed="false">일시정지</button>
+      <button type="button" class="btn btn-ghost" id="btn-settings">설정</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="stage" aria-label="공주의 모습">
+      <div class="window" id="window" data-season="spring">
+        <div class="portrait" id="portrait"></div>
+        <p class="bubble" id="bubble" aria-live="polite"></p>
+        <div class="floaters" id="floaters" aria-hidden="true"></div>
+      </div>
+      <div class="nameplate">
+        <p class="gen" id="pr-gen">1대 공주</p>
+        <h1 class="pr-name" id="pr-name">공주</h1>
+        <p class="pr-age" id="pr-age">10세</p>
+      </div>
+      <div class="almanac">
+        <p class="date" id="pr-date"></p>
+        <ol class="month-track" id="month-track" aria-label="이번 달 진행"></ol>
+      </div>
+      <div class="doing">
+        <span class="seal" id="doing-seal">쉼</span>
+        <div class="doing-text">
+          <p class="doing-name" id="doing-name">휴식</p>
+          <p class="doing-sub" id="doing-sub"></p>
+        </div>
+      </div>
+      <div class="gauge">
+        <div class="gauge-head"><span>스트레스</span><span class="num" id="stress-val">0</span></div>
+        <div class="bar"><i id="stress-bar"></i></div>
+        <p class="mood" id="mood"></p>
+      </div>
+      <p class="countdown" id="countdown"></p>
+    </section>
+
+    <section class="board">
+      <nav class="tabs" role="tablist" aria-label="메뉴">
+        <button type="button" role="tab" class="tab" data-tab="schedule" id="tab-schedule" aria-controls="panel-schedule">일정</button>
+        <button type="button" role="tab" class="tab" data-tab="stats" id="tab-stats" aria-controls="panel-stats">능력치</button>
+        <button type="button" role="tab" class="tab" data-tab="shop" id="tab-shop" aria-controls="panel-shop">상점</button>
+        <button type="button" role="tab" class="tab" data-tab="legacy" id="tab-legacy" aria-controls="panel-legacy">유산</button>
+        <button type="button" role="tab" class="tab" data-tab="endings" id="tab-endings" aria-controls="panel-endings">엔딩</button>
+        <button type="button" role="tab" class="tab" data-tab="log" id="tab-log" aria-controls="panel-log">일지</button>
+      </nav>
+      <div class="panel" role="tabpanel" id="panel-schedule" aria-labelledby="tab-schedule"></div>
+      <div class="panel" role="tabpanel" id="panel-stats" aria-labelledby="tab-stats" hidden></div>
+      <div class="panel" role="tabpanel" id="panel-shop" aria-labelledby="tab-shop" hidden></div>
+      <div class="panel" role="tabpanel" id="panel-legacy" aria-labelledby="tab-legacy" hidden></div>
+      <div class="panel" role="tabpanel" id="panel-endings" aria-labelledby="tab-endings" hidden></div>
+      <div class="panel" role="tabpanel" id="panel-log" aria-labelledby="tab-log" hidden></div>
+    </section>
+  </main>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <div class="scrim" id="scrim" hidden>
+    <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"></div>
+  </div>
+</div>
+<!-- app:end -->
+<script src="js/data.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/portrait.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "princess-idle",
+  "version": "1.0.0",
+  "private": true,
+  "description": "방치형 공주 키우기 — 브라우저에서 돌아가는 방치형 육성 게임",
+  "scripts": {
+    "test": "node --test",
+    "start": "npx --yes serve ."
+  }
+}
