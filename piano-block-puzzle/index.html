@@ -54,6 +54,19 @@
       <h1>피아노 블록</h1>
       <p class="tagline">노트 위에 블록을 맞춰 곡을 완성하는 음악 퍼즐</p>
 
+      <section class="story-card" aria-labelledby="h-story">
+        <div class="story-art" id="story-art" aria-hidden="true"></div>
+        <div class="story-text">
+          <p class="story-eyebrow">스토리 · 1장 지역 대회</p>
+          <h2 id="h-story">건반 위의 약속</h2>
+          <p>거리 피아노의 독학 천재와, 무대를 떠난 피아노 선생님. 남편 몰래 피어나는 마음과 콩쿠르 도전기.</p>
+          <div class="story-actions">
+            <button type="button" class="btn primary" id="btn-story-new">처음부터</button>
+            <button type="button" class="btn" id="btn-story-continue" hidden>이어하기</button>
+          </div>
+        </div>
+      </section>
+
       <ul class="rules">
         <li><span class="chip white"></span><span>초록 노트 위에 놓은 칸은 하얗게 바뀌고, 재생선을 지날 때 그 음이 울려요. 칸당 +100</span></li>
         <li><span class="chip bad"></span><span>노트 밖에 놓은 칸은 블록 색 그대로 남고, 그 자리의 음으로 연주돼요. 칸당 −50</span></li>
@@ -102,6 +115,8 @@
     </div>
   </section>
 
+  <section class="screen story" id="story" hidden></section>
+
   <section class="screen modal" id="pause" hidden>
     <div class="sheet">
       <h2>일시정지</h2>
@@ -125,6 +140,7 @@
       <p class="result-score"><span id="result-score">0</span><b class="badge" id="result-best" hidden>최고 기록</b></p>
       <dl class="stats" id="result-stats"></dl>
       <div class="actions two">
+        <button type="button" class="btn primary wide" id="btn-story-next" hidden>스토리 계속</button>
         <button type="button" class="btn primary wide" id="btn-listen">다시 듣기</button>
         <button type="button" class="btn" id="btn-original">원곡 듣기</button>
         <button type="button" class="btn" id="btn-continue" hidden>이어서 만들기</button>

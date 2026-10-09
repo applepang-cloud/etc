@@ -1,6 +1,8 @@
 import { SONGS, BAND_SONGS, FREE_SONG } from './songs.js';
 import { PianoAudio } from './audio.js';
 import { Game } from './game.js';
+import { Story } from './story.js';
+import { portrait } from './portraits.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -22,6 +24,7 @@ const store = {
 
 const el = {
   menu: $('#menu'),
+  story: $('#story'),
   pause: $('#pause'),
   result: $('#result'),
   hudTitle: $('#hud-title'),
@@ -129,6 +132,7 @@ function songButton(song, mode) {
 }
 
 function renderMenu() {
+  $('#btn-story-continue').hidden = !story.hasSave();
   const list = $('#song-list');
   list.innerHTML = '';
   for (const song of SONGS) list.appendChild(songButton(song, playMode));
@@ -163,10 +167,10 @@ hintBtn.addEventListener('click', () => {
 });
 renderHint();
 
-function startGame(song, mode) {
+function startGame(song, mode, extra = {}) {
   // 합주와 자유 작곡도 진행 방식(30초 정지 / 자동 이동)을 따른다.
   const auto = (mode === 'free' || mode === 'band') && playMode === 'flow';
-  current = { song, mode, auto };
+  current = { song, mode, auto, story: extra.story || null };
   lastStats = null;
   audio.ensure();
   el.menu.hidden = true;
@@ -179,6 +183,8 @@ function startGame(song, mode) {
 
 function openMenu() {
   game.stop();
+  storyResolve = null;
+  el.story.hidden = true;
   el.pause.hidden = true;
   el.result.hidden = true;
   el.flow.hidden = true;
@@ -221,14 +227,15 @@ function showResult(stats, again = false) {
   lastStats = stats;
   const free = stats.mode === 'free';
   let isBest = false;
-  if (!free && !again) {
+  if (!free && !again && !current.story) {
     const key = bestKey(stats.song, stats.mode, current.auto);
     const prev = store.get(key, null);
     isBest = stats.score > 0 && (!prev || stats.score > prev.score);
     if (isBest) store.set(key, { score: stats.score, stars: stats.stars });
   }
 
-  const modeName = MODE_NAME[stats.mode] + (current.auto ? ' · 자동 이동' : '');
+  let modeName = MODE_NAME[stats.mode] + (current.auto ? ' · 자동 이동' : '');
+  if (current.story) modeName = current.story === 'contest' ? '스토리 · 결선 연주' : '스토리 · 레슨';
   $('#result-song').textContent = free ? modeName : `${stats.song.title} · ${modeName}`;
   $('#result-stars').hidden = free;
   document.querySelectorAll('#result-stars .star').forEach((s, i) => s.classList.toggle('on', i < stats.stars));
@@ -249,7 +256,13 @@ function showResult(stats, again = false) {
     $('#result-stats').innerHTML = html;
   }
 
-  $('#btn-original').hidden = free;
+  // 스토리 연주면 '스토리 계속'으로 돌아간다
+  const inStory = !!current.story;
+  $('#btn-story-next').hidden = !inStory;
+  $('#btn-listen').classList.toggle('primary', !inStory);
+  $('#btn-original').hidden = free || inStory;
+  $('#btn-again').hidden = inStory;
+  $('#btn-songs').hidden = inStory;
   $('#btn-continue').hidden = !free;
   $('#btn-again').textContent = free ? '새로 만들기' : '다시 하기';
   el.flow.hidden = true;
@@ -270,5 +283,43 @@ $('#btn-continue').addEventListener('click', () => {
 });
 $('#btn-again').addEventListener('click', () => startGame(current.song, current.mode));
 $('#btn-songs').addEventListener('click', openMenu);
+
+// ---------- 스토리 ----------
+
+let storyResolve = null;
+
+// 스토리에서 곡을 연주하고, 결과 화면의 '스토리 계속'을 누르면 결과를 돌려준다
+function playForStory(song, purpose) {
+  return new Promise((resolve) => {
+    storyResolve = resolve;
+    el.story.hidden = true;
+    startGame(song, playMode === 'flow' ? 'flow' : 'stop', { story: purpose });
+  });
+}
+
+const story = new Story(el.story, {
+  audio,
+  songs: SONGS,
+  play: playForStory,
+  exit: () => openMenu(),
+});
+
+$('#btn-story-next').addEventListener('click', () => {
+  el.result.hidden = true;
+  game.stop();
+  el.story.hidden = false;
+  const resolve = storyResolve;
+  storyResolve = null;
+  resolve?.(lastStats);
+});
+
+function openStory(fresh) {
+  audio.ensure();
+  el.menu.hidden = true;
+  story.start(fresh);
+}
+$('#btn-story-new').addEventListener('click', () => openStory(true));
+$('#btn-story-continue').addEventListener('click', () => openStory(false));
+$('#story-art').innerHTML = `<div class="a">${portrait('dohyun', 'normal')}</div><div class="b">${portrait('seoyun', 'smile')}</div>`;
 
 renderMenu();
