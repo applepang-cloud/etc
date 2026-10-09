@@ -2691,7 +2691,7 @@ function schoolEvent() {
       selectSong(id); UI.strip = true; G.after = () => { like(h, 6); after(); }; openStage(bar);
     }, '합주 ▸');
   };
-  scene('me', ev.lines, () => h ? scene(h, [ev.who[h]], () => { like(h, 4); jam(); }) : after());
+  scene('me', ev.lines, () => h ? scene(h, [ev.who[h]], () => { like(h, 3); jam(); }) : after());
 }
 const PRACTICE = { play: '건반 앞에서 손가락이 저릴 때까지 연습했다.', comp: '노트에 멜로디를 적고 지우기를 몇 번이고 반복했다.', sense: '잡지와 영상을 보며 무대 연출을 연구했다.' };
 let S = null;
@@ -2729,7 +2729,9 @@ function choose(who, opts, done) {
   });
   say('▼ 어떻게 대답할까?', true, acts);
 }
+const AFF_RATE = 0.5; // a year has 144 actions: gains are halved so affection has to be earned
 function like(who, n) {
+  if (n > 0) n = Math.max(1, Math.round(n * AFF_RATE));
   S.aff[who] = Math.max(0, Math.min(100, S.aff[who] + n)); if (n > 0) { S.last = S.last || {}; S.last[who] = S.week; }
   toast(`${CAST[who].name} ♥ ${n > 0 ? '+' + n : n}`); if (n > 0) sfx('heart');
   expr.temp = n >= 12 ? 'happy' : n <= 0 ? 'oops' : null; expr.tempUntil = performance.now() + 1800;
@@ -2896,8 +2898,8 @@ function duet(h) {
   const o = songOf(h); showHub(false); selectSong(o.id); UI.strip = true; tire(-8);
   if (S[o.key][h] >= 5) { G.afterSong = () => { like(h, 4); scene(h, [SIM[h].small[0]], spend); }; return playSong(); }
   G.after = stars => {
-    S[o.key][h]++; const bonus = 8 + (stars === 3 ? 2 : 0) + (S.stats[SIM[h].pref] >= 4 ? 4 : 0); like(h, bonus); S.stats.play = Math.min(10, S.stats.play + 1);
-    if (S[o.key][h] >= 5) { stopLoop(); scene(h, ['#우리 곡이 처음으로 끝까지 이어졌다.'].concat(SONG.ending), () => { like(h, 10); spend(); }); }
+    S[o.key][h]++; const bonus = 5 + (stars === 3 ? 2 : 0) + (S.stats[SIM[h].pref] >= 4 ? 3 : 0); like(h, bonus); S.stats.play = Math.min(10, S.stats.play + 1);
+    if (S[o.key][h] >= 5) { stopLoop(); scene(h, ['#우리 곡이 처음으로 끝까지 이어졌다.'].concat(SONG.ending), () => { like(h, 8); spend(); }); }
     else spend();
   };
   openStage(S[o.key][h]);
