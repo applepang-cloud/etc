@@ -18,6 +18,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const GAME = join(HERE, 'index.html');
 // Songs kept only on this PC (local-songs/*.json, not in git): shown in the game's song list.
 const LOCAL_SONGS = join(HERE, 'local-songs');
+// Story voice audition page (story-tools/audition.py) and where its picks are saved.
+const AUDITION = join(HERE, 'story-tools', 'audition', 'voices.html');
+const VOICE_CHOICE = join(HERE, 'story-tools', 'voice-choice.json');
 
 const PORT = Number(process.env.PB_BRIDGE_PORT) || 8788;
 const TIMEOUT_MS = 6 * 60 * 1000;
@@ -191,6 +194,25 @@ const server = createServer(async (req, res) => {
       return res.end(readFileSync(GAME));
     } catch (e) {
       return send(res, 500, { error: 'index.html을 읽지 못했어요.' });
+    }
+  }
+  if (req.method === 'GET' && url.pathname === '/voices') {
+    try {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+      return res.end(readFileSync(AUDITION));
+    } catch {
+      return send(res, 404, { error: '목소리 고르기 페이지가 아직 없어요 (story-tools/audition.py).' });
+    }
+  }
+  if (req.method === 'POST' && url.pathname === '/voice-choice') {
+    try {
+      const pick = await readBody(req);
+      const clean = {};
+      for (const [k, v] of Object.entries(pick)) if (/^[a-z]+$/.test(k) && /^[A-Za-z0-9]{10,40}$/.test(String(v))) clean[k] = String(v);
+      writeFileSync(VOICE_CHOICE, JSON.stringify(clean, null, 1));
+      return send(res, 200, { ok: true }, cors);
+    } catch {
+      return send(res, 400, { error: '저장하지 못했어요.' }, cors);
     }
   }
   if (req.method === 'GET' && url.pathname === '/local-songs') {
