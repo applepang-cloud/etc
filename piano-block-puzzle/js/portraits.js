@@ -9,7 +9,8 @@ const CHARS = {
   seoyun: { hair: '#3b2a2a', hairHi: '#6b4a42', iris: '#7a4a32', cloth: '#2c3e66', inner: '#f6f6fb' },
   dohyun: { hair: '#1e2128', hairHi: '#434a5a', iris: '#44506e', cloth: '#2a2e38', inner: '#3a3f4c' },
   chaea: { hair: '#b08a6a', hairHi: '#dcb795', iris: '#b07a2a', cloth: '#1c1c24', inner: '#ffffff' },
-  prof: { hair: '#16171b', hairHi: '#3a3d46', iris: '#3a3030', cloth: '#3a3f4a', inner: '#f2f3f6' },
+  prof: { hair: '#6f6f78', hairHi: '#b4b4bd', iris: '#3a3030', cloth: '#3a3f4a', inner: '#f2f3f6' },
+  taejun: { hair: '#2b211d', hairHi: '#6e5546', iris: '#4a3526', cloth: '#14161c', inner: '#f4f4f6' },
 };
 
 function eye(cx, cy, expr, iris, lash) {
@@ -147,12 +148,29 @@ function prof(expr) {
   s += body(c, shirt + tie + lapel);
   s += face(c, expr === 'normal' ? 'serious' : expr);
   s += `<path d="M98 152 C104 104 132 90 160 92 C186 96 204 116 204 152 C196 126 178 112 150 112 C128 116 108 128 98 152 Z" fill="${c.hair}"/>`;
+  s += `<path d="M126 228 Q122 238 128 246 M174 228 Q178 238 172 246" fill="none" stroke="${SKIN_SH}" stroke-width="2" stroke-linecap="round"/>`;
   s += '<rect x="101" y="176" width="40" height="32" rx="9" fill="none" stroke="#1d1f24" stroke-width="3"/><rect x="159" y="176" width="40" height="32" rx="9" fill="none" stroke="#1d1f24" stroke-width="3"/><path d="M141 188 Q150 183 159 188" fill="none" stroke="#1d1f24" stroke-width="3"/>';
   s += '<path d="M106 182 L118 182" stroke="#fff" stroke-width="2" opacity="0.6"/><path d="M164 182 L176 182" stroke="#fff" stroke-width="2" opacity="0.6"/>';
   return s;
 }
 
-const DRAW = { seoyun, dohyun, chaea, prof };
+function taejun(expr) {
+  const c = CHARS.taejun;
+  let s = '';
+  s += `<path d="M92 170 C88 106 116 74 152 74 C188 74 214 106 208 170 Z" fill="${c.hair}"/>`;
+  s += body(
+    c,
+    `<path d="M130 302 L150 344 L170 302 Z" fill="${c.inner}"/><path d="M140 304 L150 320 L160 304" fill="none" stroke="#c9ccd4" stroke-width="2"/>` +
+      '<path d="M112 316 L134 302 L150 352 Z M188 316 L166 302 L150 352 Z" fill="#0c0d11"/><rect x="176" y="336" width="14" height="4" rx="1" fill="#d8b45a"/>',
+  );
+  s += face(c, expr === 'normal' ? 'smile' : expr);
+  // 이마를 드러내고 뒤로 넘긴 머리
+  s += `<path d="M98 146 C100 98 128 76 156 76 C188 78 208 100 204 146 C196 120 180 108 160 104 C140 102 116 112 98 146 Z" fill="${c.hair}"/>`;
+  s += `<path d="M118 100 C136 86 166 84 188 98 M126 110 C144 98 168 98 186 108" fill="none" stroke="${c.hairHi}" stroke-width="3.5" stroke-linecap="round" opacity="0.75"/>`;
+  return s;
+}
+
+const DRAW = { seoyun, dohyun, chaea, prof, taejun };
 
 export function portrait(id, expr = 'normal') {
   const draw = DRAW[id];

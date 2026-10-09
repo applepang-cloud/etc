@@ -3,7 +3,7 @@
 import { portrait } from './portraits.js';
 import { CAST, CHAPTER1 } from './story-data.js';
 
-const SAVE_KEY = 'pb.story.v1';
+const SAVE_KEY = 'pb.story.v2'; // 설정이 바뀌면 버전을 올려 예전 저장을 쓰지 않는다
 const TYPE_MS = 28;
 
 const SFX = {
@@ -137,6 +137,7 @@ export class Story {
   }
 
   goto(id) {
+    if (!this.chapter.scenes[id]) id = this.chapter.start;
     this.st.scene = id;
     this.save();
     this.queue = [...this.chapter.scenes[id]];
