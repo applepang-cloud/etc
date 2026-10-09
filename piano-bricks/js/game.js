@@ -28,6 +28,52 @@
       localStorage.setItem(STORE_KEY, JSON.stringify(store));
     } catch (e) { /* ignore */ }
   }
+  // Songs made in the 만들기 screen live in their own key, appended after the built-in songs.
+  const CUSTOM_KEY = 'pianoBricks.custom';
+
+  function loadCustomSongs() {
+    let list = [];
+    try {
+      list = JSON.parse(localStorage.getItem(CUSTOM_KEY) || '[]');
+    } catch (e) { /* ignore */ }
+    if (!Array.isArray(list)) return;
+    list.forEach((song) => {
+      try {
+        if (!song || !song.custom || !song.stages.length) return;
+        core.songRows(song); // throws on a malformed melody
+        PB.SONGS.push(song);
+      } catch (e) { /* skip a broken entry */ }
+    });
+  }
+
+  function saveCustomSongs() {
+    const songs = PB.SONGS.filter((s) => s.custom);
+    try {
+      localStorage.setItem(CUSTOM_KEY, JSON.stringify(songs, (k, v) => (k.charAt(0) === '_' ? undefined : v)));
+    } catch (e) { /* ignore */ }
+  }
+
+  function addCustomSong(song) {
+    PB.SONGS.push(song);
+    saveCustomSongs();
+    return PB.SONGS.length - 1;
+  }
+
+  function removeCustomSong(id) {
+    const i = PB.SONGS.findIndex((s) => s.custom && s.id === id);
+    if (i < 0) return;
+    PB.SONGS.splice(i, 1);
+    saveCustomSongs();
+    Object.keys(store.stars).forEach((k) => {
+      if (k.startsWith(id + ':')) {
+        delete store.stars[k];
+        delete store.left[k];
+        delete store.best[k];
+      }
+    });
+    saveStore();
+  }
+
   const keyOf = (songIdx, stageIdx) => PB.SONGS[songIdx].id + ':' + stageIdx;
   const starsOf = (songIdx, stageIdx) => store.stars[keyOf(songIdx, stageIdx)] || 0;
   const songCleared = (songIdx) => PB.SONGS[songIdx].stages.every((_, i) => starsOf(songIdx, i) > 0);
@@ -1112,8 +1158,8 @@
   // ---------- DOM screens ----------
 
   function showScreen(name) {
-    ['title', 'menu', 'result'].forEach((n) => $('screen-' + n).classList.toggle('hidden', n !== name));
-    $('hud').classList.toggle('hidden', name === 'title' || name === 'menu');
+    ['title', 'menu', 'result', 'create'].forEach((n) => $('screen-' + n).classList.toggle('hidden', n !== name));
+    $('hud').classList.toggle('hidden', name === 'title' || name === 'menu' || name === 'create');
   }
 
   function el(tag, cls, text) {
@@ -1124,21 +1170,30 @@
   }
 
   const starText = (n) => '★'.repeat(n) + '☆'.repeat(3 - n);
+  const SOURCE_LABEL = { ai: '제목으로 만듦', midi: 'MIDI로 만듦', audio: '음악 분석으로 만듦' };
+  const LEVEL_LABEL = ['쉬움', '보통', '어려움'];
 
   function renderMenu() {
     const list = $('song-list');
     list.textContent = '';
-    let total = 0, max = 0;
+    let total = 0, max = 0, customHeading = false;
     PB.SONGS.forEach((song, si) => {
       const got = song.stages.reduce((a, _, i) => a + starsOf(si, i), 0);
       total += got;
       max += song.stages.length * 3;
 
-      const card = el('article', 'song-card');
+      if (song.custom && !customHeading) {
+        list.appendChild(el('h3', 'list-heading', '내가 만든 곡'));
+        customHeading = true;
+      }
+      const card = el('article', 'song-card' + (song.custom ? ' custom' : ''));
       const head = el('div', 'song-head');
       const names = el('div');
       names.appendChild(el('h3', null, song.title));
-      names.appendChild(el('p', null, song.en + ' · ' + song.stages.length + '스테이지'));
+      const info = song.custom
+        ? [song.en, SOURCE_LABEL[song.source] || '직접 만든 곡', LEVEL_LABEL[song.level || 0], song.stages.length + '스테이지']
+        : [song.en, song.stages.length + '스테이지'];
+      names.appendChild(el('p', null, info.filter(Boolean).join(' · ')));
       head.appendChild(names);
       head.appendChild(el('div', 'song-stars', '★ ' + got + '/' + song.stages.length * 3));
       card.appendChild(head);
@@ -1161,6 +1216,27 @@
       full.disabled = !songCleared(si);
       full.addEventListener('click', () => { SND.unlock(); startFull(si); });
       card.appendChild(full);
+      if (song.custom) {
+        // Two taps to delete: no confirm() dialogs inside an artifact.
+        const del = el('button', 'btn del-btn', '삭제');
+        let armed = null;
+        del.addEventListener('click', () => {
+          if (armed) {
+            clearTimeout(armed);
+            removeCustomSong(song.id);
+            renderMenu();
+            return;
+          }
+          del.textContent = '한 번 더 누르면 삭제';
+          del.classList.add('armed');
+          armed = setTimeout(() => {
+            armed = null;
+            del.textContent = '삭제';
+            del.classList.remove('armed');
+          }, 3000);
+        });
+        card.appendChild(del);
+      }
       list.appendChild(card);
     });
     $('menu-total').textContent = '★ ' + total + ' / ' + max;
@@ -1376,6 +1452,7 @@
     canvas = $('game');
     ctx = canvas.getContext('2d');
     loadStore();
+    loadCustomSongs();
     SND.setMuted(store.muted);
     syncSoundButton();
     // Title backdrop: the first stage, idle.
@@ -1389,6 +1466,6 @@
     requestAnimationFrame(loop);
   }
 
-  PB.game = { state: G, startStage, startFull, openMenu, fire, setAimAngle, hit: onHit, store };
+  PB.game = { state: G, startStage, startFull, openMenu, showScreen, addCustomSong, fire, setAimAngle, hit: onHit, store };
   document.addEventListener('DOMContentLoaded', boot);
 })(window.PB = window.PB || {});

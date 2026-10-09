@@ -157,7 +157,8 @@
     const song = PB.SONGS[songIdx];
     const st = song.stages[stageIdx];
     const rows = songRows(song);
-    const d = stageNumber(songIdx, stageIdx);
+    // Made songs pick a level (easy / normal / hard) and ramp up within the song.
+    const d = song.custom ? [0, 5, 10][song.level || 0] + Math.min(stageIdx, 5) : stageNumber(songIdx, stageIdx);
     const diff = difficulty(d);
     const melody = melodyBlocks(st.melody, rows, 0);
 

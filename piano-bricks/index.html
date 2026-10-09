@@ -67,6 +67,66 @@
         <div id="menu-total" class="menu-total">★ 0 / 0</div>
       </header>
       <div id="song-list" class="song-list"></div>
+      <div class="menu-foot">
+        <button id="btn-create" class="btn primary create-open" type="button">+ 새 곡 만들기</button>
+      </div>
+    </section>
+
+    <section id="screen-create" class="screen hidden">
+      <header class="menu-head">
+        <button id="create-back" class="round small" type="button" aria-label="곡 선택으로">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <h2>새 곡 만들기</h2>
+      </header>
+      <div class="create-body">
+        <div class="create-card">
+          <h3>노래 제목으로</h3>
+          <p class="hint">제목(과 가수)을 적으면 Claude가 멜로디를 받아 적어 맵을 만들어요.</p>
+          <form id="ai-form" class="row">
+            <input id="title-input" type="text" placeholder="예: 아이유 좋은 날" maxlength="80" autocomplete="off" aria-label="노래 제목">
+            <button id="btn-ai" class="btn primary" type="submit">만들기</button>
+          </form>
+          <p id="ai-status" class="status" aria-live="polite"></p>
+        </div>
+
+        <div class="create-card">
+          <h3>음악 파일로</h3>
+          <p class="hint">MIDI 파일은 악보 그대로, MP3·WAV 같은 음악은 멜로디를 분석해서 맵을 만들어요. 반주가 많은 곡은 멜로디가 조금 다르게 잡힐 수 있어요.</p>
+          <div class="row">
+            <label class="btn file-btn">파일 선택<input id="file-input" type="file" accept="audio/*,.mid,.midi"></label>
+            <label class="start-field">시작 <input id="start-sec" type="number" min="0" max="600" step="1" value="0" inputmode="numeric"> 초부터</label>
+          </div>
+          <p id="file-status" class="status" aria-live="polite"></p>
+        </div>
+
+        <div class="create-card options">
+          <label>난이도
+            <select id="opt-level">
+              <option value="0">쉬움</option>
+              <option value="1" selected>보통</option>
+              <option value="2">어려움</option>
+            </select>
+          </label>
+          <label>길이
+            <select id="opt-stages">
+              <option value="4">최대 4스테이지</option>
+              <option value="6" selected>최대 6스테이지</option>
+              <option value="8">최대 8스테이지</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="create-result" class="create-card result hidden">
+          <h3 id="made-title"></h3>
+          <p id="made-info" class="hint"></p>
+          <canvas id="made-preview" width="480" height="120" aria-label="만든 맵 미리보기"></canvas>
+          <div class="row">
+            <button id="btn-play-made" class="btn primary" type="button">플레이 ▶</button>
+            <button id="btn-list-made" class="btn" type="button">곡 목록</button>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section id="screen-result" class="screen overlay hidden" aria-live="polite">
@@ -85,7 +145,9 @@
 
   <script src="js/songs.js"></script>
   <script src="js/core.js"></script>
+  <script src="js/maker.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/game.js"></script>
+  <script src="js/create.js"></script>
 </body>
 </html>
