@@ -1,4 +1,4 @@
-// 스토리 대사를 캐릭터별 일레븐랩스 목소리로 읽혀 sounds/voice/ 에 저장하고 js/voices.js 로 묶는다.
+// 스토리 대사와 플레이 중 한마디(banter-data.js)를 캐릭터별 일레븐랩스 목소리로 읽혀 sounds/voice/ 에 저장하고 js/voices.js 로 묶는다.
 //   node tools/gen-voices.mjs          없는 줄만 새로 만든다
 //   node tools/gen-voices.mjs --embed  생성 없이 voices.js 만 다시 쓴다
 // ELEVENLABS_API_KEY 환경 변수가 필요하다. 해설(n)은 읽지 않는다.
@@ -13,6 +13,7 @@ const OUT = join(ROOT, 'sounds', 'voice');
 mkdirSync(OUT, { recursive: true });
 const { CHAPTER1 } = await import(pathToFileURL(join(ROOT, 'js', 'story-data.js')).href);
 const { voiceKey } = await import(pathToFileURL(join(ROOT, 'js', 'voice-key.js')).href);
+const { allBanterLines } = await import(pathToFileURL(join(ROOT, 'js', 'banter-data.js')).href);
 
 // 캐릭터 → 일레븐랩스 목소리 (보이스 오디션에서 고름)
 export const VOICE_IDS = {
@@ -38,6 +39,8 @@ const lines = new Map();
   }
   for (const v of Object.values(x)) if (typeof v === 'object') walk(v);
 })(CHAPTER1);
+// 플레이 중 한마디·결과 화면 대사
+for (const [who, text] of allBanterLines()) if (VOICE_IDS[who]) lines.set(voiceKey(who, text), { who, text });
 
 // 괄호(속마음)와 낫표는 떼고 읽힌다
 const spoken = (t) => t.replace(/^\((.*)\)$/s, '$1').replace(/[「」]/g, '').trim();

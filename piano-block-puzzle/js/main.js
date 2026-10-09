@@ -5,6 +5,7 @@ import { Game } from './game.js';
 import { Story } from './story.js';
 import { portrait } from './portraits.js';
 import { MELODIC } from './instruments.js';
+import { Banter } from './banter.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -124,9 +125,24 @@ const game = new Game($('#board'), audio, {
     }
   },
   end: showResult,
+  event(name, data) {
+    banter.event(name, data);
+  },
   listened() {
     if (lastStats) showResult(lastStats, true);
   },
+});
+
+const banter = new Banter($('#stage'));
+const talkBtn = $('#btn-talk');
+const showTalk = () => {
+  talkBtn.setAttribute('aria-pressed', String(banter.on));
+  talkBtn.textContent = banter.on ? '선생님 대화 켬' : '선생님 대화 끔';
+};
+showTalk();
+talkBtn.addEventListener('click', () => {
+  banter.setOn(!banter.on);
+  showTalk();
 });
 
 new ResizeObserver(([entry]) => {
@@ -370,12 +386,20 @@ function startGame(song, mode, extra = {}) {
   el.result.hidden = true;
   el.flowLabel.textContent = mode === 'free' ? '다음' : '연주';
   for (const k of Object.keys(shown)) delete shown[k];
+  // 크기 알림(ResizeObserver)이 아직 안 왔으면 무대 크기를 직접 재서 넘긴다
+  if (!game.W) {
+    const r = $('#stage').getBoundingClientRect();
+    if (r.width && r.height) game.resize(r.width, r.height);
+  }
   // 스토리는 피아노 이야기라서 늘 피아노로 연주한다
   game.start(song, mode, { auto, hints: hintsOn, timbre: extra.story ? 'piano' : timbre });
+  banter.begin(song, mode, extra.story);
 }
 
 function openMenu() {
   game.stop();
+  banter.stop();
+  banter.result($('#result-talk'), {}, '', true);
   storyResolve = null;
   el.story.hidden = true;
   el.pause.hidden = true;
@@ -395,6 +419,7 @@ el.done.addEventListener('click', () => game.completeFree());
 function openPause() {
   if (game.state !== 'playing') return;
   game.pause();
+  banter.hide();
   el.pause.hidden = false;
 }
 
@@ -460,6 +485,11 @@ function showResult(stats, again = false) {
   $('#btn-again').textContent = free ? '새로 만들기' : '다시 하기';
   el.flow.hidden = true;
   el.result.hidden = false;
+  // 서윤의 한마디: 별이 많으면 칭찬, 적으면 아쉬움·위로
+  if (!again) {
+    banter.stop();
+    banter.result($('#result-talk'), stats, stats.mode, current.story);
+  }
 }
 
 $('#btn-listen').addEventListener('click', () => {

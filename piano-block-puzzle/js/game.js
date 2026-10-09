@@ -244,6 +244,7 @@ export class Game {
     this.queue = this.buildQueue();
     this.state = 'playing';
     this.lastTs = null;
+    this.lastPlaceAt = this.now;
     this.next();
   }
 
@@ -572,8 +573,10 @@ export class Game {
       this.sceneClears++;
       this.judge('ALL CLEAR', `+${bonus}`);
       this.audio.sparkle();
+      this.hooks.event?.('clear');
     } else if (reason === 'timeup') {
       this.judge('TIME UP');
+      this.hooks.event?.('timeup');
     }
     this.queue.unshift({ type: 'hold', dur: reason === 'skip' ? 0.15 : 0.75 });
     this.next();
@@ -708,6 +711,11 @@ export class Game {
   update() {
     const now = this.now;
     const ph = this.phase;
+    // 블록을 한동안 안 놓으면 알린다 (말 걸기용)
+    if (!this.drag && (ph?.type === 'place' || this.live) && now - this.lastPlaceAt > 14) {
+      this.lastPlaceAt = now;
+      this.hooks.event?.('idle');
+    }
     if (ph) {
       if (ph.type === 'intro' || ph.type === 'hold') {
         if (now >= ph.until) this.next();
@@ -959,6 +967,7 @@ export class Game {
   place(slot, piece, r0, c0) {
     const part = this.part;
     const now = this.now;
+    this.lastPlaceAt = now;
     if (piece.bomb) {
       this.detonate(piece, r0, c0);
     } else {
@@ -1055,6 +1064,7 @@ export class Game {
     // 실제로 깎인 감점만큼만 폭탄으로 돌려받을 수 있다 (0점 아래로는 안 깎이므로)
     if (bad) this.penaltyBank += Math.min(bad * POINTS_BAD, before + good * POINTS_GOOD);
     this.judge(word, this.combo > 1 ? `${this.combo} COMBO` : '');
+    this.hooks.event?.('judge', { word, combo: this.combo });
     this.popups.push({
       text: gain >= 0 ? `+${gain}` : `${gain}`,
       x: this.xOf(c0) + (piece.w * this.cellW) / 2,
@@ -1106,6 +1116,7 @@ export class Game {
     this.rings.push({ x: cx, y: cy, age: 0, life: 0.45, r: Math.max(piece.w, piece.h) * this.cellW });
     this.shake = 0.7;
     this.audio.boom();
+    this.hooks.event?.('bomb');
     if (!this.free) {
       this.goodCells -= removedGood;
       this.badCells -= removedBad;

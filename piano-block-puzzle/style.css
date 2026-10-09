@@ -1026,3 +1026,30 @@ h1 {
 .inst-chip:hover { border-color: var(--chip); }
 .inst-chip:focus-visible { outline: 2px solid var(--chip); outline-offset: 2px; }
 .inst-chip[aria-checked="true"] { border-color: var(--chip); background: color-mix(in srgb, var(--chip) 22%, transparent); font-weight: 600; }
+
+/* 플레이 중 한마디 (도현·서윤) */
+.banter {
+  position: absolute; left: 10px; right: 10px; top: 8px; z-index: 5;
+  display: flex; align-items: flex-end; gap: 8px;
+  pointer-events: none;
+  opacity: 0; transform: translateY(-6px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.banter.show { opacity: 1; transform: none; }
+.banter-face {
+  flex: none; width: 54px; height: 54px; border-radius: 50%; overflow: hidden;
+  background: #1d2420; border: 2px solid var(--c);
+}
+.banter-face svg { width: 100%; height: auto; transform: translateY(-14%) scale(1.75); transform-origin: 50% 20%; }
+.banter-bubble {
+  max-width: min(420px, 100%); padding: 8px 12px; border-radius: 14px 14px 14px 4px;
+  background: rgba(16, 19, 17, 0.92); border: 1px solid var(--c); color: #f1f4f2;
+  font-size: 14px; line-height: 1.45; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.banter-bubble b { display: block; font-size: 12px; color: var(--c); margin-bottom: 1px; }
+.banter.mono .banter-bubble { font-style: italic; color: #c9d1cc; border-style: dashed; }
+@media (prefers-reduced-motion: reduce) { .banter { transition: none; } }
+
+/* 결과 화면의 서윤 한마디 */
+.result-talk { position: static; margin: 4px 0 2px; justify-content: center; }
+.result-talk .banter-bubble { text-align: left; }
