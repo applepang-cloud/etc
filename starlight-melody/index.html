@@ -2319,7 +2319,7 @@ function tick() {
     st.lanes.forEach((l, y) => { const on = full ? st.sol[y][step] : G.cells && G.cells[y][step] === 'on'; if (on) { voice(l, nextT, st); if (MELODY.has(l)) mel = true; } });
     visQ.push({ t: nextT, step, bar: idx, mel });
     nextT += STEP; step = (step + 1) % W;
-    if (step === 0 && song) { G.songBar++; if (G.songBar >= STAGES.length) { G.songBar = 0; visQ.push({ t: nextT, end: true }); } }
+    if (step === 0 && song) { G.songBar++; if (G.songBar >= STAGES.length) { G.songBar = 0; visQ.push({ t: nextT, end: true }); G.playing = false; break; } }
   }
 }
 function frame(now) {
@@ -2406,7 +2406,7 @@ function checkClear() {
   G.mode = 'clear'; B.locked = true; expr.base = 'happy'; emote('sparkle', 'hop');
   sfx(!SONG.lesson && (G.stage === STAGES.length - 1 || prog().stars.every(s => s > 0)) ? 'fanfare' : 'clear');
   toast(`${G.stage + 1}소절 완성! ` + '★'.repeat(stars) + '☆'.repeat(3 - stars));
-  if (G.after) { const fn = G.after; G.after = null; say(st.clear, false, [['계속 ▸', () => fn(stars)]]); return; }
+  if (G.after) { const fn = G.after; G.after = null; say(st.clear, false, [['계속 ▸', () => { stopLoop(); showPlayUI(false); UI.strip = false; fn(stars); }]]); return; }
   const last = G.stage === STAGES.length - 1, all = prog().stars.every(s => s > 0);
   say(st.clear, false, SONG.lesson && last ? [['처음으로', mainMenu]] : last || all ? [['처음부터 듣기', playSong]] : [['다음 소절 ▸', () => openStage(G.stage + 1)]]);
 }
@@ -2739,12 +2739,12 @@ function choose(who, opts, done) {
   say('▼ 어떻게 대답할까?', true, acts);
 }
 const AFF_RATE = 0.5; // a year has 144 actions: gains are halved so affection has to be earned
-function like(who, n) {
-  if (n > 0) n = Math.max(1, Math.round(n * AFF_RATE));
+function like(who, raw) {
+  const n = raw > 0 ? Math.max(1, Math.round(raw * AFF_RATE)) : raw;
   S.aff[who] = Math.max(0, Math.min(100, S.aff[who] + n)); if (n > 0) { S.last = S.last || {}; S.last[who] = S.week; }
   toast(`${CAST[who].name} ♥ ${n > 0 ? '+' + n : n}`); if (n > 0) sfx('heart');
-  expr.temp = n >= 12 ? 'happy' : n <= 0 ? 'oops' : null; expr.tempUntil = performance.now() + 1800;
-  if (n >= 12) emote('love', 'hop'); else if (n < 0) emote('anger', 'shake'); else if (n === 0) emote('silence', 'shake');
+  if (raw >= 12 || raw <= 0) { expr.temp = raw >= 12 ? 'happy' : 'oops'; expr.tempUntil = performance.now() + 1800; }
+  if (raw >= 12) emote('love', 'hop'); else if (raw < 0) emote('anger', 'shake'); else if (raw === 0) emote('silence', 'shake');
 }
 const thumbCache = {};
 function thumb(who, met) { // 48x48 face crop, a flat silhouette until you have met her
