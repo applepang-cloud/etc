@@ -1855,7 +1855,21 @@ function album(i) {
   UI.cg = seen ? key : null; setChar(seen ? h : 'me');
   if (seen && key.startsWith('duo_')) { const ev = DUOS.find(e => 'duo_' + e.id === key), o = ev.opts.find(x => x.side === 'both'); setChar(o.reply[o.reply.length - 1][0]); } // the caption is her line
   say(seen ? fmt(cgCaption(key, h)) : (h2 ? `${who}${jong(CAST[h2].name) ? '이' : '가'} 함께한 장면은 아직 보지 못했다.` : `${CAST[h].name}의 ${kind} 장면은 아직 보지 못했다.`), true, [
-    ['◀ 이전', () => album((i + n - 1) % n)], ['다음 ▶', () => album((i + 1) % n)], ['← 타이틀로', mainMenu, true]]);
+    ['◀ 이전', () => album((i + n - 1) % n)], ['다음 ▶', () => album((i + 1) % n)]].concat(seen && replayLines(key, h).length ? [['장면 다시 보기 ▸', () => replay(i)]] : []).concat([['← 타이틀로', mainMenu, true]]));
+}
+function replayLines(key, h) { // [who, line] pairs for the scene behind a picture
+  const mine = ls => (ls || []).map(t => [h, t]);
+  if (key.startsWith('duo_')) { const ev = DUOS.find(e => 'duo_' + e.id === key), o = ev && ev.opts.find(x => x.side === 'both'); return ev ? ev.lines.concat(o ? o.reply : []) : []; }
+  if (key.startsWith('heart_')) return mine(HEARTS[h] && HEARTS[h].heart2 && HEARTS[h].heart2.lines);
+  if (key.startsWith('promise_')) return mine(HEARTS[h] && HEARTS[h].heart3 && HEARTS[h].heart3.lines);
+  if (key.startsWith('live_')) return mine(SIM[h].live);
+  return mine(SIM[h].final || SIM[h].love);
+}
+function replay(i) { // 회상: the picture stays up while the scene plays again; nothing in the save changes
+  const [key, h] = ALBUM[i];
+  bgm(key.startsWith('heart_') || key.startsWith('promise_') ? 'heart' : key.startsWith('live_') ? 'festival' : 'ending');
+  UI.cg = key; UI.stageLabel = '회상 · ' + UI.stageLabel.split(' · ').slice(2).join(' · ');
+  duoLines(replayLines(key, h), () => album(i), '앨범으로 ▸');
 }
 function mainMenu() {
   UI.cg = null; UI.bg = null; bgm('title'); G.mode = 'title'; G.simLock = false; G.after = G.afterSong = null; stopLoop(); liveEnd(); setScene('big'); showHub(false); showPlayUI(false); UI.strip = false;
