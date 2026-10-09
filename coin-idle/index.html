@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>방치형 코인 키우기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<!--APP-->
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-coin" aria-hidden="true">코</div>
+    <div class="brand-text">
+      <div class="brand-name">방치형 코인 키우기</div>
+      <div class="brand-rank"><span id="rank-name">코린이</span><span class="rank-bar"><i id="rank-fill"></i></span></div>
+    </div>
+  </div>
+  <div class="hud">
+    <div class="hud-item hud-main"><span class="lbl">총자산</span><b id="hud-nw">-</b><small id="hud-nwchg"></small></div>
+    <div class="hud-item"><span class="lbl">보유 현금</span><b id="hud-cash">-</b></div>
+    <div class="hud-item"><span class="lbl">초당 고정수입</span><b id="hud-ips">-</b></div>
+    <div class="hud-item"><span class="lbl">공포·탐욕</span><b id="hud-fg">-</b></div>
+    <div class="hud-item"><span class="lbl">게임 시각</span><b id="hud-time">-</b></div>
+  </div>
+  <div class="hud-actions">
+    <button class="icon-btn" id="btn-sfx" data-act="toggleSfx" aria-pressed="true" title="효과음 켜기/끄기">효과음</button>
+    <button class="icon-btn" id="btn-bgm" data-act="toggleBgm" aria-pressed="false" title="배경음악 켜기/끄기">배경음</button>
+  </div>
+</header>
+
+<div class="ticker" aria-label="속보 티커"><div class="ticker-track" id="ticker"></div></div>
+
+<nav class="tabs" id="tabs" role="tablist">
+  <button role="tab" data-act="tab" data-arg="ex">거래소</button>
+  <button role="tab" data-act="tab" data-arg="mgr">매니저</button>
+  <button role="tab" data-act="tab" data-arg="mine">채굴</button>
+  <button role="tab" data-act="tab" data-arg="news">뉴스<span class="dot" id="news-dot" hidden></span></button>
+  <button role="tab" data-act="tab" data-arg="stock">주식</button>
+  <button role="tab" data-act="tab" data-arg="realty">부동산</button>
+  <button role="tab" data-act="tab" data-arg="biz">사업</button>
+  <button role="tab" data-act="tab" data-arg="life">라이프</button>
+  <button role="tab" data-act="tab" data-arg="me">내 자산</button>
+</nav>
+
+<main class="wrap">
+
+<!-- ===================== 거래소 ===================== -->
+<section class="tab" id="tab-ex" hidden>
+  <div class="ex-grid">
+    <aside class="panel coinlist">
+      <div class="cl-head">
+        <input id="coin-search" type="search" placeholder="코인명 · 심볼 검색" autocomplete="off">
+      </div>
+      <div class="chips" id="coin-filter"></div>
+      <div class="cl-cols"><span>코인</span><span>현재가</span><span>전일대비</span><span>거래대금</span></div>
+      <div class="cl-rows" id="coin-rows"></div>
+      <div class="cl-foot" id="market-foot"></div>
+    </aside>
+
+    <div class="ex-main">
+      <div class="panel coin-head" id="coin-head"></div>
+
+      <div class="panel chart-panel">
+        <div class="chart-bar">
+          <div class="seg" id="tf-seg">
+            <button data-act="tf" data-arg="5">1시간</button>
+            <button data-act="tf" data-arg="20">4시간</button>
+            <button data-act="tf" data-arg="120">1일</button>
+          </div>
+          <div class="seg seg-ghost" id="ind-seg">
+            <button data-act="ind" data-arg="ma">이동평균</button>
+            <button data-act="ind" data-arg="bb">볼린저</button>
+            <button data-act="ind" data-arg="vol">거래량</button>
+            <button data-act="ind" data-arg="rsi">RSI</button>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="chart" aria-label="캔들 차트"></canvas></div>
+      </div>
+
+      <div class="ex-trade">
+        <div class="panel order-panel">
+          <div class="otabs" id="otabs">
+            <button data-act="otab" data-arg="buy">매수</button>
+            <button data-act="otab" data-arg="sell">매도</button>
+            <button data-act="otab" data-arg="limit">지정가</button>
+            <button data-act="otab" data-arg="fut">선물</button>
+            <button data-act="otab" data-arg="stake">스테이킹</button>
+            <button data-act="otab" data-arg="rule">예약매도</button>
+          </div>
+
+          <div class="oform" data-o="buy">
+            <div class="orow"><span>주문 가능</span><b id="buy-avail">-</b></div>
+            <label class="ofield"><span>주문 금액</span><input id="buy-amt" inputmode="decimal" placeholder="예: 50만, 1억" autocomplete="off"><em>원</em></label>
+            <div class="pcts"><button data-act="pct" data-arg="buy:0.1">10%</button><button data-act="pct" data-arg="buy:0.25">25%</button><button data-act="pct" data-arg="buy:0.5">50%</button><button data-act="pct" data-arg="buy:1">최대</button></div>
+            <div class="oest" id="buy-est"></div>
+            <button class="obtn buy" data-act="doBuy">시장가 매수</button>
+          </div>
+
+          <div class="oform" data-o="sell" hidden>
+            <div class="orow"><span>매도 가능</span><b id="sell-avail">-</b></div>
+            <label class="ofield"><span>주문 수량</span><input id="sell-qty" inputmode="decimal" placeholder="0" autocomplete="off"><em id="sell-unit">개</em></label>
+            <div class="pcts"><button data-act="pct" data-arg="sell:0.1">10%</button><button data-act="pct" data-arg="sell:0.25">25%</button><button data-act="pct" data-arg="sell:0.5">50%</button><button data-act="pct" data-arg="sell:1">전량</button></div>
+            <div class="oest" id="sell-est"></div>
+            <button class="obtn sell" data-act="doSell">시장가 매도</button>
+          </div>
+
+          <div class="oform" data-o="limit" hidden>
+            <div class="seg seg-full" id="lim-side">
+              <button data-act="limSide" data-arg="buy">매수</button>
+              <button data-act="limSide" data-arg="sell">매도</button>
+            </div>
+            <label class="ofield"><span>지정 가격</span>
+              <button class="stepper" data-act="limStep" data-arg="-1" aria-label="한 호가 내리기">−</button>
+              <input id="lim-price" inputmode="decimal" autocomplete="off">
+              <button class="stepper" data-act="limStep" data-arg="1" aria-label="한 호가 올리기">+</button>
+            </label>
+            <div class="pcts"><button data-act="limAt" data-arg="-0.05">-5%</button><button data-act="limAt" data-arg="-0.02">-2%</button><button data-act="limAt" data-arg="0">현재가</button><button data-act="limAt" data-arg="0.02">+2%</button><button data-act="limAt" data-arg="0.05">+5%</button></div>
+            <label class="ofield"><span>수량</span><input id="lim-qty" inputmode="decimal" placeholder="0" autocomplete="off"><em id="lim-unit">개</em></label>
+            <div class="pcts"><button data-act="pct" data-arg="lim:0.25">25%</button><button data-act="pct" data-arg="lim:0.5">50%</button><button data-act="pct" data-arg="lim:1">최대</button></div>
+            <div class="oest" id="lim-est"></div>
+            <button class="obtn buy" id="lim-btn" data-act="doLimit">지정가 매수 주문</button>
+          </div>
+
+          <div class="oform" data-o="fut" hidden>
+            <div class="oest warn" id="fut-na" hidden>이 코인은 선물 거래를 지원하지 않습니다. 선물은 BTC · ETH · XRP · SOL · DOGE만 가능합니다.</div>
+            <div id="fut-body">
+              <div class="seg seg-full" id="fut-side">
+                <button data-act="futSide" data-arg="long">롱 (상승에 베팅)</button>
+                <button data-act="futSide" data-arg="short">숏 (하락에 베팅)</button>
+              </div>
+              <label class="ofield"><span>레버리지</span><input id="fut-lev" type="range" min="1" max="25" step="1" value="5"><em id="fut-lev-v">5x</em></label>
+              <label class="ofield"><span>증거금</span><input id="fut-margin" inputmode="decimal" placeholder="예: 100만" autocomplete="off"><em>원</em></label>
+              <div class="pcts"><button data-act="pct" data-arg="fut:0.1">10%</button><button data-act="pct" data-arg="fut:0.25">25%</button><button data-act="pct" data-arg="fut:0.5">50%</button><button data-act="pct" data-arg="fut:1">최대</button></div>
+              <div class="oest" id="fut-est"></div>
+              <button class="obtn buy" id="fut-btn" data-act="doFut">롱 포지션 열기</button>
+            </div>
+          </div>
+
+          <div class="oform" data-o="stake" hidden>
+            <div class="oest warn" id="stake-na" hidden>이 코인은 스테이킹을 지원하지 않습니다. ETH · SOL · ADA · AVAX · DTR을 선택하세요.</div>
+            <div id="stake-body">
+              <div class="orow"><span>일 보상률</span><b id="stake-rate">-</b></div>
+              <div class="orow"><span>스테이킹 중</span><b id="stake-cur">-</b></div>
+              <div class="orow"><span>누적 보상</span><b id="stake-earn">-</b></div>
+              <label class="ofield"><span>수량</span><input id="stake-qty" inputmode="decimal" placeholder="0" autocomplete="off"><em id="stake-unit">개</em></label>
+              <div class="pcts"><button data-act="pct" data-arg="stake:0.5">보유 50%</button><button data-act="pct" data-arg="stake:1">보유 전량</button><button data-act="pct" data-arg="unstake:1">스테이킹 전량</button></div>
+              <div class="btn-row">
+                <button class="obtn buy" data-act="doStake">스테이킹</button>
+                <button class="obtn ghost" data-act="doUnstake">해제</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="oform" data-o="rule" hidden>
+            <p class="ohelp">보유 코인이 평균단가 대비 목표 수익률이나 손실률에 닿으면 자동으로 전량 매도합니다.</p>
+            <label class="ofield"><span>익절</span><input id="rule-tp" inputmode="decimal" placeholder="예: 10" autocomplete="off"><em>%</em></label>
+            <label class="ofield"><span>손절</span><input id="rule-sl" inputmode="decimal" placeholder="예: 5" autocomplete="off"><em>%</em></label>
+            <div class="oest" id="rule-est"></div>
+            <div class="btn-row">
+              <button class="obtn buy" data-act="doRule">예약 저장</button>
+              <button class="obtn ghost" data-act="clearRule">예약 해제</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel mypos" id="mypos"></div>
+      </div>
+    </div>
+
+    <aside class="ex-side">
+      <div class="panel ob-panel">
+        <div class="ph"><h3>호가</h3><small>클릭하면 지정가 입력</small></div>
+        <div id="ob"></div>
+      </div>
+      <div class="panel tape-panel">
+        <div class="ph"><h3>체결</h3></div>
+        <div id="tape"></div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="panel ex-bottom">
+    <div class="otabs otabs-line" id="btabs">
+      <button data-act="btab" data-arg="orders">미체결 <span id="cnt-orders"></span></button>
+      <button data-act="btab" data-arg="futs">선물 포지션 <span id="cnt-futs"></span></button>
+      <button data-act="btab" data-arg="hist">거래 내역</button>
+      <button data-act="btab" data-arg="cnews">이 코인 뉴스</button>
+    </div>
+    <div id="bpanel"></div>
+  </div>
+</section>
+
+<!-- ===================== 매니저 ===================== -->
+<section class="tab" id="tab-mgr" hidden>
+  <div class="panel mgr-top" id="mgr-top"></div>
+  <div class="sec-title"><h2>고용 중인 매니저</h2><span class="muted" id="mgr-count"></span></div>
+  <div class="mgr-grid" id="mgr-list"></div>
+  <div class="sec-title">
+    <h2>지원자</h2><span class="muted" id="cand-timer"></span>
+    <button class="btn ghost" id="cand-refresh" data-act="refreshCands">헤드헌터 호출</button>
+  </div>
+  <div class="cand-grid" id="cand-list"></div>
+</section>
+
+<!-- ===================== 채굴 ===================== -->
+<section class="tab" id="tab-mine" hidden>
+  <div class="mine-grid">
+    <div class="panel tap-panel">
+      <div class="seg" id="mine-coin"></div>
+      <button class="tapcoin" id="tapcoin" data-act="tap" aria-label="탭해서 채굴"><span class="tc-face"><span class="tc-sym" id="tap-sym">BTC</span><span class="tc-label">탭해서 채굴</span></span></button>
+      <div class="tap-info" id="tap-info"></div>
+      <button class="btn" id="tapup" data-act="tapUp">곡괭이 강화</button>
+    </div>
+    <div class="panel mine-stats" id="mine-stats"></div>
+  </div>
+  <div class="sec-title"><h2>채굴 장비</h2><span class="muted">장비가 많을수록 채굴 단가가 13%씩 비싸집니다</span></div>
+  <div class="rig-grid" id="rig-list"></div>
+</section>
+
+<!-- ===================== 뉴스 ===================== -->
+<section class="tab" id="tab-news" hidden>
+  <div class="news-grid">
+    <div class="panel news-feed">
+      <div class="chips" id="news-filter"></div>
+      <div id="news-list" class="news-list"></div>
+    </div>
+    <aside class="news-side">
+      <div class="panel fg-panel"><div class="ph"><h3>공포·탐욕 지수</h3></div><div id="fg-big"></div></div>
+      <div class="panel"><div class="ph"><h3>인맥 귀띔</h3></div><div id="tips"></div></div>
+      <div class="panel"><div class="ph"><h3>경제 캘린더</h3></div><div id="calendar"></div></div>
+      <div class="panel"><div class="ph"><h3>실제 뉴스 · 영상 참고</h3></div><div id="refs"></div></div>
+    </aside>
+  </div>
+</section>
+
+<!-- ===================== 주식 ===================== -->
+<section class="tab" id="tab-stock" hidden>
+  <div class="idx-row" id="idx-row"></div>
+  <div class="panel">
+    <div class="ph"><h3>종목</h3>
+      <div class="seg" id="stock-qty">
+        <button data-act="stockQty" data-arg="1">1주</button>
+        <button data-act="stockQty" data-arg="10">10주</button>
+        <button data-act="stockQty" data-arg="100">100주</button>
+        <button data-act="stockQty" data-arg="1000">1000주</button>
+      </div>
+    </div>
+    <div class="tbl-wrap"><table class="tbl" id="stock-tbl">
+      <thead><tr><th>종목</th><th>현재가</th><th>전일대비</th><th>주간 배당</th><th>보유</th><th>평가손익</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <p class="muted small">배당은 7일마다 지급됩니다. 매수 수수료 0.015%, 매도 시 수수료·세금 0.2%.</p>
+  </div>
+</section>
+
+<!-- ===================== 부동산 ===================== -->
+<section class="tab" id="tab-realty" hidden>
+  <div class="panel realty-top" id="realty-top"></div>
+  <div class="prop-grid" id="prop-list"></div>
+</section>
+
+<!-- ===================== 사업 ===================== -->
+<section class="tab" id="tab-biz" hidden>
+  <div class="panel biz-top">
+    <div id="biz-sum"></div>
+    <div class="seg" id="biz-qty">
+      <button data-act="bizQty" data-arg="1">×1</button>
+      <button data-act="bizQty" data-arg="10">×10</button>
+      <button data-act="bizQty" data-arg="100">×100</button>
+      <button data-act="bizQty" data-arg="max">최대</button>
+    </div>
+  </div>
+  <div class="biz-list" id="biz-list"></div>
+  <div class="sec-title"><h2>스타트업 지분 투자</h2><span class="muted" id="offer-timer"></span></div>
+  <div class="offer-grid" id="offer-list"></div>
+  <div class="panel"><div class="ph"><h3>투자 진행 중</h3></div><div id="su-list"></div></div>
+</section>
+
+<!-- ===================== 라이프 ===================== -->
+<section class="tab" id="tab-life" hidden>
+  <div class="panel life-stats" id="life-stats"></div>
+  <div class="life-grid">
+    <div class="panel"><div class="ph"><h3>연애</h3></div><div id="love"></div></div>
+    <div class="panel"><div class="ph"><h3>인맥</h3><small id="net-count"></small></div><div id="network"></div></div>
+  </div>
+  <div class="sec-title"><h2>차고</h2><span class="muted" id="car-sum"></span></div>
+  <div class="car-grid" id="car-list"></div>
+  <div class="sec-title"><h2>쇼핑 · 소비</h2><span class="muted">돈은 쓰라고 버는 것. 소비하면 행복과 매력이 오릅니다</span></div>
+  <div class="shop-grid" id="shop"></div>
+</section>
+
+<!-- ===================== 내 자산 ===================== -->
+<section class="tab" id="tab-me" hidden>
+  <div class="me-grid">
+    <div class="panel"><div class="ph"><h3>자산 구성</h3></div>
+      <div class="donut-wrap"><canvas id="donut" width="220" height="220"></canvas><div id="donut-legend" class="legend"></div></div>
+    </div>
+    <div class="panel"><div class="ph"><h3>총자산 추이</h3><small>최근 4시간</small></div><div class="nw-wrap"><canvas id="nwchart"></canvas></div></div>
+  </div>
+  <div class="me-grid">
+    <div class="panel"><div class="ph"><h3>기록</h3></div><div id="stats" class="kv"></div></div>
+    <div class="panel"><div class="ph"><h3>업적</h3><small id="ach-count"></small></div><div id="ach-list" class="ach-grid"></div></div>
+  </div>
+  <div class="panel settings">
+    <div class="ph"><h3>설정</h3></div>
+    <div class="set-grid">
+      <label class="set-row"><span>효과음 볼륨</span><input type="range" id="set-sfx" min="0" max="1" step="0.05"></label>
+      <label class="set-row"><span>배경음 볼륨</span><input type="range" id="set-bgm" min="0" max="1" step="0.05"></label>
+      <div class="set-row"><span>시세 색상</span>
+        <div class="seg" id="set-colors">
+          <button data-act="colors" data-arg="kr">한국식 (상승 빨강)</button>
+          <button data-act="colors" data-arg="global">해외식 (상승 초록)</button>
+        </div>
+      </div>
+      <div class="set-row"><span>저장</span>
+        <div class="btn-row">
+          <button class="btn ghost" data-act="saveNow">지금 저장</button>
+          <button class="btn danger" data-act="resetAsk">처음부터 다시</button>
+        </div>
+      </div>
+    </div>
+    <p class="muted small" id="save-info"></p>
+  </div>
+</section>
+
+</main>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<div class="modal-bg" id="modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-head"><h3 id="modal-title"></h3><button class="icon-btn" data-act="closeModal" aria-label="닫기">닫기</button></div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-actions" id="modal-actions"></div>
+  </div>
+</div>
+<div class="boot" id="boot"><div class="boot-coin">코</div><p id="boot-msg">시장을 여는 중…</p><div class="boot-bar"><i id="boot-fill"></i></div></div>
+<!--/APP-->
+
+<script src="js/util.js"></script>
+<script src="js/data.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/state.js"></script>
+<script src="js/market.js"></script>
+<script src="js/news.js"></script>
+<script src="js/trading.js"></script>
+<script src="js/managers.js"></script>
+<script src="js/assets.js"></script>
+<script src="js/life.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/chart.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
