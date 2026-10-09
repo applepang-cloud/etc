@@ -52,6 +52,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
 .talk .act { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .act button { font-family: var(--pixel); font-size: 14px; background: var(--gold); color: #2b1b00; border: 0; border-radius: 4px; padding: 7px 14px; box-shadow: 0 3px 0 #b8892a; cursor: pointer; }
 .talk .act.grid { display: grid; grid-template-columns: 1fr 1fr; }
+.talk .act.grid.odd button:first-child { grid-column: 1 / -1; }
 .act button small { display: block; font-family: var(--body); font-size: 11px; opacity: .75; margin-top: 2px; }
 .act button.ghost { background: transparent; color: var(--ink); box-shadow: none; border: 1px solid var(--slot-line); }
 .act button:active { transform: translateY(2px); box-shadow: 0 1px 0 #b8892a; }
@@ -106,7 +107,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
 .controls .icon-btn { padding: 9px 14px; font-size: 14px; }
 .controls .icon-btn.primary { background: var(--gold); color: #2b1b00; border-color: var(--gold); box-shadow: 0 3px 0 #b8892a; }
 .help { position: fixed; inset: 0; z-index: 6; background: rgba(8, 6, 26, .72); display: grid; place-items: center; padding: 16px; }
-.help-card { background: var(--night-2); border: 2px solid var(--ink); border-radius: 6px; box-shadow: 4px 4px 0 #0b0920; max-width: 380px; width: 100%; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.help-card { max-height: 100%; overflow-y: auto; background: var(--night-2); border: 2px solid var(--ink); border-radius: 6px; box-shadow: 4px 4px 0 #0b0920; max-width: 380px; width: 100%; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
 .help-card h2 { margin: 0; font-family: var(--pixel); font-weight: 400; font-size: 18px; color: var(--pink); }
 .help-card ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; line-height: 1.5; font-size: 14px; }
 .help-card b { color: var(--gold); font-weight: 400; }
@@ -173,7 +174,10 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
         <div class="ex" aria-hidden="true"><span class="exc">1 2</span><i class="f"></i><i></i><i></i><i class="f"></i><i class="f"></i></div></li>
       <li>왼쪽 숫자는 가로줄, 위쪽 숫자는 세로줄 이야기예요. 0이면 그 줄은 전부 빈칸이에요.</li>
       <li>맞는 칸을 누르면 그 음이 울리고, 틀리면 ×가 표시돼요. 줄이 다 맞으면 남은 칸은 자동으로 ×가 돼요.</li>
-      <li>막히면 <b>힌트</b>를 누르세요. 맞는 칸 하나가 반짝여요.</li>
+      <li><b>요령 1.</b> 큰 숫자는 가운데부터. 8칸에 '6'이면 가운데 4칸은 무조건 칠해져요.</li>
+      <li><b>요령 2.</b> 숫자와 사이 빈칸을 더해 8이면 자리가 하나뿐이에요. '3 4'는 3+1+4=8.</li>
+      <li><b>요령 3.</b> 숫자를 다 채운 줄의 나머지는 빈칸이에요. 그 ×를 보고 다른 줄을 좁혀 가요.</li>
+      <li>막히면 <b>힌트</b>를 누르세요. 맞는 칸 하나가 반짝여요. 처음 화면의 <b>풀이 연습</b>에서 직접 따라 해 볼 수도 있어요.</li>
     </ol>
     <div class="act"><button type="button" id="helpClose">알겠어</button></div>
   </div>
@@ -356,6 +360,142 @@ root.drawHeroine = drawHeroine;
 </script>
 <script>
 const SONGS = [
+ {
+  "id": "lesson",
+  "title": "풀이 연습",
+  "bpm": 100,
+  "lead": "piano",
+  "singer": "ria",
+  "lesson": true,
+  "ending": [
+   "요령 연습 끝!",
+   "이제 노래 퍼즐도 같은 요령으로 풀 수 있어."
+  ],
+  "stages": [
+   {
+    "id": "t1",
+    "title": "큰 숫자 공략",
+    "root": 48,
+    "pad": [
+     60,
+     64,
+     67
+    ],
+    "lanes": [
+     "G",
+     "E",
+     "K"
+    ],
+    "pattern": {
+     "G": "........",
+     "E": "..xxxxxx",
+     "K": "xx..x..."
+    },
+    "givens": [],
+    "intro": [
+     "숫자 맞추는 요령을 알려 줄게! 내가 설명하는 동안 반짝이는 칸만 누르면 돼.",
+     "먼저 솔 줄의 0 보이지? 0인 줄은 전부 빈칸이라서 처음부터 ×가 쳐져 있어."
+    ],
+    "guide": [
+     {
+      "say": "미 줄은 '6'이야. 8칸에 6칸을 놓으면 왼쪽 끝에 붙이든 오른쪽 끝에 붙이든 가운데 4칸은 꼭 겹쳐. 그 4칸을 눌러!",
+      "row": "E",
+      "cells": [
+       "E2",
+       "E3",
+       "E4",
+       "E5"
+      ]
+     },
+     {
+      "say": "이번엔 위쪽 숫자. 5번째 세로줄은 '2'야. 솔 칸은 ×니까, 미 칸에서 아래로 2칸 이어지려면 킥 칸도 칠해야 해.",
+      "col": 4,
+      "cells": [
+       "K4"
+      ]
+     },
+     {
+      "say": "킥 줄은 '2 1'. 방금 칠한 칸이 '1'이고 '2'는 그 왼쪽이야. 3, 4번째 세로줄은 숫자를 다 채워서 나머지가 ×가 됐지? 그러니 '2'는 맨 앞 두 칸!",
+      "row": "K",
+      "cells": [
+       "K0",
+       "K1"
+      ]
+     },
+     {
+      "say": "마지막! 1, 2번째 세로줄의 '1'은 킥 칸이 채웠으니 미 칸은 빈칸이야. 그럼 미 줄의 6칸은 3번째부터 끝까지. 남은 두 칸을 눌러!",
+      "row": "E",
+      "cells": [
+       "E6",
+       "E7"
+      ]
+     }
+    ],
+    "clear": "잘했어! 큰 숫자는 가운데부터, 숫자를 다 채운 줄의 나머지는 빈칸. 이 두 개만 알아도 반은 풀려!"
+   },
+   {
+    "id": "t2",
+    "title": "꽉 차는 줄",
+    "root": 41,
+    "pad": [
+     53,
+     57,
+     60
+    ],
+    "lanes": [
+     "A",
+     "D",
+     "S"
+    ],
+    "pattern": {
+     "A": "xxx.xxxx",
+     "D": "x......x",
+     "S": "...x...."
+    },
+    "givens": [],
+    "intro": [
+     "두 번째 요령! 숫자를 더해서 줄이 꽉 차는지 보는 거야."
+    ],
+    "guide": [
+     {
+      "say": "라 줄은 '3 4'. 3칸 + 사이 빈칸 1 + 4칸 = 딱 8칸! 빈틈없이 꽉 차니까 자리가 하나뿐이야. 7칸을 다 눌러!",
+      "row": "A",
+      "cells": [
+       "A0",
+       "A1",
+       "A2",
+       "A4",
+       "A5",
+       "A6",
+       "A7"
+      ]
+     },
+     {
+      "say": "1번째 세로줄은 '2'. 맨 위 라 칸이 칠해졌으니 바로 아래 레 칸까지 이어져야 해.",
+      "col": 0,
+      "cells": [
+       "D0"
+      ]
+     },
+     {
+      "say": "8번째 세로줄도 '2'야. 똑같이 레 칸!",
+      "col": 7,
+      "cells": [
+       "D7"
+      ]
+     },
+     {
+      "say": "4번째 세로줄은 '1'. 라 칸은 빈칸이고 레 줄은 숫자를 다 채웠어. 남은 자리는 스네어 칸뿐이야!",
+      "col": 3,
+      "cells": [
+       "S3"
+      ]
+     }
+    ],
+    "clear": "완벽해! 막히면 숫자가 큰 줄, 꽉 차는 줄, 다 채운 줄부터 찾아봐. 그래도 막히면 힌트!"
+   }
+  ]
+ },
  {
   "id": "starlight",
   "title": "별빛 멜로디",
@@ -1526,7 +1666,7 @@ const SONGS = [
   "singer": "yuna"
  }
 ];
-let SONG = SONGS[0], STAGES = SONG.stages;
+let SONG = SONGS[1], STAGES = SONG.stages;
 const LANES = {
   A: { name: '라', c: '#ff8fc8', midi: 81 }, G: { name: '솔', c: '#ffb35c', midi: 79 }, E: { name: '미', c: '#ffe066', midi: 76 },
   D: { name: '레', c: '#7fe3ad', midi: 74 }, C: { name: '도', c: '#6ccbff', midi: 72 },
@@ -1563,7 +1703,7 @@ function migrate(d) {
 }
 const P = migrate(saved);
 const prog = () => P.songs[SONG.id];
-function selectSong(id) { SONG = SONGS.find(sg => sg.id === id) || SONGS[0]; STAGES = SONG.stages; STEP = 60 / SONG.bpm / 2; G.lead = null; updateLead(); setChar(SONG.singer || 'ria'); P.last = SONG.id; persist(); $('songLabel').textContent = SONG.title; }
+function selectSong(id) { SONG = SONGS.find(sg => sg.id === id) || SONGS[1]; STAGES = SONG.stages; STEP = 60 / SONG.bpm / 2; G.lead = null; updateLead(); setChar(SONG.singer || 'ria'); P.last = SONG.id; persist(); $('songLabel').textContent = SONG.title; }
 const persist = () => store.save(P);
 window.claude?.hot?.snapshot?.(() => ({ progress: P }));
 
@@ -1804,7 +1944,7 @@ function checkClear() {
   G.mode = 'clear'; $('board').classList.add('locked'); sfx('clear'); expr.base = 'happy'; renderBars();
   toast(`${G.stage + 1}소절 완성! ` + '★'.repeat(stars) + '☆'.repeat(3 - stars));
   const last = G.stage === STAGES.length - 1, all = prog().stars.every(s => s > 0);
-  say(st.clear, false, last || all ? [['처음부터 듣기', playSong]] : [['다음 소절 ▸', () => openStage(G.stage + 1)]]);
+  say(st.clear, false, SONG.lesson && last ? [['곡 고르러 가기', title]] : last || all ? [['처음부터 듣기', playSong]] : [['다음 소절 ▸', () => openStage(G.stage + 1)]]);
 }
 
 /* ---------- song strip ---------- */
@@ -1829,7 +1969,7 @@ function say(text, quick, actions) {
   const p = $('line'); clearInterval(typeTimer);
   if (reduceMotion || quick) p.textContent = text;
   else { let i = 0; p.textContent = ''; typeTimer = setInterval(() => { i += 1; p.textContent = text.slice(0, i); if (i >= text.length) clearInterval(typeTimer); }, 28); }
-  if (actions) { const a = $('act'); a.innerHTML = ''; a.classList.toggle('grid', actions.length > 3); actions.forEach(([label, fn, ghost]) => { const b = document.createElement('button'); b.type = 'button'; const [main, sub] = label.split('\n'); b.textContent = main; if (sub) { const sm = document.createElement('small'); sm.textContent = sub; b.append(sm); } if (ghost) b.className = 'ghost'; b.addEventListener('click', () => { initAudio(); fn(); }); a.append(b); }); }
+  if (actions) { const a = $('act'); a.innerHTML = ''; a.classList.toggle('grid', actions.length > 3); a.classList.toggle('odd', actions.length % 2 === 1); actions.forEach(([label, fn, ghost]) => { const b = document.createElement('button'); b.type = 'button'; const [main, sub] = label.split('\n'); b.textContent = main; if (sub) { const sm = document.createElement('small'); sm.textContent = sub; b.append(sm); } if (ghost) b.className = 'ghost'; b.addEventListener('click', () => { initAudio(); fn(); }); a.append(b); }); }
 }
 function talk(lines, done, lastLabel = '시작 ▸') { let i = 0; const next = () => { if (i >= lines.length) return done(); const last = i === lines.length - 1; say(lines[i++], false, [[last ? lastLabel : '다음 ▸', next]]); }; next(); }
 function setScene(size) { $('scene').dataset.size = size; sizeHeroine(); }
@@ -1850,7 +1990,7 @@ function openStage(i) {
   const st = STAGES[i]; $('stageLabel').textContent = `${i + 1}소절 · ${st.title}`; expr.base = 'idle';
   setScene('big'); showPlayUI(false); $('act').innerHTML = ''; renderBars();
   G.guide = null; talk(st.intro, () => { G.mode = 'play'; setScene('small'); buildBoard(i); showPlayUI(true); startLoop();
-    if (st.guide && !prog().stars[i]) { G.guide = { steps: st.guide, i: 0 }; applyGuide(); } else say(CAST[G.char].start, true, []); });
+    if (st.guide && (!prog().stars[i] || SONG.lesson)) { G.guide = { steps: st.guide, i: 0 }; applyGuide(); } else say(CAST[G.char].start, true, []); });
 }
 function playSong() {
   G.mode = 'song'; G.songBar = 0; expr.base = 'happy'; setScene('big'); showPlayUI(false); $('boardWrap').hidden = false; $('stageLabel').textContent = SONG.title + ' · 전곡';
@@ -1864,10 +2004,10 @@ function title() {
   G.mode = 'title'; setChar('ria'); expr.base = 'idle'; setScene('big'); showPlayUI(false); renderBars();
   const fresh = SONGS.every(sg => P.songs[sg.id].stars.every(n => !n));
   stopLoop(); $('stageLabel').textContent = '옥상 라이브 D-3';
-  say(fresh ? '와 줬구나! 나는 리아. 이번 주말 옥상 라이브에서 부를 곡들 악보가 다 번져 버렸어. 키보드 담당 유나 곡도 있어! 처음이라면 별빛 멜로디부터 같이 해 줄래?'
+  say(fresh ? '와 줬구나! 나는 리아. 이번 주말 옥상 라이브에서 부를 곡들 악보가 다 번져 버렸어. 처음이라면 풀이 연습으로 숫자 보는 법부터 알려 줄게!'
     : '어서 와! 오늘은 어떤 곡을 복원해 볼까?', false,
     SONGS.map(sg => { const st = P.songs[sg.id].stars, done = st.filter(Boolean).length;
-      return [`${sg.title}\n${CAST[sg.singer].name} · ${LEADS[sg.lead]} · ${done}/${st.length}`, () => { selectSong(sg.id); openStage(done ? Math.min(P.songs[sg.id].unlocked, st.length - 1) : 0); }, sg.id !== (fresh ? 'starlight' : P.last)]; }));
+      return [`${sg.title}\n${sg.lesson ? '숫자 맞추는 요령' : CAST[sg.singer].name + ' · ' + LEADS[sg.lead]} · ${done}/${st.length}`, () => { selectSong(sg.id); openStage(done ? Math.min(P.songs[sg.id].unlocked, st.length - 1) : 0); }, sg.id !== (fresh ? 'lesson' : P.last)]; }));
 }
 
 $('hintBtn').addEventListener('click', hint);
@@ -1881,7 +2021,7 @@ function applyGuide() {
   const st = STAGES[G.stage], step = G.guide.steps[G.guide.i];
   document.querySelectorAll('.glow, .focus').forEach(e => e.classList.remove('glow', 'focus'));
   step.cells.forEach(k => { const y = st.lanes.indexOf(k[0]), x = +k.slice(1); if (G.cells[y][x] !== 'on') cellEl(x, y).classList.add('glow'); });
-  $('board').querySelector(`.rc[data-row="${st.lanes.indexOf(step.row)}"]`).classList.add('focus');
+  const f = step.row ? $('board').querySelector(`.rc[data-row="${st.lanes.indexOf(step.row)}"]`) : $('board').querySelector(`.cc[data-col="${step.col}"]`); if (f) f.classList.add('focus');
   say(step.say, false, []);
 }
 function guideProgress() {
