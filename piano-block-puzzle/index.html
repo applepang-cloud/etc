@@ -58,27 +58,31 @@
         <li><span class="chip gold"></span><span>빈칸 없이 딱 맞추면 FANTASTIC, 연속이면 콤보가 쌓여요</span></li>
       </ul>
 
-      <section class="mode-block" aria-labelledby="h-song">
+      <section class="mode-block play-mode" aria-labelledby="h-play">
         <div class="mode-head">
-          <h2 id="h-song">곡 연주</h2>
-          <div class="seg" role="radiogroup" aria-label="진행 방식">
-            <button type="button" role="radio" data-play="stop">정지</button>
-            <button type="button" role="radio" data-play="flow">흐름</button>
+          <h2 id="h-play">진행 방식</h2>
+          <div class="seg" role="radiogroup" aria-labelledby="h-play">
+            <button type="button" role="radio" data-play="stop">30초 정지</button>
+            <button type="button" role="radio" data-play="flow">자동 이동</button>
           </div>
         </div>
         <p class="mode-desc" id="play-desc"></p>
+      </section>
+
+      <section class="mode-block" aria-labelledby="h-song">
+        <div class="mode-head"><h2 id="h-song">곡 연주</h2></div>
         <ol class="songs" id="song-list"></ol>
       </section>
 
       <section class="mode-block" aria-labelledby="h-band">
         <div class="mode-head"><h2 id="h-band">합주</h2></div>
-        <p class="mode-desc">한 페이지마다 피아노 → 드럼 → 보컬 순서로 채우고, 세 악기를 합쳐 짧게 들려줘요. 악기마다 노트 배치가 달라요.</p>
+        <p class="mode-desc">한 페이지마다 피아노 → 드럼 → 보컬 순서로 30초씩 채우고, 세 악기를 합쳐 짧게 들려줘요. 악기마다 노트 배치가 달라요. 합주는 항상 정지 방식이에요.</p>
         <ol class="songs" id="band-list"></ol>
       </section>
 
       <section class="mode-block" aria-labelledby="h-free">
         <div class="mode-head"><h2 id="h-free">자유 작곡</h2></div>
-        <p class="mode-desc">빈 피아노 롤에 블록을 놓는 자리가 그대로 음이 돼요. 시간 제한 없이 페이지를 넘기며 곡을 만들어요.</p>
+        <p class="mode-desc">빈 피아노 롤에 블록을 놓는 자리가 그대로 음이 돼요. 30초 정지에서는 시간 제한 없이 페이지를 넘기고, 자동 이동에서는 흘러가는 대로 즉흥 연주해요. 다 만들면 완성을 눌러요.</p>
         <button type="button" class="song free-card" id="btn-free">
           <span class="free-icon" aria-hidden="true"><i></i><i></i><i></i></span>
           <span class="song-text">

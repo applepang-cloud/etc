@@ -36,8 +36,9 @@ const el = {
 
 const PLAY_DESC = {
   stop: '한 페이지를 30초 동안 멈춰 두고 채워요. 시간이 끝나거나 다 채우면 그 페이지만 흘러가며 연주하고, 마지막에 전체 연주를 들려줘요.',
-  flow: '곡 템포대로 쉬지 않고 흘러가요. 재생선에 닿기 전에 흘러오는 노트 위에 블록을 놓아야 해요.',
+  flow: '멈추지 않고 곡 템포대로 계속 흘러가요. 재생선에 닿기 전에 흘러오는 자리에 블록을 놓아야 해요.',
 };
+const MODE_NAME = { stop: '정지 모드', flow: '자동 이동 모드', band: '합주', free: '자유 작곡' };
 
 const audio = new PianoAudio();
 let playMode = store.get('pb.play', 'stop');
@@ -58,10 +59,12 @@ const game = new Game($('#board'), audio, {
     if (mode === 'band') title += ` · ${s.part ? s.part.name : '합주'}`;
     let sub;
     if (s.finale) sub = '전체 연주';
-    else if (mode === 'flow') sub = '흐름 모드';
+    else if (mode === 'flow' || (mode === 'free' && current.auto)) sub = '자동 이동';
     else if (mode !== 'free') sub = `${s.scene + 1} / ${s.scenes} 페이지`;
     setText(el.hudTitle, 'title', sub ? `${title}  ·  ${sub}` : title);
-    setText(el.hudScore, 'score', mode === 'free' ? `${s.scene + 1} 페이지` : s.score.toLocaleString('ko-KR'));
+    let big = s.score.toLocaleString('ko-KR');
+    if (mode === 'free') big = current.auto ? `${s.bar}마디` : `${s.scene + 1} 페이지`;
+    setText(el.hudScore, 'score', big);
 
     const showTimer = s.timer != null;
     if (el.hudTimer.hidden === showTimer) el.hudTimer.hidden = !showTimer;
@@ -147,7 +150,9 @@ for (const b of document.querySelectorAll('[data-play]')) {
 $('#btn-free').addEventListener('click', () => startGame(FREE_SONG, 'free'));
 
 function startGame(song, mode) {
-  current = { song, mode };
+  // 자유 작곡도 진행 방식(정지/자동 이동)을 따른다. 합주는 항상 정지 방식.
+  const auto = mode === 'free' && playMode === 'flow';
+  current = { song, mode, auto };
   lastStats = null;
   audio.ensure();
   el.menu.hidden = true;
@@ -155,7 +160,7 @@ function startGame(song, mode) {
   el.result.hidden = true;
   el.flowLabel.textContent = mode === 'free' ? '다음 페이지' : '바로 연주';
   for (const k of Object.keys(shown)) delete shown[k];
-  game.start(song, mode);
+  game.start(song, mode, { auto });
 }
 
 function openMenu() {
@@ -209,7 +214,7 @@ function showResult(stats, again = false) {
     if (isBest) store.set(key, { score: stats.score, stars: stats.stars });
   }
 
-  const modeName = { stop: '정지 모드', flow: '흐름 모드', band: '합주', free: '자유 작곡' }[stats.mode];
+  const modeName = MODE_NAME[stats.mode] + (free && current.auto ? ' · 자동 이동' : '');
   $('#result-song').textContent = free ? modeName : `${stats.song.title} · ${modeName}`;
   $('#result-stars').hidden = free;
   document.querySelectorAll('#result-stars .star').forEach((s, i) => s.classList.toggle('on', i < stats.stars));
@@ -218,8 +223,8 @@ function showResult(stats, again = false) {
   if (!again) $('#result-best').hidden = !isBest;
 
   if (free) {
-    const sec = Math.round(stats.scenes * FREE_SONG.sceneSteps * FREE_SONG.stepSec);
-    $('#result-stats').innerHTML = stat('페이지', stats.scenes) + stat('길이', `${sec}초`);
+    const sec = Math.round(stats.length * FREE_SONG.stepSec);
+    $('#result-stats').innerHTML = stat('마디', Math.ceil(stats.length / FREE_SONG.stepsPerBar)) + stat('길이', `${sec}초`);
   } else {
     let html =
       stat('정확도', `${Math.round(stats.accuracy * 100)}%`) +

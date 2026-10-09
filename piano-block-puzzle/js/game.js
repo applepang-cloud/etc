@@ -7,6 +7,7 @@
 //         그 페이지만 흘러가며 연주하고 다음 페이지로. 모든 페이지가 끝나면 전체 연주.
 //   band  합주 모드: 페이지마다 피아노 → 드럼 → 보컬을 정지 모드로 채우고 그 페이지를 합주로 들려준다.
 //   free  자유 작곡: 목표 노트 없이 놓은 블록이 그대로 음이 된다. 시간 제한 없음.
+//         정지(페이지 단위)와 자동 이동(계속 흘러가며 놓기) 둘 다 된다.
 //
 // 시계는 AudioContext.currentTime. 일시정지하면 컨텍스트를 멈춰 시계(제한 시간 포함)도 멈춘다.
 
@@ -20,7 +21,8 @@ const SCHEDULE_AHEAD = 0.1; // 오디오 예약 선행 시간(초)
 const RULER_H = 18;
 const MAX_ROWS = 40;
 const MAX_CELL = 44;
-const OFFSCREEN_COLS = 3; // 흐름 모드에서 화면 오른쪽 밖으로 걸쳐 놓을 수 있는 칸 수
+const OFFSCREEN_COLS = 3; // 자동 이동 중 화면 오른쪽 밖으로 걸쳐 놓을 수 있는 칸 수
+const FREE_LIVE_STEPS = 256; // 자유 작곡 자동 이동의 최대 길이(칸)
 
 const POINTS_GOOD = 100;
 const POINTS_BAD = 50;
@@ -176,12 +178,14 @@ export class Game {
 
   // ---------- 게임 흐름 ----------
 
-  start(song, mode) {
+  // opts.auto: 자유 작곡을 자동 이동으로 진행
+  start(song, mode, opts = {}) {
     this.song = song;
     this.mode = mode;
     this.free = mode === 'free';
+    this.live = mode === 'flow' || (this.free && !!opts.auto);
     this.stepSec = song.stepSec;
-    this.length = this.free ? song.sceneSteps : song.length;
+    this.length = this.free ? (this.live ? FREE_LIVE_STEPS : song.sceneSteps) : song.length;
     this.parts = song.parts.map((src) => ({
       inst: INSTRUMENTS[src.inst],
       src,
@@ -227,7 +231,7 @@ export class Game {
   }
 
   buildQueue() {
-    if (this.mode === 'flow') return [{ type: 'flow', live: true, parts: this.parts, view: 'part', part: this.parts[0] }];
+    if (this.live) return [this.liveFlow(0)];
     if (this.free) return this.freeScene(0);
     const q = [];
     for (let k = 0; k < this.sceneCount; k++) {
@@ -243,6 +247,10 @@ export class Game {
     }
     q.push(...this.finaleQueue());
     return q;
+  }
+
+  liveFlow(startAt) {
+    return { type: 'flow', live: true, startAt, parts: this.parts, view: 'part', part: this.parts[0] };
   }
 
   freeScene(k) {
@@ -318,7 +326,7 @@ export class Game {
       if (ph.live) {
         const spb = this.song.stepsPerBeat;
         const lead = Math.max(this.song.stepsPerBar, Math.ceil((this.aheadCols * 0.6) / spb) * spb);
-        ph.from = -lead;
+        ph.from = ph.startAt - lead;
         ph.to = this.length;
       } else {
         ph.from = ph.finale ? 0 : ph.scene * ss;
@@ -414,6 +422,7 @@ export class Game {
       badCells: this.badCells,
       sceneClears: this.sceneClears,
       scenes: this.sceneCount * (this.free ? 1 : this.parts.length),
+      length: this.length,
       blocks,
       covered,
       total,
@@ -434,6 +443,17 @@ export class Game {
   completeFree() {
     if (!this.free || this.state !== 'playing') return false;
     const ph = this.phase;
+    if (ph?.live) {
+      let maxCol = -1;
+      for (const k of this.part.occupied.keys()) maxCol = Math.max(maxCol, Math.floor(k / 128));
+      if (maxCol < 0) return false;
+      const bar = this.song.stepsPerBar;
+      this.length = Math.ceil((maxCol + 1) / bar) * bar;
+      this.scenesDone = Math.ceil(this.length / this.song.sceneSteps);
+      this.queue = this.finaleQueue();
+      this.next();
+      return true;
+    }
     let scenes = this.scenesDone;
     if (ph && ph.type === 'place') {
       for (const k of this.part.occupied.keys()) {
@@ -454,8 +474,14 @@ export class Game {
   // 자유 작곡 결과 화면에서 이어서 만들기
   continueFree() {
     this.state = 'playing';
-    this.length = (this.scenesDone + 1) * this.song.sceneSteps;
-    this.queue = this.freeScene(this.scenesDone);
+    if (this.live) {
+      const startAt = this.length;
+      this.length = startAt + FREE_LIVE_STEPS;
+      this.queue = [this.liveFlow(startAt)];
+    } else {
+      this.length = (this.scenesDone + 1) * this.song.sceneSteps;
+      this.queue = this.freeScene(this.scenesDone);
+    }
     this.lastTs = null;
     this.next();
   }
@@ -538,7 +564,8 @@ export class Game {
       scenes: this.sceneCount,
       finale: !!ph?.finale,
       live: !!ph?.live,
-      progress: ph?.live ? Math.max(0, Math.min(1, this.pos / this.length)) : null,
+      progress: ph?.live && !this.free ? Math.max(0, Math.min(1, this.pos / this.length)) : null,
+      bar: Math.max(1, Math.floor(this.pos / this.song.stepsPerBar) + 1),
     });
   }
 
@@ -550,6 +577,11 @@ export class Game {
       this.playColumn(ph.processed, ph.t0 + (ph.processed - ph.from) * this.stepSec, ph);
     }
     if (now < ph.end) return;
+    if (this.free && ph.live) {
+      // 자동 이동 최대 길이까지 갔으면 지금까지 만든 곡으로 완성
+      if (!this.completeFree()) this.finish();
+      return;
+    }
     if (this.free && !ph.finale) {
       this.scenesDone = ph.scene + 1;
       this.length = (this.scenesDone + 1) * this.song.sceneSteps;
@@ -1355,8 +1387,8 @@ export class Game {
     let text = '';
     if (ph.type === 'place' && ph.scene === 0 && this.now - (ph.deadline - SCENE_TIME) < 5) {
       text = this.free ? '블록을 놓으면 그 자리의 음이 연주돼요' : '아래 블록을 끌어서 초록 노트 위에 놓으세요';
-    } else if (ph.live && this.pos < this.song.stepsPerBar) {
-      text = '아래 블록을 끌어서 흘러오는 노트 위에 놓으세요';
+    } else if (ph.live && this.pos < (ph.startAt || 0) + this.song.stepsPerBar) {
+      text = this.free ? '블록을 놓으면 재생선이 지날 때 그 음이 연주돼요' : '아래 블록을 끌어서 흘러오는 노트 위에 놓으세요';
     }
     if (!text) return;
     const g = this.g;
