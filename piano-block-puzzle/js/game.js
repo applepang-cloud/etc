@@ -5,7 +5,8 @@
 //   flow  흐름 모드: 곡 템포대로 계속 흘러가고, 흘러오는 노트 위에 블록을 놓는다.
 //   stop  정지 모드: 한 페이지를 30초 동안 멈춰 두고 블록을 놓는다. 시간이 끝나면(또는 다 채우면)
 //         그 페이지만 흘러가며 연주하고 다음 페이지로. 모든 페이지가 끝나면 전체 연주.
-//   band  합주 모드: 페이지마다 피아노 → 드럼 → 보컬을 정지 모드로 채우고 그 페이지를 합주로 들려준다.
+//   band  합주 모드: 페이지마다 피아노 → 드럼 → 보컬을 채우고 그 페이지를 합주로 들려준다.
+//         30초 정지(악기마다 멈춰서 채움)와 자동 이동(악기마다 페이지가 흘러오는 동안 채움) 둘 다 된다.
 //   free  자유 작곡: 목표 노트 없이 놓은 블록이 그대로 음이 된다. 시간 제한 없음.
 //         정지(페이지 단위)와 자동 이동(계속 흘러가며 놓기) 둘 다 된다.
 //
@@ -183,7 +184,9 @@ export class Game {
     this.song = song;
     this.mode = mode;
     this.free = mode === 'free';
-    this.live = mode === 'flow' || (this.free && !!opts.auto);
+    this.auto = !!opts.auto;
+    // live: 곡 전체가 한 번에 흘러가는 진행 (곡 연주 자동 이동, 자유 작곡 자동 이동)
+    this.live = mode === 'flow' || (this.free && this.auto);
     this.stepSec = song.stepSec;
     this.length = this.free ? (this.live ? FREE_LIVE_STEPS : song.sceneSteps) : song.length;
     this.parts = song.parts.map((src) => ({
@@ -234,11 +237,18 @@ export class Game {
     if (this.live) return [this.liveFlow(0)];
     if (this.free) return this.freeScene(0);
     const q = [];
+    const pageLive = this.mode === 'band' && this.auto;
     for (let k = 0; k < this.sceneCount; k++) {
       for (const part of this.parts) {
-        q.push({ type: 'intro', scene: k, part });
-        q.push({ type: 'place', scene: k, part });
-        q.push({ type: 'flow', scene: k, parts: [part], view: 'part', part });
+        if (pageLive) {
+          // 합주 자동 이동: 악기 페이지가 오른쪽에서 흘러오는 동안 블록을 놓는다
+          q.push({ type: 'intro', scene: k, part, page: true });
+          q.push({ type: 'flow', live: true, page: true, scene: k, parts: [part], view: 'part', part });
+        } else {
+          q.push({ type: 'intro', scene: k, part });
+          q.push({ type: 'place', scene: k, part });
+          q.push({ type: 'flow', scene: k, parts: [part], view: 'part', part });
+        }
       }
       if (this.parts.length > 1) {
         q.push({ type: 'intro', scene: k, band: true });
@@ -247,6 +257,12 @@ export class Game {
     }
     q.push(...this.finaleQueue());
     return q;
+  }
+
+  // 흘러오기 시작할 때 재생선 앞에 미리 보이는 칸 수 (박 단위로 맞춤, 최소 한 마디)
+  leadSteps(frac) {
+    const spb = this.song.stepsPerBeat;
+    return Math.max(this.song.stepsPerBar, Math.ceil((this.aheadCols * frac) / spb) * spb);
   }
 
   liveFlow(startAt) {
@@ -307,7 +323,7 @@ export class Game {
         ph.until = now + 0.9;
         this.part = ph.part;
         this.view = 'part';
-        this.pos = ph.scene * ss;
+        this.pos = ph.scene * ss - (ph.page ? this.leadSteps(0.9) : 0);
         if (this.parts.length > 1) this.showBanner(ph.part.inst.name, `${ph.scene + 1} / ${n} 페이지`, ph.part.inst.color, 0.9);
         else this.showBanner(`${ph.scene + 1} 페이지`, `전체 ${n}페이지`, ph.part.inst.color, 0.9);
       }
@@ -323,18 +339,23 @@ export class Game {
     } else if (ph.type === 'hold') {
       ph.until = now + ph.dur;
     } else if (ph.type === 'flow') {
-      if (ph.live) {
-        const spb = this.song.stepsPerBeat;
-        const lead = Math.max(this.song.stepsPerBar, Math.ceil((this.aheadCols * 0.6) / spb) * spb);
-        ph.from = ph.startAt - lead;
+      if (ph.live && ph.page) {
+        ph.s0 = ph.scene * ss;
+        ph.s1 = Math.min(this.length, ph.s0 + ss);
+        ph.from = ph.s0 - this.leadSteps(0.9);
+        ph.to = ph.s1;
+        ph.playFrom = ph.s0;
+      } else if (ph.live) {
+        ph.from = ph.startAt - this.leadSteps(0.6);
         ph.to = this.length;
+        ph.playFrom = ph.startAt;
       } else {
         ph.from = ph.finale ? 0 : ph.scene * ss;
         ph.to = ph.finale ? this.length : Math.min(this.length, ph.from + ss);
       }
       ph.processed = ph.from - 1;
       ph.t0 = now + (ph.finale || ph.live ? 0.25 : 0.08);
-      ph.end = ph.t0 + (ph.to - ph.from) * this.stepSec + (ph.finale || ph.live ? 1.2 : 0.1);
+      ph.end = ph.t0 + (ph.to - ph.from) * this.stepSec + (ph.finale || (ph.live && !ph.page) ? 1.2 : 0.1);
       this.view = ph.view;
       if (ph.part) this.part = ph.part;
       this.pos = ph.from;
@@ -356,7 +377,9 @@ export class Game {
     if (!ph || this.state !== 'playing') return null;
     if (ph.type === 'place') return [ph.s0, ph.s1 - 1];
     if (ph.type === 'flow' && ph.live) {
-      return [Math.max(0, ph.processed + 1), Math.min(this.length - 1, Math.floor(this.pos + this.aheadCols) + OFFSCREEN_COLS)];
+      const lo = Math.max(0, ph.processed + 1, ph.page ? ph.s0 : 0);
+      const hi = Math.min(ph.page ? ph.s1 - 1 : this.length - 1, Math.floor(this.pos + this.aheadCols) + OFFSCREEN_COLS);
+      return lo <= hi ? [lo, hi] : null;
     }
     return null;
   }
@@ -366,7 +389,7 @@ export class Game {
     const range = this.placeRange();
     if (!range || this.free) return [];
     const part = this.part;
-    const from = this.phase.live ? Math.max(range[0] + 2, 0) : range[0];
+    const from = this.phase.live && !this.phase.page ? Math.max(range[0] + 2, 0) : range[0];
     const out = [];
     for (let c = from; c <= range[1]; c++) {
       for (const n of part.byCol[c] || []) {
@@ -577,6 +600,12 @@ export class Game {
       this.playColumn(ph.processed, ph.t0 + (ph.processed - ph.from) * this.stepSec, ph);
     }
     if (now < ph.end) return;
+    if (ph.page && !this.free && this.sceneComplete()) {
+      this.score += POINTS_CLEAR;
+      this.sceneClears++;
+      this.judge('ALL CLEAR', `+${POINTS_CLEAR}`);
+      this.audio.sparkle();
+    }
     if (this.free && ph.live) {
       // 자동 이동 최대 길이까지 갔으면 지금까지 만든 곡으로 완성
       if (!this.completeFree()) this.finish();
@@ -605,9 +634,12 @@ export class Game {
 
   // 재생선이 c열에 닿기 직전에 한 번 호출. 덮인 노트(자유 작곡은 놓인 블록)만 소리를 낸다.
   playColumn(c, t, ph) {
-    if (c < 0) {
+    const start = ph.playFrom || 0;
+    if (c < start) {
+      // 흘러오기 전 마지막 한 마디는 박자 카운트
       const { stepsPerBeat: spb, stepsPerBar: bar } = this.song;
-      if (c >= -bar && ((c % spb) + spb) % spb === 0) this.audio.tick(t, c === -bar);
+      const d = c - start;
+      if (d >= -bar && ((d % spb) + spb) % spb === 0) this.audio.tick(t, d === -bar);
       return;
     }
     for (const part of ph.parts) {
@@ -963,15 +995,17 @@ export class Game {
     const g = this.g;
     const { W, kbW, phX } = this;
     const h = bottom - top;
-    if (this.phase?.type === 'place') {
-      // 정지 모드: 이번 페이지 밖은 어둡게
-      const x1 = this.xOf(this.phase.s1);
-      if (x1 < W) {
-        g.fillStyle = COL.offScene;
-        g.fillRect(x1, top, W - x1, h);
-        g.fillStyle = 'rgba(255,226,122,0.6)';
-        g.fillRect(Math.round(x1) - 1, top, 2, h);
-      }
+    const ph = this.phase;
+    if (ph && (ph.type === 'place' || ph.page)) {
+      // 이번 페이지 밖은 어둡게
+      g.fillStyle = COL.offScene;
+      const x1 = this.xOf(ph.s1);
+      if (x1 < W) g.fillRect(x1, top, W - x1, h);
+      const x0 = this.xOf(ph.s0);
+      if (x0 > kbW) g.fillRect(kbW, top, Math.min(W, x0) - kbW, h);
+      g.fillStyle = 'rgba(255,226,122,0.6)';
+      if (x1 < W) g.fillRect(Math.round(x1) - 1, top, 2, h);
+      if (x0 > kbW && x0 < W) g.fillRect(Math.round(x0) - 1, top, 2, h);
     }
     g.fillStyle = COL.past;
     g.fillRect(kbW, top, phX - kbW, h);

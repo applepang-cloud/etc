@@ -60,7 +60,7 @@ const game = new Game($('#board'), audio, {
     let sub;
     if (s.finale) sub = '전체 연주';
     else if (mode === 'flow' || (mode === 'free' && current.auto)) sub = '자동 이동';
-    else if (mode !== 'free') sub = `${s.scene + 1} / ${s.scenes} 페이지`;
+    else if (mode !== 'free') sub = `${current.auto ? '자동 이동 · ' : ''}${s.scene + 1} / ${s.scenes} 페이지`;
     setText(el.hudTitle, 'title', sub ? `${title}  ·  ${sub}` : title);
     let big = s.score.toLocaleString('ko-KR');
     if (mode === 'free') big = current.auto ? `${s.bar}마디` : `${s.scene + 1} 페이지`;
@@ -100,10 +100,10 @@ new ResizeObserver(([entry]) => {
 
 // ---------- 메뉴 ----------
 
-const bestKey = (song, mode) => `pb.best.${song.id}.${mode}`;
+const bestKey = (song, mode, auto = false) => `pb.best.${song.id}.${mode}${auto ? '-auto' : ''}`;
 
 function songButton(song, mode) {
-  const best = store.get(bestKey(song, mode), null);
+  const best = store.get(bestKey(song, mode, mode === 'band' && playMode === 'flow'), null);
   const li = document.createElement('li');
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -150,8 +150,8 @@ for (const b of document.querySelectorAll('[data-play]')) {
 $('#btn-free').addEventListener('click', () => startGame(FREE_SONG, 'free'));
 
 function startGame(song, mode) {
-  // 자유 작곡도 진행 방식(정지/자동 이동)을 따른다. 합주는 항상 정지 방식.
-  const auto = mode === 'free' && playMode === 'flow';
+  // 합주와 자유 작곡도 진행 방식(30초 정지 / 자동 이동)을 따른다.
+  const auto = (mode === 'free' || mode === 'band') && playMode === 'flow';
   current = { song, mode, auto };
   lastStats = null;
   audio.ensure();
@@ -208,13 +208,13 @@ function showResult(stats, again = false) {
   const free = stats.mode === 'free';
   let isBest = false;
   if (!free && !again) {
-    const key = bestKey(stats.song, stats.mode);
+    const key = bestKey(stats.song, stats.mode, current.auto);
     const prev = store.get(key, null);
     isBest = stats.score > 0 && (!prev || stats.score > prev.score);
     if (isBest) store.set(key, { score: stats.score, stars: stats.stars });
   }
 
-  const modeName = MODE_NAME[stats.mode] + (free && current.auto ? ' · 자동 이동' : '');
+  const modeName = MODE_NAME[stats.mode] + (current.auto ? ' · 자동 이동' : '');
   $('#result-song').textContent = free ? modeName : `${stats.song.title} · ${modeName}`;
   $('#result-stars').hidden = free;
   document.querySelectorAll('#result-stars .star').forEach((s, i) => s.classList.toggle('on', i < stats.stars));

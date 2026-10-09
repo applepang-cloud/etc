@@ -56,6 +56,13 @@ function buildSong(def) {
   return { ...def, parts, length };
 }
 
+// 새 곡들의 멜로디 (곡 연주와 합주에서 같이 쓴다)
+const MARY_Q = 'E4 D4 C4 D4 | E4 E4 E4:2 | D4 D4 D4:2 | E4 G4 G4:2 | E4 D4 C4 D4 | E4 E4 E4 E4 | D4 D4 E4 D4 | C4:4';
+const LIGHTLY_Q = 'G4 E4 E4:2 | F4 D4 D4:2 | C4 D4 E4 F4 | G4 G4 G4:2 | G4 E4 E4:2 | F4 D4 D4:2 | C4 E4 G4 G4 | C4:4';
+const LIGHTLY_Q2 = 'D4 D4 D4 D4 | D4 E4 F4:2 | E4 E4 E4 E4 | E4 F4 G4:2 | G4 E4 E4:2 | F4 D4 D4:2 | C4 E4 G4 G4 | C4:4';
+// 4분음표 그리드 멜로디를 8분음표 그리드로 (길이 두 배)
+const double = (src) => src.replace(/([A-G][#b]?\d|R)(?::(\d+))?/g, (_, n, len) => `${n}:${(Number(len) || 1) * 2}`);
+
 const SONG_DEFS = [
   {
     id: 'twinkle',
@@ -89,6 +96,45 @@ const SONG_DEFS = [
          F4 F4 F4 F4 | F4 E4 E4 E4 | E4 D4 D4 E4 | D4:2 G4:2 |
          E4 E4 E4:2 | E4 E4 E4:2 | E4 G4 C4 D4 | E4:4 |
          F4 F4 F4 F4 | F4 E4 E4 E4 | G4 G4 F4 D4 | C4:4`,
+      ],
+    },
+  },
+  {
+    id: 'mary',
+    title: '비행기',
+    composer: '미국 동요 · Mary Had a Little Lamb',
+    level: 1,
+    stepSec: 0.5,
+    stepsPerBeat: 1,
+    stepsPerBar: 4,
+    sceneSteps: 12,
+    parts: { piano: [MARY_Q] },
+  },
+  {
+    id: 'lightly',
+    title: '나비야',
+    composer: '독일 민요 · Hänschen klein',
+    level: 1,
+    stepSec: 0.5,
+    stepsPerBeat: 1,
+    stepsPerBar: 4,
+    sceneSteps: 12,
+    parts: { piano: [`${LIGHTLY_Q} | ${LIGHTLY_Q2}`] },
+  },
+  {
+    id: 'birthday',
+    title: '생일 축하합니다',
+    composer: 'M. J. 힐 · P. S. 힐',
+    level: 2,
+    stepSec: 0.36, // 8분음표 = 1칸, 3/4박자
+    stepsPerBeat: 2,
+    stepsPerBar: 6,
+    sceneSteps: 12,
+    parts: {
+      piano: [
+        `R:4 G3 G3 | A3:2 G3:2 C4:2 | B3:4 G3 G3 | A3:2 G3:2 D4:2 | C4:4 G3 G3 |
+         G4:2 E4:2 C4:2 | B3:2 A3:2 F4 F4 | E4:2 C4:2 D4:2 | C4:6`,
+        'R:6 | C3:6 | B2:6 | B2:6 | C3:6 | C3:6 | F3:6 | C3:2 R:2 B2:2 | C3:6',
       ],
     },
   },
@@ -160,6 +206,93 @@ const BAND_DEFS = [
         'KK R:3 KK R:3 | KK R:2 KK KK R:3 | KK R:3 KK R:3 | KK R:3 KK R:3',
       ],
       vocal: ['C4:2 C4:2 G4:2 G4:2 | A4:2 A4:2 G4:4 | F4:2 F4:2 E4:2 E4:2 | D4:2 D4:2 C4:4'],
+    },
+  },
+  {
+    id: 'band-mary',
+    title: '비행기 밴드',
+    composer: '미국 동요 · 록 비트 편곡',
+    level: 1,
+    band: true,
+    stepSec: 0.32,
+    stepsPerBeat: 2,
+    stepsPerBar: 8,
+    sceneSteps: 8,
+    parts: {
+      piano: [
+        'C3:4 G3:4 | C3:4 G3:4 | G3:4 D3:4 | C3:4 G3:4 | C3:4 G3:4 | C3:4 G3:4 | G3:4 D3:4 | C3:8',
+        `R:2 E4+G4:2 R:2 E4+G4:2 | R:2 E4+G4:2 R:2 E4+G4:2 | R:2 D4+G4:2 R:2 D4+G4:2 | R:2 E4+G4:2 R:2 E4+G4:2 |
+         R:2 E4+G4:2 R:2 E4+G4:2 | R:2 E4+G4:2 R:2 E4+G4:2 | R:2 D4+G4:2 R:2 D4+G4:2 | R:2 E4+G4:6`,
+      ],
+      drums: [
+        'CR R:7 | R:8 | R:8 | R:8 | CR R:7 | R:8 | R:8 | CR R:7',
+        `R HH HH HH HH HH HH HH | HH HH HH HH HH HH HH HH | HH HH HH HH HH HH HH HH | HH HH HH HH R:4 |
+         R HH HH HH HH HH HH HH | HH HH HH HH HH HH HH HH | HH HH HH HH HH HH HH HH | R:8`,
+        'R:8 | R:8 | R:8 | R:6 TH TL | R:8 | R:8 | R:8 | R:8',
+        `R:2 SN R:3 SN R | R:2 SN R:3 SN R | R:2 SN R:3 SN R | R:2 SN R SN SN R:2 |
+         R:2 SN R:3 SN R | R:2 SN R:3 SN R | R:2 SN R:3 SN R | R:8`,
+        `KK R:3 KK R:3 | KK R:2 KK KK R:3 | KK R:3 KK R:3 | KK R:3 KK R:3 |
+         KK R:3 KK R:3 | KK R:2 KK KK R:3 | KK R:3 KK R:3 | KK R:7`,
+      ],
+      vocal: [double(MARY_Q)],
+    },
+  },
+  {
+    id: 'band-lightly',
+    title: '나비야 밴드',
+    composer: '독일 민요 · 팝 편곡',
+    level: 2,
+    band: true,
+    stepSec: 0.32,
+    stepsPerBeat: 2,
+    stepsPerBar: 8,
+    sceneSteps: 8,
+    parts: {
+      piano: [
+        `C3:2 G3:2 C3:2 G3:2 | G3:2 D3:2 G3:2 D3:2 | C3:2 G3:2 C3:2 G3:2 | C3:2 G3:2 C3:2 G3:2 |
+         C3:2 G3:2 C3:2 G3:2 | G3:2 D3:2 G3:2 D3:2 | C3:2 G3:2 C3:2 G3:2 | C3:8`,
+        'E4+G4:8 | D4+F4:8 | E4+G4:8 | E4+G4:8 | E4+G4:8 | D4+F4:8 | E4+G4:8 | E4+G4:8',
+      ],
+      drums: [
+        'CR R:7 | R:8 | R:8 | R:8 | CR R:7 | R:8 | R:8 | CR R:7',
+        `R:2 HH R HH R HH R | HH R HH R HH R HH R | HH R HH R HH R HH R | HH R HH R R:4 |
+         R:2 HH R HH R HH R | HH R HH R HH R HH R | HH R HH R HH R HH R | R:8`,
+        'R:8 | R:8 | R:8 | R:4 TH TH TL TL | R:8 | R:8 | R:8 | R:8',
+        `R:2 SN R:3 SN R | R:2 SN R:3 SN R | R:2 SN R:3 SN R | R:2 SN R:5 |
+         R:2 SN R:3 SN R | R:2 SN R:3 SN R | R:2 SN R:3 SN R | R:8`,
+        `KK R:3 KK R:3 | KK R:3 KK R:3 | KK R:3 KK R:3 | KK R:3 KK R:3 |
+         KK R:3 KK R:3 | KK R:3 KK R:3 | KK R:3 KK R:3 | KK R:7`,
+      ],
+      vocal: [double(LIGHTLY_Q)],
+    },
+  },
+  {
+    id: 'band-birthday',
+    title: '생일 축하 밴드',
+    composer: 'M. J. 힐 · P. S. 힐 · 왈츠 편곡',
+    level: 2,
+    band: true,
+    stepSec: 0.34,
+    stepsPerBeat: 2,
+    stepsPerBar: 6, // 3/4박자
+    sceneSteps: 6,
+    parts: {
+      piano: [
+        'R:6 | C3:2 R:4 | G3:2 R:4 | G3:2 R:4 | C3:2 R:4 | C3:2 R:4 | F3:2 R:4 | C3:2 R:2 G3:2 | C3:6',
+        `R:6 | R:2 E4+G4:2 E4+G4:2 | R:2 D4+F4:2 D4+F4:2 | R:2 D4+F4:2 D4+F4:2 | R:2 E4+G4:2 E4+G4:2 |
+         R:2 E4+G4:2 E4+G4:2 | R:2 F4+A4:2 F4+A4:2 | R:2 E4+G4:2 R:2 | E4+G4:6`,
+      ],
+      drums: [
+        'R:6 | CR R:5 | R:6 | R:6 | R:6 | CR R:5 | R:6 | R:6 | CR R:5',
+        `R:4 HH HH | R:2 HH R HH R | R:2 HH R HH R | R:2 HH R HH R | R:2 HH R:3 |
+         R:2 HH R HH R | R:2 HH R HH R | R:2 HH R HH R | R:6`,
+        'R:6 | R:6 | R:6 | R:6 | R:4 SN SN | R:6 | R:6 | R:2 SN R SN R | R:6',
+        'R:6 | KK R:5 | KK R:5 | KK R:5 | KK R:5 | KK R:5 | KK R:5 | KK R:3 KK R | KK R:5',
+      ],
+      vocal: [
+        `R:4 G4 G4 | A4:2 G4:2 C5:2 | B4:4 G4 G4 | A4:2 G4:2 D5:2 | C5:4 G4 G4 |
+         G5:2 E5:2 C5:2 | B4:2 A4:2 F5 F5 | E5:2 C5:2 D5:2 | C5:6`,
+      ],
     },
   },
 ];
