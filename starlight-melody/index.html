@@ -2784,6 +2784,7 @@ function hub() {
   G.mode = 'sim'; G.simLock = true; stopLoop();
   if (S.week === FESTIVAL && !S.live) return festival();
   if (EVENTS[S.week] && !S.seen[S.week]) return schoolEvent();
+  if (S.week === CONCERT && !S.seen[CONCERT]) return winterConcert();
   const heart = heartDue(); if (heart) return heartEvent(...heart);
   const bday = HEROINES.find(h => S.met[h] && BIRTHDAYS[h] && BIRTHDAYS[h].week === S.week && !(S.bday && S.bday[h])); if (bday) return birthday(bday);
   if (!S.tutHub) { S.tutHub = true; showHub(true); return scene('me', ['#…좋아, 이제부터 1년. 한 주에 할 수 있는 일은 세 번이다.', '#연습으로 실력을 키우고, 둘러보기로 보컬을 찾고, 만나러 가서 이야기를 나눈다.', '#친해지면 합주로 같이 곡을 완성하고, 주말엔 데이트도 할 수 있다.', '#무리하면 컨디션이 떨어진다. 지치면 하루 쉬자.', '#10월엔 학교 축제. 그리고 2월 종업식 날 밤에는… 옥상에 별이 뜬다.'], hub, '시작 ▸'); }
@@ -2837,6 +2838,20 @@ function spend() { // one action used; the week turns over after three
 }
 const PLACE_BG = { ria: 'rooftop', yuna: 'musicroom', hana: 'gym', sora: 'library', arin: 'market', sena: 'broadcast' };
 const EVENT_BG = { 3: 'gym', 7: 'sakura', 9: 'library', 12: 'sports', 14: 'rain', 19: 'rooftop', 21: 'beach', 23: 'fireworks', 26: 'chuseok', 28: 'stage', 30: 'stage', 32: 'musicroom', 35: 'snow', 40: 'christmas', 41: 'sunrise', 46: 'cafe', 47: 'graduation' };
+/* --- 2월 1주 겨울 별빛 콘서트: the second song gets its own stage --- */
+const CONCERT = 45;
+function winterConcert() {
+  S.seen[CONCERT] = true; showHub(false); UI.strip = false; UI.bg = 'stage'; bgm('festival'); sfx('event'); UI.stageLabel = `${weekLabel(S.week)} · 겨울 별빛 콘서트`;
+  const h = HEROINES.filter(k => S.met[k] && SIM[k].song2 && S.bars2[k] >= 5).sort((a, b) => S.aff[b] - S.aff[a])[0];
+  const intro = ['#2월, 겨울 별빛 콘서트. 강당 창밖으로 눈이 내리고 있었다.', '#축제 때보다 작은 무대. 그래도 객석은 응원봉으로 가득했다.'];
+  if (!h) return scene('me', intro.concat(['#올해는 객석에서 다른 팀의 무대를 봤다.', '#…우리 두 번째 곡이 완성됐다면, 저기 서 있었을 텐데.']), hub, '이번 주로 ▸');
+  scene('me', intro.concat([`#${wa(CAST[h].name)} 무대에 올랐다. 이번엔 우리 두 번째 곡.`]), () => {
+    selectSong(SIM[h].song2); setChar(h); UI.strip = true; UI.crowd = true; UI.live = true;
+    G.live = { who: h, heat: 85, start: 85, gain: 0, decay: 0, penalty: 0, extra: 0, cheered: 3, armed: false, done: true, grade: 'S' }; // crowd only, no scoring
+    G.afterSong = () => { liveEnd(); UI.bg = 'stage'; like(h, 10); scene('me', ['#노래가 끝나자, 눈 내리는 소리마저 박수처럼 들렸다.'], hub, '이번 주로 ▸'); };
+    playSong();
+  }, '무대로 ▸');
+}
 const BUMP = ['#복도 모퉁이에서 누군가와 부딪칠 뻔했다.', '#매점 앞 줄에서 아는 얼굴을 발견했다.', '#하굣길 버스 정류장에서 우연히 마주쳤다.', '#계단을 내려가는데 누가 내 이름을 불렀다.'];
 function encounter(h) { // a chance meeting: free, short, a little affection
   showHub(false); UI.strip = false; expr.base = 'idle'; UI.bg = null;
