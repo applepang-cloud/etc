@@ -2011,7 +2011,7 @@ const persist = () => store.save(P);
 window.claude?.hot?.snapshot?.(() => ({ progress: P }));
 
 /* ---------- game state ---------- */
-const G = { char: 'ria', mode: 'title', stage: 0, cells: null, sol: null, misses: 0, tool: 'fill', playing: false, muted: (() => { try { return localStorage.getItem('starlight-muted') === '1'; } catch (e) { return false; } })(), songBar: 0 };
+const G = { char: 'ria', mode: 'title', stage: 0, cells: null, sol: null, misses: 0, tool: 'fill', playing: false, fast: (() => { try { return localStorage.getItem('starlight-fast') === '1'; } catch (e) { return false; } })(), muted: (() => { try { return localStorage.getItem('starlight-muted') === '1'; } catch (e) { return false; } })(), songBar: 0 };
 SONGS.forEach(sg => sg.stages.concat(sg.encore || []).forEach(s => { s.sol = s.lanes.map(l => [...s.pattern[l]].map(c => c === 'x')); }));
 const clueOf = line => { const r = []; let n = 0; line.forEach(v => { if (v) n++; else if (n) { r.push(n); n = 0; } }); if (n) r.push(n); return r.length ? r : [0]; };
 
@@ -2413,7 +2413,7 @@ function checkClear() {
 
 /* ---------- dialogue ---------- */
 function say(text, quick, actions) {
-  const T = UI.talk; T.text = text; T.t0 = performance.now(); T.quick = reduceMotion || !!quick; T.blip = 0;
+  const T = UI.talk; T.text = text; T.t0 = performance.now(); T.quick = reduceMotion || !!quick || G.fast; T.blip = 0;
   needFont(text); if (actions) { T.actions = actions; focusKey = null; actions.forEach(a => needFont(a[0])); }
   srSay(text); speakVoice(G.char, text);
   if (HEROINES.includes(G.char) && text && !text.startsWith('▼')) { const m = moodOf(text); if (m) emote(m[0], m[1]); }
@@ -2546,6 +2546,7 @@ function cycleLead() {
   const keys = Object.keys(LEADS), cur = leadKind(); G.lead = keys[(keys.indexOf(cur) + 1) % keys.length]; initAudio();
   if (ac) lead(leadKind(), 76, ac.currentTime + 0.01, 0.9, master); toast('멜로디 악기: ' + LEADS[leadKind()]);
 }
+function toggleFast() { G.fast = !G.fast; UI.talk.quick = UI.talk.quick || G.fast; try { localStorage.setItem('starlight-fast', G.fast ? '1' : '0'); } catch (e) {} }
 function toggleMute() {
   G.muted = !G.muted; if (master) master.gain.value = G.muted ? 0 : 0.55; if (G.muted && voiceEl) { voiceEl.pause(); voiceEl = null; }
   bgmHold(); try { localStorage.setItem('starlight-muted', G.muted ? '1' : '0'); } catch (e) {}
@@ -3051,7 +3052,7 @@ function mainMenu() {
   titleCycle = setInterval(() => { if (G.mode !== 'title') return clearInterval(titleCycle); k = (k + 1) % HEROINES.length; setChar(HEROINES[k]); }, 2600);
   const save = simStore.load(), ends = Object.keys(simStore.endings()).filter(k => HEROINES.includes(k)).length;
   say(`봄부터 겨울까지 1년. 여섯 명의 보컬 중, 누구와 별빛 아래 서게 될까? (연애 엔딩 ${ends}/6)`, true, [
-    ['새 게임\n1년의 이야기', () => { clearInterval(titleCycle); simStart(); }],
+    ['새 게임\n1년의 이야기', () => { clearInterval(titleCycle); if (!save) return simStart(); say(`저장된 이야기(${save.name} · ${save.v === 2 ? weekLabel(Math.min(WEEKS, save.week)) : '예전 저장'})가 지워져요. 새로 시작할까요?`, true, [['새로 시작', simStart], ['← 돌아가기', mainMenu, true]]); }],
     save ? ['이어 하기\n' + save.name + ' · ' + (save.v === 2 ? (save.week > WEEKS ? '종업식' : weekLabel(save.week)) : '예전 저장'), () => { clearInterval(titleCycle); S = migrateSim(save); CAST.me.name = S.name; G.char = null; S.week > WEEKS ? finalEnding() : hub(); }] : ['이어 하기\n저장 없음', () => toast('저장된 이야기가 없어요.'), true],
     ['자유 연주\n곡 골라 풀기', () => { clearInterval(titleCycle); freePlay(); }, true],
     ['풀이 연습\n숫자 맞추는 요령', () => { clearInterval(titleCycle); selectSong('lesson'); openStage(0); }, true],
@@ -3097,15 +3098,20 @@ function render(now) {
   placeNameInput();
 }
 
-function drawTop() {
-  cx.save(); if ('letterSpacing' in cx) cx.letterSpacing = '1.5px';
-  txt('★ STARLIGHT', PADX, 18, font(13, true), COL.pink); cx.font = font(13, true); const w1 = cx.measureText('★ STARLIGHT ').width;
-  txt('MELODY', PADX + w1, 18, font(13, true), COL.gold); const brandW = w1 + cx.measureText('MELODY').width;
-  cx.restore();
+function drawTop() { // brand on the title only; elsewhere the bar carries where you are, fast text and sound
+  let left = PADX;
+  if (G.mode === 'title') {
+    cx.save(); if ('letterSpacing' in cx) cx.letterSpacing = '1.5px';
+    txt('★ STARLIGHT', PADX, 18, font(13, true), COL.pink); cx.font = font(13, true); const w1 = cx.measureText('★ STARLIGHT ').width;
+    txt('MELODY', PADX + w1, 18, font(13, true), COL.gold); left = PADX + w1 + cx.measureText('MELODY').width + 12;
+    cx.restore();
+  }
   const label = G.muted ? '소리 켜기' : '소리 끄기', bw = Math.ceil(mw(label, font(13))) + 18, bx = VW - PADX - bw;
   drawBtn('mute', bx, 6, bw, 24, toggleMute, 'icon', label, null, { f: font(13) });
-  const room = bx - 10 - (PADX + brandW + 12);
-  if (room > 20) txt(ellipsize(UI.stageLabel, font(13), room), bx - 10, 18, font(13), COL.dim, 'right');
+  const fl = G.fast ? '빠르게 ✓' : '빠르게', fw = Math.ceil(mw(fl, font(13))) + 16, fx = bx - 6 - fw;
+  drawBtn('fast', fx, 6, fw, 24, toggleFast, G.fast ? 'primary' : 'icon', fl, null, { f: font(13) });
+  const room = fx - 10 - left;
+  if (room > 20) txt(ellipsize(UI.stageLabel, font(13), room), G.mode === 'title' ? fx - 10 : left, 18, font(13), COL.dim, G.mode === 'title' ? 'right' : 'left');
 }
 
 function talkLayout(w, compact) {
