@@ -136,7 +136,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
   <section class="scene" id="scene" data-size="big" aria-label="리아">
     <canvas class="sky" id="sky" aria-hidden="true"></canvas>
     <div class="spot" aria-hidden="true"></div>
-    <canvas id="heroine" width="64" height="72" role="img" aria-label="헤드폰을 쓴 분홍 트윈테일 소녀 리아"></canvas>
+    <canvas id="heroine" width="96" height="108" role="img" aria-label="헤드폰을 쓴 분홍 트윈테일 소녀 리아"></canvas>
     <div class="talk">
       <span class="who">리아</span>
       <p id="line" aria-live="polite"></p>
@@ -180,91 +180,155 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
 </div>
 
 <script>
-// Procedural pixel-art portrait. drawHeroine(expr) -> {w, h, px: array of '#rrggbb' | null}
+// Procedural pixel-art portrait v2 (96x108). drawHeroine(opt) -> {w, h, px: array of '#rrggbb' | null}
 (function (root) {
-const W = 64, H = 72, CX = 32;
-const COL = {
-  line: '#3a1d3f',
-  skin: '#ffe6d8', skinS: '#f7bfae', skinD: '#c98478',
-  hair: '#ff9cc9', hairS: '#e76aa8', hairD: '#a83d79', hairH: '#ffd6ea',
-  cloth: '#f6f3ff', clothS: '#cfc8ee', clothD: '#7e74b8',
-  navy: '#34407e', navyS: '#262f61', navyD: '#1a1f44',
-  red: '#ff5b78', redS: '#d63a5c',
-  phone: '#4a4e6e', phoneS: '#33364f', phoneH: '#7b80a6',
-  cup: '#62dcff', cupS: '#2fa6d6', led: '#ff7ab8',
-  tie: '#ffd45e', tieS: '#e6a92e',
-  eyeL: '#2b1f4a', irisA: '#2e4fa3', irisB: '#4b8fe8', irisC: '#9be6ff', pupil: '#1a1846', hi: '#ffffff', scl: '#fbf8ff',
-  blush: '#ff9fb4', mouth: '#b93a58', tongue: '#ff8a9c', sweat: '#9fe3ff'
-};
-const R = { tails: 1, back: 2, body: 3, collar: 4, ribbon: 5, neck: 6, face: 7, band: 8, cup: 9, bangs: 10, tie: 11 };
-const PAL = {
-  1: ['hair', 'hairS', 'hairD'], 2: ['hair', 'hairS', 'hairD'], 3: ['cloth', 'clothS', 'clothD'], 4: ['navy', 'navyS', 'navyD'],
-  5: ['red', 'redS', 'line'], 6: ['skin', 'skinS', 'skinD'], 7: ['skin', 'skinS', 'skinD'], 8: ['phone', 'phoneS', 'line'],
-  9: ['cup', 'cupS', 'line'], 10: ['hair', 'hairS', 'hairD'], 11: ['tie', 'tieS', 'line']
+const W = 96, H = 108, CX = 48;
+const C = {
+  hairL: '#3c1840', skinL: '#b8656c', clothL: '#4a3a86',
+  skin: '#ffe9de', skinS: '#fbc8b8', skinS2: '#eea596', skinH: '#fff6f0', nose: '#f0a898',
+  h0: '#ffd0e8', h1: '#ffa6d2', h2: '#f27fbf', h3: '#c95aa6', h4: '#a98af0', h5: '#8a6be0', hH: '#fff0f8',
+  cl0: '#ffffff', cl1: '#f1ecff', cl2: '#cfc5f2', navy: '#3a3f8f', navyS: '#2b2f6e', pink: '#ff6f9c', pinkS: '#d94a7d',
+  ph: '#f6f2ff', phS: '#c9bfee', phD: '#8f83c9', cup: '#ff9ccf', cupS: '#e06aa8', led: '#7ff3ff', ear: '#ffc0df',
+  gold: '#ffd76a', goldS: '#e0a63a',
+  lash: '#3a1a46', lash2: '#6e3a78', scl: '#fdfaff', sclS: '#dcd2f2', irA: '#2a2f86', irB: '#3e62d6', irC: '#4f9be8', irD: '#7fd4f6', irE: '#b8f4ff', pupil: '#191548', hi: '#ffffff',
+  blush: '#ffb0c0', blush2: '#ff94ac', mouth: '#a8364f', mouthIn: '#d9506a', tongue: '#ff8c9c', sweat: '#a6ecff'
 };
 const ell = (x, y, cx, cy, rx, ry) => ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1;
-// face: round skull + soft pointed jaw
-const face = (x, y) => { if (y < 32) return ell(x, y, CX, 32, 14, 15); if (y > 51) return false; const t = (y - 32) / 19; return Math.abs(x - CX) <= 14 * Math.pow(Math.max(0, 1 - Math.pow(t, 3)), 0.6); };
-const skull = (x, y) => ell(x, y, CX, 30, 17.5, 17);
-// bang strands: [topX, tipX, tipY, halfWidthTop]
-const STRANDS = [[14, 15, 54, 3.6], [17, 18, 45, 3.4], [21, 22, 34, 3.4], [25, 25, 35, 3], [29, 30, 31, 3], [33, 33, 37, 2.8], [37, 39, 32, 3], [42, 42, 35, 3.4], [47, 46, 45, 3.4], [50, 49, 54, 3.6]];
-function strand(x, y, s) { const [tx, px, py, hw] = s, top = 16; if (y < top || y > py) return false; const t = (y - top) / (py - top); const cx = tx + (px - tx) * t; const w = hw * Math.pow(1 - t, 0.8); return Math.abs(x - cx) <= w; }
-const bangs = (x, y) => (skull(x, y) && y < 25) || STRANDS.some(s => strand(x, y, s) && (skull(x, y) || y > 28));
-const back = (x, y) => (ell(x, y, CX, 31, 19.5, 19)) || (y >= 31 && y <= 56 && Math.abs(x - CX) <= 18.5 - Math.max(0, y - 40) * 0.25);
-function tails(x, y) { const top = 18, bot = 70; if (y < top || y > bot) return false; const t = (y - top) / (bot - top);
-  for (const side of [-1, 1]) { const cx = CX + side * (21 + 3.5 * Math.sin(t * Math.PI * 0.9)); const hw = 5.6 * (1 - t) ** 0.65 + 0.9; if (Math.abs(x - cx) <= hw) return true; } return false; }
-const tie = (x, y) => [-1, 1].some(s => ell(x, y, CX + s * 21.5, 20, 3.2, 2.6));
-const neck = (x, y) => y >= 46 && y <= 57 && Math.abs(x - CX) <= 4;
-const body = (x, y) => y >= 55 && Math.abs(x - CX) <= Math.min(23, 7 + (y - 55) * 2.4 + Math.min(6, Math.max(0, y - 57) * 1.5));
-const collar = (x, y) => body(x, y) && y <= 66 && !(Math.abs(x - CX) <= Math.max(0, 6 - (y - 55) * 0.8) && y < 63) && Math.abs(x - CX) <= 8 + (y - 55) * 1.5;
-const ribbon = (x, y) => (ell(x, y, CX - 3.5, 62, 3.5, 2.3) || ell(x, y, CX + 3.5, 62, 3.5, 2.3) || (Math.abs(x - CX) <= 1 && y >= 61 && y <= 63)) || ([[-1, 0], [1, 0]].some(([s]) => Math.abs(x - (CX + s * 2.5 + s * (y - 64) * 0.5)) <= 1 && y >= 64 && y <= 68));
-const band = (x, y) => { const d = Math.hypot(x - CX, (y - 31) * 1.02); return d >= 19 && d <= 21.2 && y < 28; };
-const cup = (x, y) => [-1, 1].some(s => ell(x, y, CX + s * 19.5, 32, 3.6, 5.6));
-const LAYERS = [[R.tails, tails], [R.back, back], [R.body, body], [R.collar, collar], [R.ribbon, ribbon], [R.neck, neck], [R.face, face], [R.bangs, bangs], [R.band, band], [R.cup, cup], [R.tie, tie]];
+const R = { tailB: 1, back: 2, body: 3, collar: 4, frill: 5, neck: 6, face: 7, bangs: 8, ahoge: 9, band: 10, cup: 11, ear: 12, tie: 13, ribbon: 14, brooch: 15 };
+// ---- shapes ----
+const face = (x, y) => { if (y < 48) return ell(x, y, CX, 48, 20.5, 22); if (y > 76) return false; const t = (y - 48) / 28.5; return Math.abs(x - CX) <= 20.5 * Math.pow(Math.max(0, 1 - Math.pow(t, 3.2)), 0.62); };
+const skull = (x, y) => ell(x, y, CX, 45, 26, 25.5);
+// bang strands: [rootX, tipX, tipY, width, bend]
+const STR = [[22, 21, 80, 5, -2], [26, 27, 66, 4.5, -1], [30, 32, 53, 4.5, 1], [35, 36, 56, 4, 1], [40, 41, 50, 4, 0.5], [45, 47, 57, 4, 0], [50, 51, 51, 4, -0.5], [55, 58, 55, 4, -1], [60, 63, 52, 4.5, -1], [66, 68, 66, 4.5, 1], [72, 75, 80, 5, 2]];
+function strand(x, y, s) { const [rx, tx, ty, w, bend] = s, top = 22; if (y < top || y > ty) return false; const t = (y - top) / (ty - top);
+  const cx = rx + (tx - rx) * t + bend * Math.sin(t * Math.PI) * 2.2; const hw = w * Math.pow(1 - t, 0.75) + 0.3; return Math.abs(x - cx) <= hw; }
+const CLUMPS = [[29, 52, 0.30], [37.5, 56, 0.26], [47, 53, 0.24], [56.5, 57, 0.26], [65, 52, 0.30]];
+const bangLine = x => Math.max(40, ...CLUMPS.map(([cx, ty, k]) => ty - k * (x - cx) ** 2));
+const sideLock = (x, y) => [[-1, 23.5], [1, 72.5]].some(([s, rx]) => { if (y < 40 || y > 84) return false; const t = (y - 40) / 44; const cx = rx + s * (Math.sin(t * Math.PI) * 1.5 - t * 1.5); return Math.abs(x - cx) <= 4.2 * Math.pow(1 - t, 0.7) + 0.4; });
+const bangs = (x, y) => (skull(x, y) && (y < 37 || y < bangLine(x))) || sideLock(x, y);
+const ahoge = (x, y) => { if (y < 6 || y > 22) return false; const t = (y - 6) / 16; const cx = 50 + Math.sin(t * 3.4 + 0.4) * 7 * (1 - t * 0.5); return Math.abs(x - cx) <= 0.9 + t * 1.8; };
+const back = (x, y) => ell(x, y, CX, 46, 29, 28.5) || (y >= 46 && y <= 86 && Math.abs(x - CX) <= 27.5 - Math.max(0, y - 58) * 0.35);
+function tailInfo(x, y) { const top = 28, bot = 106; if (y < top || y > bot) return null; const t = (y - top) / (bot - top);
+  for (const side of [-1, 1]) { const cx = CX + side * (31 + 7 * Math.sin(t * Math.PI * 0.85) - t * 3); const hw = 8.2 * Math.pow(1 - t, 0.6) + 1 + 1.2 * Math.sin(t * 9) * (1 - t);
+    if (Math.abs(x - cx) <= hw) return { side, t, rel: (x - cx) / hw * side }; } return null; }
+const tails = (x, y) => !!tailInfo(x, y);
+const tie = (x, y) => [-1, 1].some(s => { const dx = x - (CX + s * 31.5), dy = y - 30, a = Math.atan2(dy, dx) + s * 0.3, r = Math.hypot(dx, dy); return r <= 2.6 + 2.2 * Math.max(0, Math.cos(5 * a - Math.PI / 2)) ** 1.5; });
+const neck = (x, y) => y >= 70 && y <= 86 && Math.abs(x - CX) <= 5 + Math.max(0, y - 80) * 0.6;
+const body = (x, y) => y >= 82 && Math.abs(x - CX) <= Math.min(36, 10 + (y - 82) * 3.2);
+const collar = (x, y) => body(x, y) && y <= 98 && Math.abs(x - CX) <= 12 + (y - 82) * 2.3 && !(y < 95 && Math.abs(x - CX) <= Math.max(0, 9.5 - (y - 82) * 0.75));
+const frill = (x, y) => body(x, y) && y >= 97 && y <= 101 && (Math.abs(x - CX) > 8) && ((y - 97) < 2 + Math.round(Math.sin(x * 1.1)));
+const ribbon = (x, y) => ell(x, y, CX - 5, 92, 5, 3.4) || ell(x, y, CX + 5, 92, 5, 3.4) || [-1, 1].some(s => Math.abs(x - (CX + s * (3 + (y - 94) * 0.6))) <= 1.4 && y >= 94 && y <= 103);
+const brooch = (x, y) => { const dx = x - CX, dy = y - 92; const a = Math.atan2(dy, dx), r = Math.hypot(dx, dy); return r <= 2.6 + 1.3 * Math.cos(5 * a + Math.PI / 2); };
+const band = (x, y) => { const d = Math.hypot(x - CX, (y - 46) * 1.03); return d >= 28 && d <= 31 && y < 40; };
+const cup = (x, y) => [-1, 1].some(s => ell(x, y, CX + s * 28.5, 48, 5.2, 8.2));
+const ear = (x, y) => [-1, 1].some(s => { const bx = CX + s * 19, by = 21; const u = (x - bx) * s, v = by - y; return v >= -1 && v <= 11 && Math.abs(u - v * 0.35) <= 5.2 * (1 - v / 11.5); });
+const LAYERS = [[R.tailB, tails], [R.back, back], [R.body, body], [R.collar, collar], [R.frill, frill], [R.ribbon, ribbon], [R.brooch, brooch], [R.neck, neck], [R.face, face], [R.ear, ear], [R.bangs, bangs], [R.ahoge, ahoge], [R.band, band], [R.cup, cup], [R.tie, tie]];
+const LINE = { 1: 'hairL', 2: 'hairL', 3: 'clothL', 4: 'clothL', 5: 'clothL', 6: 'skinL', 7: 'skinL', 8: 'hairL', 9: 'hairL', 10: 'clothL', 11: 'clothL', 12: 'clothL', 13: 'hairL', 14: 'clothL', 15: 'hairL' };
+// hair colour ramp by height: pink on top, lavender toward tips
+let DX = 0;
+function hairCol(y, shade) { const lav = y > 89 || (y > 86 && (y + DX) % 2 === 0);
+  const ramp = lav ? ['h1', 'h4', 'h5', 'h5'] : ['h0', 'h1', 'h2', 'h3']; return C[ramp[Math.max(0, Math.min(3, shade))]]; }
 
-const EYE = { // left eye (outer corner on the left); mirrored for the right eye
-  open: ['..LLLLL.', '.LLLLLLL', 'LLaaaaaL', 'Lawwaa.L', 'Lawpp a.'.replace(' ', 'p'), 'Labppb.L', 'Labbbb.L', '.bccccb.', '.bccccb.', '..LLLL..'],
-  happy: ['........', '........', '........', '..LLLL..', '.L....L.', 'L......L', '........', '........', '........', '........'],
-  oops: ['........', '........', 'LL......', '..LLL...', '.....LL.', '..LLL...', 'LL......', '........', '........', '........'],
-  closed: ['........', '........', '........', '........', '........', '........', 'LLLLLLLL', '.L....L.', '........', '........']
+function eyes(px, eye) {
+  const set = (x, y, k) => { if (x >= 0 && y >= 0 && x < W && y < H) px[y * W + x] = C[k]; };
+  for (const s of [-1, 1]) {
+    const ex = CX + s * 13.5, ey = 60; // eye centre
+    const P = (dx, k) => dx * s; // mirror helper
+    if (eye === 'open') {
+      for (let y = ey - 10; y <= ey + 9; y++) for (let x = Math.floor(ex - 9); x <= Math.ceil(ex + 9); x++) {
+        const fx = x + 0.5, fy = y + 0.5, u = (fx - ex) * s, v = fy - ey; // u>0 = inner side
+        const inOpen = ell(u, v, 0, 0.8, 7.4, 8.4) && v > -7.4;
+        const lidTop = -7.4 + Math.abs(u) * 0.08;
+        if (!inOpen) {
+          const outer = ell(u, v, 0, 0.6, 8.8, 10.2);
+          if (outer && v < -2.5 + (u < -5 ? 2.5 : 0)) set(x, y, v < -8.6 || u < -3 ? 'lash' : 'lash2'); // curved upper lash
+          else if (u < -6 && u > -10.5 && v > -8.6 + (-u - 6) * -0.5 && v < -5.6 + (-u - 6) * -0.55) set(x, y, 'lash'); // wing
+          else if (outer && v > 7 && u < -1 && u > -6) set(x, y, 'lash2'); // lower lash
+          continue;
+        }
+        const ir = Math.hypot((u - 0.5) / 5.9, (v - 1) / 7.9) * 6.3;
+        if (ir <= 6.3) {
+          let k = v < -3.5 ? 'irA' : v < -0.5 ? 'irB' : v < 2.5 ? 'irC' : v < 4.6 ? 'irD' : 'irE';
+          if (ir > 5.6) k = 'irA';
+          if (Math.hypot((u - 0.5) / 2.3, (v + 0.2) / 3.4) <= 1) k = 'pupil';
+          if (v < lidTop + 1.4) k = 'irA';
+          set(x, y, k);
+        } else set(x, y, v < lidTop + 1.4 ? 'sclS' : 'scl');
+      }
+      // highlights
+      const hx = Math.round(ex + s * -2.5 - (s < 0 ? 1 : 0)), hy = ey - 4;
+      [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1], [1, 2], [0, 2]].forEach(([a, b]) => set(hx + a, hy + b, 'hi'));
+      const sx = Math.round(ex + s * 3), sy = ey + 3; [[0, 0], [1, 0], [0, 1], [1, 1]].forEach(([a, b]) => set(sx + a, sy + b, 'hi'));
+      set(Math.round(ex + s * 2.5), ey - 3, 'irE');
+    } else {
+      // closed shapes: happy (^), closed (u), oops (> <)
+      const pts = [];
+      if (eye === 'happy') for (let u = -6; u <= 6; u += 0.25) pts.push([u, -Math.sqrt(Math.max(0, 36 - u * u)) * 0.55 + 2]);
+      if (eye === 'closed') for (let u = -6.5; u <= 6.5; u += 0.25) pts.push([u, Math.sqrt(Math.max(0, 42 - u * u)) * 0.35 + 1]);
+      if (eye === 'oops') for (let t = 0; t <= 1; t += 0.03) { pts.push([-5 + t * 9, -4 + t * 4]); pts.push([-5 + t * 9, 4 - t * 4]); }
+      pts.forEach(([u, v]) => { const x = Math.round(ex + u * s - 0.5), y = Math.round(ey + v); set(x, y, 'lash'); set(x, y + 1, 'lash'); });
+      if (eye === 'closed') [[-7, 2], [-8, 3]].forEach(([u, v]) => set(Math.round(ex + u * s), ey + v, 'lash'));
+    }
+  }
+}
+const MOUTH = {
+  idle: ['L....L', '.LLLL.'],
+  smile: ['LLLLLLL', '.LmmmL.', '.LmttL.', '..LLL..'],
+  sing: ['.LLL.', 'LmmmL', 'LmttL', 'LmttL', '.LLL.'],
+  oops: ['L.L.L.L', '.L.L.L.'],
 };
-const ECOL = { L: 'eyeL', a: 'irisA', b: 'irisB', c: 'irisC', p: 'pupil', w: 'hi', '.': null, s: 'scl' };
-const MOUTH = { idle: ['L..L', '.LL.'], smile: ['LLLLL', '.LmL.', '..L..'].map(r => r), sing: ['.LL.', 'LmmL', 'LttL', '.LL.'], oops: ['L.L.L', '.L.L.'], o: ['.L.', 'LmL', '.L.'] };
-const MCOL = { L: 'mouth', m: 'mouth', t: 'tongue', '.': null };
-
 function drawHeroine(opt) {
   opt = opt || {}; const eye = opt.eye || 'open', mouth = opt.mouth || 'idle';
   const reg = new Array(W * H).fill(0);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) for (const [id, f] of LAYERS) if (f(x + 0.5, y + 0.5)) reg[y * W + x] = id;
   const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? 0 : reg[y * W + x];
+  const ord = id => LAYERS.findIndex(l => l[0] === id);
+  const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const px = new Array(W * H).fill(null);
-  const order = id => LAYERS.findIndex(l => l[0] === id);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const id = at(x, y);
-    if (!id) { if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => at(x + dx, y + dy))) px[y * W + x] = COL.line; continue; }
-    const [b, s, d] = PAL[id]; let c = b;
-    const behind = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const n = at(x + dx, y + dy); return n && n !== id && order(n) < order(id) && !(id === R.neck && n === R.body) && !(id === R.ribbon) && !(id === R.collar && n === R.body); });
-    if (id === R.face || id === R.neck) { if (at(x, y - 1) === R.bangs || at(x, y - 2) === R.bangs || (id === R.neck && y < 51) || x > CX + 10) c = s; }
-    if (id === R.bangs) { if (at(x, y + 1) !== R.bangs || at(x, y + 2) !== R.bangs) c = s; const d2 = Math.hypot(x + 0.5 - CX, (y + 0.5 - 30) * 1.1); if (d2 > 11 && d2 < 13.2 && y < 25 && y > 14 && (x % 7) !== 3) c = COL.hairH; }
-    if (id === R.back && (y > 46 || Math.abs(x - CX) > 15)) c = s;
-    if (id === R.body && (x > CX + 14 || y > 69)) c = s; if (id === R.collar && (y === 65)) c = COL.cloth;
-    if (id === R.cup && x % 64 && ell(x + 0.5, y + 0.5, CX + (x > CX ? 19.5 : -19.5), 32, 1.6, 3)) c = s;
-    if (id === R.band && y < 13) c = COL.phoneH;
-    if (behind && id === R.bangs && at(x, y + 1) !== R.face) { px[y * W + x] = COL.hairS; continue; }
-    if (id === R.tails) { const t = (y - 18) / 52, side = x < CX ? -1 : 1, tc = CX + side * (21 + 3.5 * Math.sin(t * Math.PI * 0.9)), hw = 5.6 * (1 - t) ** 0.65 + 0.9, rel = (x + 0.5 - tc) / hw * side;
-      c = rel > 0.45 ? s : (rel > -0.35 && rel < -0.05 && y > 24 && y % 9 < 6) ? COL.hairH : (y > 56 ? s : b); }
-    px[y * W + x] = behind ? COL[d] : COL[c] || c;
+    const id = at(x, y); DX = x;
+    if (!id) { const n = N4.map(([a, b]) => at(x + a, y + b)).filter(Boolean); if (n.length) px[y * W + x] = C[LINE[Math.max(...n)]] || C.hairL; continue; }
+    const behind = N4.some(([a, b]) => { const n = at(x + a, y + b); return n && n !== id && ord(n) < ord(id); });
+    let c;
+    const hair = id === R.bangs || id === R.back || id === R.tailB || id === R.ahoge;
+    if (hair) {
+      let sh = 1;
+      if (id === R.back) sh = Math.abs(x - CX) > 22 || y > 70 ? 3 : 2;
+      if (id === R.tailB) { const ti = tailInfo(x + 0.5, y + 0.5); sh = ti.rel > 0.5 ? 3 : ti.rel < -0.55 ? 2 : 1; if (ti.rel > -0.38 && ti.rel < -0.12 && ((ti.t > 0.1 && ti.t < 0.22) || (ti.t > 0.42 && ti.t < 0.5))) { px[y * W + x] = C.hH; continue; } }
+      if (id === R.bangs) { const tip = at(x, y + 1) !== R.bangs || at(x, y + 2) !== R.bangs || at(x, y + 3) !== R.bangs; sh = tip ? 2 : ((x - CX) * 0.8 + (y - 30) * 0.9 > 14 ? 1 : 0); if (at(x + 1, y) !== R.bangs && at(x + 1, y) === R.face) sh = 2;
+        const d = Math.hypot(x + 0.5 - CX, (y + 0.5 - 45) * 1.12); if (d > 17 && d < 20.2 && y < 38 && y > 20 && (Math.floor(x / 3) % 3) !== 1) { px[y * W + x] = C.hH; continue; } }
+      if (id === R.ahoge) sh = 1;
+      c = hairCol(y, sh); if (behind && id !== R.ahoge) c = id === R.bangs && at(x, y + 1) !== R.face ? hairCol(y, 2) : C.h3;
+    } else if (id === R.face || id === R.neck) {
+      c = C.skin;
+      if (at(x, y - 1) === R.bangs || at(x, y - 2) === R.bangs) c = C.skinS;
+      if (at(x, y - 1) === R.bangs && at(x, y - 3) === R.bangs) c = C.skinS2;
+      if (x > CX + 15 && id === R.face) c = C.skinS;
+      if (id === R.neck) c = y < 77 ? C.skinS2 : C.skinS;
+      if (id === R.face && x < CX - 10 && y > 63 && y < 70 && x > CX - 17) c = C.skinH;
+      if (behind) c = C.skinL;
+    } else {
+      const M = { [R.body]: ['cl1', 'cl2'], [R.collar]: ['navy', 'navyS'], [R.frill]: ['cl0', 'cl2'], [R.ribbon]: ['pink', 'pinkS'], [R.brooch]: ['gold', 'goldS'],
+        [R.band]: ['ph', 'phS'], [R.cup]: ['cup', 'cupS'], [R.ear]: ['ph', 'phS'], [R.tie]: ['gold', 'goldS'] }[id];
+      c = C[M[0]];
+      if (id === R.body && (x > CX + 18 || y > 104)) c = C[M[1]];
+      if (id === R.collar && (y === 96 || y === 97)) c = C.cl0;
+      if (id === R.collar && x > CX + 14) c = C.navyS;
+      if (id === R.ribbon && (y > 94 || x > CX + 6)) c = C.pinkS;
+      if (id === R.cup) { const s = x > CX ? 1 : -1; if (ell(x + 0.5, y + 0.5, CX + s * 28.5, 48, 2.6, 4.5)) c = C.cupS; if (ell(x + 0.5, y + 0.5, CX + s * 28.5, 48, 1.1, 2)) c = C.led; }
+      if (id === R.ear) { const s = x > CX ? 1 : -1, u = (x + 0.5 - (CX + s * 19)) * s, v = 21 - (y + 0.5); if (Math.abs(u - v * 0.35) <= 2.4 * (1 - v / 11.5) && v > 0.5) c = C.ear; }
+      if (id === R.band && y < 18) c = C.cl0;
+      if (behind) c = C[LINE[id]] || C.clothL;
+    }
+    px[y * W + x] = c;
   }
-  const put = (x, y, key, map) => { const k = map[key]; if (k) px[y * W + x] = COL[k]; };
-  const E = EYE[eye];
-  E.forEach((row, j) => [...row].forEach((ch, i) => { put(19 + i, 35 + j, ch, ECOL); put(44 - i, 35 + j, ch, ECOL); }));
-  if (eye === 'open') { // sclera on inner side
-    for (let j = 3; j < 7; j++) { px[(35 + j) * W + 26] = COL.scl; px[(35 + j) * W + 37] = COL.scl; } }
-  // blush
-  for (const bx of [20, 40]) for (let i = 0; i < 3; i++) px[46 * W + bx + i * 2] = COL.blush;
-  const M = MOUTH[mouth], mx = CX - Math.floor(M[0].length / 2), my = 47 - (M.length > 2 ? 1 : 0);
-  M.forEach((row, j) => [...row].forEach((ch, i) => put(mx + i, my + j, ch, MCOL)));
-  if (opt.sweat) [[52, 20], [51, 21], [52, 21], [53, 21], [51, 22], [52, 22], [53, 22], [52, 23]].forEach(([x, y]) => px[y * W + x] = COL.sweat);
+  // nose + blush
+  px[67 * W + CX + 1] = C.nose;
+  for (const s of [-1, 1]) { const bx = CX + s * 14, by = 68; for (let y = by - 2; y <= by + 2; y++) for (let x = bx - 5; x <= bx + 5; x++) if (ell(x + 0.5, y + 0.5, bx, by, 5, 2) && px[y * W + x] && reg[y * W + x] === R.face) px[y * W + x] = ell(x + 0.5, y + 0.5, bx, by, 3, 1.2) ? C.blush2 : C.blush; }
+  eyes(px, eye);
+  const M = MOUTH[mouth], mx = CX - Math.floor(M[0].length / 2), my = 71 - (M.length > 3 ? 1 : 0);
+  M.forEach((row, j) => [...row].forEach((ch, i) => { const k = { L: 'mouth', m: 'mouthIn', t: 'tongue' }[ch]; if (k) px[(my + j) * W + mx + i] = C[k]; }));
+  if (opt.sweat) [[0, 0], [-1, 1], [0, 1], [1, 1], [-1, 2], [0, 2], [1, 2], [-1, 3], [0, 3], [1, 3], [0, 4]].forEach(([a, b]) => px[(30 + b) * W + 76 + a] = C.sweat);
   return { w: W, h: H, px };
 }
 root.drawHeroine = drawHeroine;
@@ -1493,13 +1557,13 @@ function renderHeroine(now) {
   if (!expr.temp && now < expr.sing) k = k === 'happy' ? 'singHappy' : 'sing';
   if (k === 'idle' && now > expr.nextBlink) { expr.blink = now + 130; expr.nextBlink = now + 2600 + Math.random() * 2600; }
   if (k === 'idle' && now < expr.blink) k = 'blink';
-  if (k !== lastFace) { hx.clearRect(0, 0, 64, 72); hx.putImageData(face(k), 0, 0); lastFace = k; }
+  if (k !== lastFace) { hx.clearRect(0, 0, 96, 108); hx.putImageData(face(k), 0, 0); lastFace = k; }
 }
 function sizeHeroine() {
   const big = $('scene').dataset.size === 'big';
   const avail = $('scene').clientWidth - 24;
-  const k = big ? Math.max(3, Math.min(5, Math.floor(Math.min(avail, 330) / 64))) : 2;
-  hc.style.width = 64 * k + 'px'; hc.style.height = 72 * k + 'px'; hc.style.setProperty('--px', k + 'px');
+  const k = big ? Math.max(2, Math.min(4, Math.floor(Math.min(avail, 330) / 96))) : 1.5;
+  hc.style.width = 96 * k + 'px'; hc.style.height = 108 * k + 'px'; hc.style.setProperty('--px', k + 'px');
   sizeSky();
 }
 
