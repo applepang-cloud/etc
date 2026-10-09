@@ -43,20 +43,24 @@
     intro: null,
     turn: 0,
     score: 0,
-    launcherX: C.W / 2,
-    nextX: null,
+    pad: { x: C.W / 2, w: C.PADDLE_W, flash: 0 }, // 발판 (paddle)
+    padW: C.PADDLE_W, // width the paddle grows toward
+    perLaunch: 1, // balls fired per launch
+    speedMult: 1, // ⚡ items, this turn only
     balls: [],
+    items: [], // falling ↔ capsules
     dir: null,
     world: null,
     toLaunch: 0,
     launchT: 0,
-    volleyT: 0,
+    turnT: 0,
     settle: 0,
     allClear: false,
     aim: null,
     aimAngle: -Math.PI / 2 + 0.2,
     keyDir: 0,
     pointer: null,
+    padDrag: false,
     play: null,
     keyFlash: {},
     particles: [],
@@ -81,11 +85,14 @@
     G.turn = 0;
     G.score = 0;
     G.balls = [];
+    G.items = [];
     G.toLaunch = 0;
-    G.nextX = null;
     G.aim = null;
     G.play = null;
-    G.launcherX = C.W / 2;
+    G.pad.x = C.W / 2;
+    G.pad.w = G.padW = C.PADDLE_W;
+    G.perLaunch = G.st.balls;
+    G.speedMult = 1;
     G.keyFlash = {};
     G.particles = [];
     G.floaters = [];
@@ -115,18 +122,22 @@
   }
 
   function world() {
-    return { x: G.x, rows: G.st.rows, melody: G.st.melody, noise: G.st.noise };
+    return { x: G.x, rows: G.st.rows, melody: G.st.melody, noise: G.st.noise, paddle: G.pad };
+  }
+
+  function movePaddle(x) {
+    G.pad.x = clamp(x, G.pad.w / 2, C.W - G.pad.w / 2);
   }
 
   function setAimAngle(a) {
     G.aimAngle = clamp(a, -Math.PI + MIN_ANG, -MIN_ANG);
     const b = { dx: Math.cos(G.aimAngle), dy: Math.sin(G.aimAngle) };
     core.fixDir(b);
-    G.aim = { valid: true, dx: b.dx, dy: b.dy, pts: core.traceAim(G.launcherX, C.LAUNCH_Y, b.dx, b.dy, world()) };
+    G.aim = { valid: true, dx: b.dx, dy: b.dy, pts: core.traceAim(G.pad.x, C.LAUNCH_Y, b.dx, b.dy, world()) };
   }
 
   function aimAt(p) {
-    const dx = p.x - G.launcherX, dy = p.y - C.LAUNCH_Y;
+    const dx = p.x - G.pad.x, dy = p.y - C.LAUNCH_Y;
     if (dy > -12) {
       G.aim = { valid: false };
       return;
@@ -141,14 +152,36 @@
     G.dir = { dx: G.aim.dx, dy: G.aim.dy };
     G.aim = null;
     G.turn++;
-    G.toLaunch = G.st.balls;
+    G.toLaunch = G.perLaunch;
     G.launchT = 0;
-    G.volleyT = 0;
+    G.turnT = 0;
     G.settle = 0;
-    G.nextX = null;
+    G.speedMult = 1;
     G.balls = [];
     G.allClear = false;
     G.mode = 'shoot';
+  }
+
+  function randomUp() {
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.6;
+    return { dx: Math.cos(a), dy: Math.sin(a) };
+  }
+
+  function giveItem(item, cx, cy) {
+    if (item === 'ball') {
+      // A new ball joins right away, and every later launch fires one more.
+      const d = randomUp();
+      G.balls.push({ x: cx, y: cy, dx: d.dx, dy: d.dy, active: true });
+      G.perLaunch = Math.min(C.MAX_BALLS, G.perLaunch + 1);
+      floater('공 +1', cx, cy - 18, core.ITEM_COLORS.ball);
+      SND.item();
+    } else if (item === 'speed') {
+      G.speedMult = Math.min(C.SPEED_ITEM_MAX, G.speedMult * C.SPEED_ITEM);
+      floater('속도 UP', cx, cy - 18, core.ITEM_COLORS.speed);
+      SND.item();
+    } else if (item === 'paddle') {
+      G.items.push({ type: 'paddle', x: cx, y: cy, t: 0 });
+    }
   }
 
   function onHit(kind, obj, b) {
@@ -162,6 +195,7 @@
         burst(cx, cy, obj.color);
         floater('+100', cx, cy, '#fff');
         SND.pop(obj.midi);
+        if (obj.item) giveItem(obj.item, cx, cy);
         if (!G.allClear && aliveCount() === 0) {
           G.allClear = true;
           setBanner('CLEAR!', 1.2, YELLOW);
@@ -170,6 +204,9 @@
         G.score += 10;
         SND.bump();
       }
+    } else if (kind === 'paddle') {
+      G.pad.flash = 1;
+      SND.paddle();
     } else if (kind === 'melody') {
       obj.flash = 1;
       flashKey(obj.midi, false);
@@ -182,52 +219,69 @@
     }
   }
 
+  // Balls speed up the longer a turn lasts, so every turn ends eventually.
+  const rampMult = () => Math.min(C.RAMP_CAP, 1 + C.RAMP * Math.floor(G.turnT / C.RAMP_EVERY));
+
+  function updateItems(dt) {
+    const p = G.pad;
+    G.items = G.items.filter((it) => {
+      it.t += dt;
+      it.y += C.ITEM_SPEED * dt;
+      const caught = it.y + 9 >= C.PADDLE_Y && it.y - 9 <= C.PADDLE_Y + C.PADDLE_H &&
+        Math.abs(it.x - p.x) <= p.w / 2 + 16;
+      if (caught) {
+        G.padW = Math.min(C.PADDLE_MAX_W, G.padW + C.PADDLE_GROW);
+        p.flash = 1;
+        floater('발판 UP', p.x, C.PADDLE_Y - 24, core.ITEM_COLORS.paddle);
+        SND.item();
+        return false;
+      }
+      return it.y < C.H + 20;
+    });
+  }
+
   function updateShoot(dt) {
-    G.volleyT += dt;
-    const mult = G.allClear ? 3 : G.volleyT < 4 ? 1 : Math.min(3, 1 + (G.volleyT - 4) * 0.4);
+    G.turnT += dt;
+    if (G.keyDir) movePaddle(G.pad.x + G.keyDir * 900 * dt);
     if (G.toLaunch > 0) {
-      G.launchT -= dt * mult;
+      G.launchT -= dt;
       while (G.toLaunch > 0 && G.launchT <= 0) {
-        G.balls.push({ x: G.launcherX, y: C.LAUNCH_Y, dx: G.dir.dx, dy: G.dir.dy, active: true });
+        G.balls.push({ x: G.pad.x, y: C.LAUNCH_Y, dx: G.dir.dx, dy: G.dir.dy, active: true });
         G.toLaunch--;
         G.launchT += 0.08;
         SND.launch();
       }
     }
-    const dist = C.BALL_SPEED * dt * mult;
-    let flying = 0;
-    for (const b of G.balls) {
-      if (b.active) {
-        if (core.stepBall(b, dist, G.world, onHit)) {
-          b.active = false;
-          if (G.nextX === null) G.nextX = clamp(b.x, C.BALL_R + 2, C.W - C.BALL_R - 2);
-        } else {
-          flying++;
-        }
-      } else if (G.nextX !== null) {
-        b.x += (G.nextX - b.x) * Math.min(1, dt * 14);
-      }
-    }
-    if (G.volleyT > 25) {
-      // Safety net: never let a volley run forever.
-      G.balls.forEach((b) => {
-        if (!b.active) return;
-        b.active = false;
-        b.y = C.LAUNCH_Y;
-        if (G.nextX === null) G.nextX = clamp(b.x, C.BALL_R + 2, C.W - C.BALL_R - 2);
-      });
+    if (G.allClear) {
+      G.balls = [];
+      G.items = [];
       G.toLaunch = 0;
     }
-    if (G.toLaunch === 0 && flying === 0) {
+    const dist = C.BALL_SPEED * rampMult() * G.speedMult * dt;
+    for (const b of G.balls) {
+      if (b.active && core.stepBall(b, dist, G.world, onHit)) {
+        b.active = false;
+        SND.lose();
+      }
+    }
+    G.balls = G.balls.filter((b) => b.active);
+    updateItems(dt);
+    if (G.turnT >= C.TURN_LIMIT && G.balls.length) {
+      // Time's up: the balls still in play vanish and the turn ends.
+      G.balls.forEach((b) => burst(b.x, b.y, '#ffffff'));
+      G.balls = [];
+      G.toLaunch = 0;
+      setBanner('TIME', 0.8, '#fff', 56);
+    }
+    if (G.toLaunch === 0 && !G.balls.length && !G.items.length) {
       G.settle += dt;
-      if (G.settle > 0.25) endVolley();
+      if (G.settle > 0.3) endVolley();
     }
   }
 
   function endVolley() {
     G.balls = [];
-    if (G.nextX !== null) G.launcherX = G.nextX;
-    G.nextX = null;
+    G.speedMult = 1;
     if (aliveCount() === 0) return startPlay(true);
     if (G.turn >= C.TURNS) return startPlay(false);
     // The board flows one step toward the playback line.
@@ -428,6 +482,10 @@
       if (G.banner.t >= G.banner.dur) G.banner = null;
     }
     G.shake = Math.max(0, G.shake - dt * 2);
+    // Paddle grows smoothly after a ↔ pickup.
+    G.pad.w += (G.padW - G.pad.w) * Math.min(1, dt * 8);
+    G.pad.flash = Math.max(0, G.pad.flash - dt * 4);
+    movePaddle(G.pad.x);
   }
 
   function update(dt) {
@@ -583,16 +641,83 @@
     ctx.strokeStyle = 'rgba(0,0,0,0.4)';
     ctx.lineWidth = 1;
     ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-    if (hp > 1) {
-      ctx.font = '700 ' + Math.min(15, h * 0.6) + 'px ' + FONT_U;
+    if (hp > 0) {
+      const label = String(hp);
+      ctx.font = '800 ' + Math.min(label.length > 1 ? 13 : 15, h * 0.6) + 'px ' + FONT_U;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.lineWidth = 3;
-      ctx.strokeStyle = 'rgba(0,0,0,0.45)';
-      ctx.strokeText(String(hp), x + w / 2, y + h / 2 + 1);
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+      ctx.strokeText(label, x + w / 2, y + h / 2 + 1);
       ctx.fillStyle = '#fff';
-      ctx.fillText(String(hp), x + w / 2, y + h / 2 + 1);
+      ctx.fillText(label, x + w / 2, y + h / 2 + 1);
     }
+    if (flash > 0) {
+      ctx.fillStyle = 'rgba(255,255,255,' + flash * 0.7 + ')';
+      ctx.fillRect(x, y, w, h);
+    }
+    ctx.restore();
+  }
+
+  // Item icons: ⊕ ball, ⚡ speed, ↔ paddle. s = icon size.
+  function drawItemIcon(type, cx, cy, s, color) {
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (type === 'ball') {
+      ctx.beginPath();
+      ctx.arc(cx - s * 0.12, cy + s * 0.12, s * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = Math.max(1.5, s * 0.12);
+      ctx.beginPath();
+      ctx.moveTo(cx + s * 0.3, cy - s * 0.42);
+      ctx.lineTo(cx + s * 0.3, cy - s * 0.06);
+      ctx.moveTo(cx + s * 0.12, cy - s * 0.24);
+      ctx.lineTo(cx + s * 0.48, cy - s * 0.24);
+      ctx.stroke();
+    } else if (type === 'speed') {
+      ctx.beginPath();
+      ctx.moveTo(cx + s * 0.1, cy - s * 0.5);
+      ctx.lineTo(cx - s * 0.32, cy + s * 0.06);
+      ctx.lineTo(cx - s * 0.02, cy + s * 0.06);
+      ctx.lineTo(cx - s * 0.12, cy + s * 0.5);
+      ctx.lineTo(cx + s * 0.32, cy - s * 0.08);
+      ctx.lineTo(cx + s * 0.02, cy - s * 0.08);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      const a = s * 0.46, hd = s * 0.2;
+      ctx.lineWidth = Math.max(1.5, s * 0.13);
+      ctx.beginPath();
+      ctx.moveTo(cx - a, cy);
+      ctx.lineTo(cx + a, cy);
+      ctx.moveTo(cx - a + hd, cy - hd);
+      ctx.lineTo(cx - a, cy);
+      ctx.lineTo(cx - a + hd, cy + hd);
+      ctx.moveTo(cx + a - hd, cy - hd);
+      ctx.lineTo(cx + a, cy);
+      ctx.lineTo(cx + a - hd, cy + hd);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Special blocks: dark tile, glowing border in the item colour, icon instead of a number.
+  function drawItemTile(x, y, w, h, item, flash, alpha) {
+    const color = core.ITEM_COLORS[item];
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 6 + 4 * Math.sin(G.time * 5);
+    ctx.fillStyle = '#202126';
+    ctx.fillRect(x, y, w, h);
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = color;
+    ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    drawItemIcon(item, x + w / 2, y + h / 2, Math.min(w, h) * 0.78, color);
     if (flash > 0) {
       ctx.fillStyle = 'rgba(255,255,255,' + flash * 0.7 + ')';
       ctx.fillRect(x, y, w, h);
@@ -611,7 +736,9 @@
       if (!c.alive) continue;
       const x = bx + c.col * CW + 1;
       if (x > C.W || x + CW < C.ROLL_LEFT) continue;
-      drawTile(x, C.ROLL_TOP + c.row * h + 1, CW - 2, h - 2, c.color, c.hp, c.flash, alpha * (c.passed ? 0.5 : 1));
+      const y = C.ROLL_TOP + c.row * h + 1, a = alpha * (c.passed ? 0.5 : 1);
+      if (c.item && !board.form) drawItemTile(x, y, CW - 2, h - 2, c.item, c.flash, a);
+      else drawTile(x, y, CW - 2, h - 2, c.color, board.form ? 0 : c.hp, c.flash, a);
     }
   }
 
@@ -691,15 +818,13 @@
     s.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = s;
     ctx.fillRect(0, C.ROLL_BOTTOM, C.W, 18);
-    if (G.mode === 'full' || (G.st && G.st.form)) return;
-    ctx.strokeStyle = 'rgba(255,255,255,0.13)';
-    ctx.setLineDash([6, 8]);
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, C.LAUNCH_Y + C.BALL_R + 3);
-    ctx.lineTo(C.W, C.LAUNCH_Y + C.BALL_R + 3);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    if (G.mode !== 'shoot') return;
+    // Turn timer: shrinks over TURN_LIMIT seconds.
+    const left = Math.max(0, 1 - G.turnT / C.TURN_LIMIT);
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.fillRect(0, C.ROLL_BOTTOM, C.W, 5);
+    ctx.fillStyle = left < 0.25 ? RED : 'rgba(255,255,255,0.75)';
+    ctx.fillRect(0, C.ROLL_BOTTOM, C.W * left, 5);
   }
 
   function drawBall(x, y) {
@@ -713,21 +838,69 @@
     ctx.restore();
   }
 
+  // 발판: a white piano key lying on its side.
+  function drawPaddle() {
+    const p = G.pad, x = p.x - p.w / 2, y = C.PADDLE_Y;
+    ctx.save();
+    ctx.shadowColor = p.flash > 0 ? 'rgba(255,214,90,' + (0.5 + p.flash * 0.5) + ')' : 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = p.flash > 0 ? 18 : 10;
+    ctx.shadowOffsetY = p.flash > 0 ? 0 : 4;
+    const g = ctx.createLinearGradient(0, y, 0, y + C.PADDLE_H);
+    g.addColorStop(0, '#ffffff');
+    g.addColorStop(1, '#d3d2cc');
+    roundRect(x, y, p.w, C.PADDLE_H, 5);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.restore();
+    // A black key on the paddle's centre marks where balls launch from.
+    roundRect(p.x - 7, y + 2, 14, C.PADDLE_H - 6, 2);
+    ctx.fillStyle = '#1b1c1f';
+    ctx.fill();
+  }
+
+  function drawFallingItems() {
+    for (const it of G.items) {
+      const color = core.ITEM_COLORS[it.type];
+      const wob = Math.sin(it.t * 6) * 0.12;
+      ctx.save();
+      ctx.translate(it.x, it.y);
+      ctx.rotate(wob);
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 14;
+      roundRect(-20, -10, 40, 20, 10);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      drawItemIcon(it.type, 0, 0, 22, '#1a1a1a');
+      ctx.restore();
+    }
+  }
+
   function drawLauncher() {
-    if (!G.st || G.st.form) return;
+    if (!G.st || G.st.form || G.mode === 'play' || G.mode === 'title' || G.mode === 'menu') return;
+    drawPaddle();
     const showRest = G.mode === 'intro' || G.mode === 'aim' || (G.mode === 'shoot' && G.toLaunch > 0);
     if (showRest) {
-      drawBall(G.launcherX, C.LAUNCH_Y);
-      const n = G.mode === 'shoot' ? G.toLaunch : G.st.balls;
+      drawBall(G.pad.x, C.LAUNCH_Y);
+      const n = G.mode === 'shoot' ? G.toLaunch : G.perLaunch;
       if (n > 1) {
+        const right = G.pad.x > C.W - 60;
         ctx.font = '700 15px ' + FONT_U;
-        ctx.textAlign = G.launcherX > C.W - 60 ? 'right' : 'left';
+        ctx.textAlign = right ? 'right' : 'left';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = 'rgba(255,255,255,0.9)';
-        ctx.fillText('×' + n, G.launcherX + (G.launcherX > C.W - 60 ? -14 : 14), C.LAUNCH_Y - 14);
+        ctx.fillText('×' + n, G.pad.x + (right ? -14 : 14), C.LAUNCH_Y - 14);
       }
     }
     for (const b of G.balls) drawBall(b.x, b.y);
+    drawFallingItems();
+    if (G.mode === 'shoot' && G.speedMult > 1) {
+      ctx.font = '800 16px ' + FONT_U;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = core.ITEM_COLORS.speed;
+      ctx.fillText('속도 ×' + G.speedMult.toFixed(1), C.W - 14, C.ROLL_BOTTOM + 14);
+    }
   }
 
   function drawAim() {
@@ -803,11 +976,23 @@
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#fff';
-    const y = (C.ROLL_BOTTOM + C.LAUNCH_Y) / 2;
+    const y = (C.ROLL_BOTTOM + C.LAUNCH_Y) / 2 - 40;
     ctx.fillText('위쪽을 눌러 조준하고, 손을 떼면 발사!', C.W / 2, y);
     ctx.font = '600 15px ' + FONT_U;
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.fillText('흰·검은 블럭은 원곡 멜로디(안 깨짐) · 컬러 블럭을 모두 깨세요', C.W / 2, y + 32);
+    ctx.fillStyle = 'rgba(255,255,255,0.78)';
+    ctx.fillText('공이 날아가는 동안 화면을 좌우로 밀어 발판으로 받으세요', C.W / 2, y + 30);
+    ctx.fillText('흰·검은 블럭 = 원곡 멜로디(안 깨짐) · 컬러 블럭은 숫자만큼 맞히면 깨짐', C.W / 2, y + 54);
+    // Item legend
+    const items = [['ball', '공 추가'], ['speed', '속도 UP'], ['paddle', '발판 UP (받아야 획득)']];
+    ctx.font = '700 14px ' + FONT_U;
+    ctx.textAlign = 'left';
+    let x = 40;
+    items.forEach(([type, label]) => {
+      drawItemIcon(type, x, y + 92, 18, core.ITEM_COLORS[type]);
+      ctx.fillStyle = core.ITEM_COLORS[type];
+      ctx.fillText(label, x + 16, y + 92);
+      x += ctx.measureText(label).width + 52;
+    });
     ctx.globalAlpha = 1;
   }
 
@@ -863,8 +1048,9 @@
   }
 
   function draw() {
-    const k = canvas.width / C.W;
-    ctx.setTransform(k, 0, 0, k, 0, 0);
+    // Separate x/y factors so the logical C.W × C.H area covers the whole bitmap
+    // (rounding the canvas size would otherwise leave stale rows at the bottom).
+    ctx.setTransform(canvas.width / C.W, 0, 0, canvas.height / C.H, 0, 0);
     ctx.clearRect(0, 0, C.W, C.H);
     ctx.save();
     if (G.shake > 0) ctx.translate((Math.random() - 0.5) * 10 * G.shake, (Math.random() - 0.5) * 6 * G.shake);
@@ -1040,40 +1226,66 @@
   }
 
   function bindInput() {
+    // Aim mode: press above the paddle to aim (release fires), press on the paddle row to slide it.
+    // Shoot mode: the paddle follows the finger / mouse horizontally.
     canvas.addEventListener('pointerdown', (e) => {
       SND.unlock();
+      const p = toLogical(e);
+      if (G.mode === 'shoot') {
+        G.pointer = e.pointerId;
+        movePaddle(p.x);
+        return;
+      }
       if (G.mode !== 'aim') return;
       e.preventDefault();
       G.pointer = e.pointerId;
       G.keyDir = 0;
       try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
-      aimAt(toLogical(e));
+      G.padDrag = p.y >= C.PADDLE_Y - 40;
+      if (G.padDrag) {
+        G.aim = null;
+        movePaddle(p.x);
+      } else {
+        aimAt(p);
+      }
     });
     canvas.addEventListener('pointermove', (e) => {
+      const p = toLogical(e);
+      if (G.mode === 'shoot') {
+        if (G.pointer === e.pointerId || e.pointerType === 'mouse') movePaddle(p.x);
+        return;
+      }
       if (G.pointer !== e.pointerId || G.mode !== 'aim') return;
-      aimAt(toLogical(e));
+      if (G.padDrag) movePaddle(p.x);
+      else aimAt(p);
     });
     canvas.addEventListener('pointerup', (e) => {
       if (G.pointer !== e.pointerId) return;
       G.pointer = null;
       if (G.mode !== 'aim') return;
+      if (G.padDrag) {
+        G.padDrag = false;
+        return;
+      }
       aimAt(toLogical(e));
       if (G.aim && G.aim.valid) fire();
       else G.aim = null;
     });
     canvas.addEventListener('pointercancel', () => {
       G.pointer = null;
-      G.aim = null;
+      G.padDrag = false;
+      if (G.mode === 'aim') G.aim = null;
     });
 
+    // Keyboard: ← → aim (aim mode) or move the paddle (shoot mode); Space / Enter fires.
     window.addEventListener('keydown', (e) => {
       SND.unlock();
-      if (G.mode !== 'aim') return;
+      if (G.mode !== 'aim' && G.mode !== 'shoot') return;
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         G.keyDir = e.key === 'ArrowLeft' ? -1 : 1;
-        if (!G.aim || !G.aim.valid) setAimAngle(G.aimAngle);
+        if (G.mode === 'aim' && (!G.aim || !G.aim.valid)) setAimAngle(G.aimAngle);
         e.preventDefault();
-      } else if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowUp') {
+      } else if (G.mode === 'aim' && (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowUp')) {
         if (!G.aim || !G.aim.valid) setAimAngle(G.aimAngle);
         fire();
         e.preventDefault();
@@ -1114,8 +1326,7 @@
     const vw = document.body.clientWidth || window.innerWidth;
     const vh = document.body.clientHeight || window.innerHeight;
     // Tall phones get a taller launch area instead of empty bars.
-    C.H = Math.round(clamp((C.W * vh) / vw, 960, 1200));
-    C.LAUNCH_Y = C.H - 66;
+    C.setHeight(Math.round(clamp((C.W * vh) / vw, 960, 1200)));
     const scale = Math.min(vw / C.W, vh / C.H);
     const w = Math.floor(C.W * scale), h = Math.floor(C.H * scale);
     frame.style.width = w + 'px';
@@ -1151,6 +1362,6 @@
     requestAnimationFrame(loop);
   }
 
-  PB.game = { state: G, startStage, startFull, openMenu, fire, setAimAngle, store };
+  PB.game = { state: G, startStage, startFull, openMenu, fire, setAimAngle, hit: onHit, store };
   document.addEventListener('DOMContentLoaded', boot);
 })(window.PB = window.PB || {});

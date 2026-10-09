@@ -10,14 +10,32 @@
     STRIP_H: 22,
     ROLL_H: 384,
     KEY_W: 56,
-    LAUNCH_Y: 894,
     BALL_R: 6,
-    BALL_SPEED: 1000,
+    BALL_SPEED: 850,
     TURNS: 30,
     COLS: 8,
     CELL_W: 25,
-    MIN_ROWS: 12
+    MIN_ROWS: 12,
+    PADDLE_W: 100,
+    PADDLE_MAX_W: 190,
+    PADDLE_GROW: 30,
+    PADDLE_H: 14,
+    ITEM_SPEED: 150, // falling ↔ capsule, px/s
+    MAX_BALLS: 5,
+    SPEED_ITEM: 1.2,
+    SPEED_ITEM_MAX: 1.9,
+    TURN_LIMIT: 8, // seconds per launch, keeps a stage around 1–4 minutes
+    RAMP: 0.05, // +5% ball speed …
+    RAMP_EVERY: 2, // … every 2 s of a turn
+    RAMP_CAP: 1.5
   };
+  // The paddle sits near the bottom; balls launch from its top.
+  C.setHeight = function (h) {
+    C.H = h;
+    C.PADDLE_Y = h - 74;
+    C.LAUNCH_Y = C.PADDLE_Y - C.BALL_R - 1;
+  };
+  C.setHeight(C.H);
   C.ROLL_TOP = C.HUD_H + C.STRIP_H;
   C.ROLL_BOTTOM = C.ROLL_TOP + C.ROLL_H;
   C.ROLL_LEFT = C.KEY_W;
@@ -59,13 +77,18 @@
     return d;
   }
 
-  // Tuned with a headless bot: a random shooter scrapes 1–2 stars, careful aim gets 3.
+  // Block HP is tuned with a headless bot that catches the ball with the paddle
+  // most of the time (see README): a shaky player scrapes 1–2 stars, a steady one gets 3.
+  const tuning = { hpBase: 4, hpStep: 0.7 };
+
   function difficulty(d) {
-    const balls = 1 + Math.floor(d / 4);
+    const items = ['ball', 'speed', 'paddle'];
+    if (d >= 6) items.push('ball');
+    if (d >= 11) items.push('paddle');
     return {
       noise: 14 + d,
-      balls,
-      meanHp: (1.8 + 0.1 * d) * Math.pow(balls, 0.8)
+      items,
+      meanHp: tuning.hpBase + tuning.hpStep * d
     };
   }
 
@@ -119,8 +142,11 @@
     }));
   }
 
-  function noiseCell(col, midi, rows, hp, color) {
-    return { col, row: rows.hi - midi, midi, hp, maxHp: hp, color, alive: true, flash: 0, passed: false };
+  // Special blocks: break in one hit and give an item.
+  const ITEM_COLORS = { ball: '#5ce1ff', speed: '#ff5fa2', paddle: '#ffd34d' };
+
+  function noiseCell(col, midi, rows, hp, color, item) {
+    return { col, row: rows.hi - midi, midi, hp, maxHp: hp, color, item: item || null, alive: true, flash: 0, passed: false };
   }
 
   function buildStage(songIdx, stageIdx) {
@@ -139,12 +165,13 @@
     // Same seed every time, so a retry gives the same layout.
     const rng = mulberry32(hashStr(song.id + ':' + stageIdx));
     const noise = [];
-    for (let tries = 0; noise.length < diff.noise && tries < 5000; tries++) {
+    const plain = diff.noise - diff.items.length;
+    for (let tries = 0; noise.length < plain && tries < 5000; tries++) {
       const shape = pickShape(rng);
       const c0 = Math.floor(rng() * C.COLS);
       const r0 = Math.floor(rng() * rows.n);
       const cells = shape.cells.map(([dc, dr]) => [c0 + dc, r0 + dr]);
-      if (noise.length + cells.length > diff.noise) continue;
+      if (noise.length + cells.length > plain) continue;
       const fits = cells.every(([c, r]) => c < C.COLS && r < rows.n && !taken.has(c + ',' + r));
       if (!fits) continue;
       const hp = Math.max(1, Math.round(diff.meanHp * (0.6 + 0.8 * rng())));
@@ -154,6 +181,15 @@
         noise.push(noiseCell(c, rows.hi - r, rows, hp, color));
       });
     }
+    diff.items.forEach((item) => {
+      for (let tries = 0; tries < 500; tries++) {
+        const c = Math.floor(rng() * C.COLS), r = Math.floor(rng() * rows.n);
+        if (taken.has(c + ',' + r)) continue;
+        taken.add(c + ',' + r);
+        noise.push(noiseCell(c, rows.hi - r, rows, 1, ITEM_COLORS[item], item));
+        return;
+      }
+    });
 
     return {
       song,
@@ -162,7 +198,7 @@
       rows,
       melody,
       noise,
-      balls: diff.balls,
+      balls: 1,
       chords: st.chords.split(/\s+/).map((name, i) => ({ beat: i * 2, chord: PB.parseChord(name) }))
     };
   }
@@ -224,8 +260,19 @@
   const blockX = (world, col) => world.x + col * C.CELL_W + 1;
   const blockY = (world, row) => C.ROLL_TOP + row * world.rows.h + 1;
 
+  // Paddle bounce angle depends on where the ball lands on it (edges = up to 60°).
+  function paddleBounce(b, p) {
+    const rel = Math.max(-1, Math.min(1, (b.x - p.x) / (p.w / 2)));
+    const ang = rel * 1.05;
+    b.dx = Math.sin(ang);
+    b.dy = -Math.cos(ang);
+    b.y = C.PADDLE_Y - C.BALL_R;
+    fixDir(b);
+  }
+
   // Moves ball b by dist px. onHit(kind, obj, b) fires on each bounce
-  // (kind: 'wall' | 'key' | 'melody' | 'noise'). Returns true when the ball lands.
+  // (kind: 'wall' | 'key' | 'melody' | 'noise' | 'paddle').
+  // world.paddle = { x (centre), w }. Returns true once the ball has fallen off the bottom.
   function stepBall(b, dist, world, onHit) {
     const R = C.BALL_R;
     const steps = Math.max(1, Math.ceil(dist / 3));
@@ -272,10 +319,14 @@
         }
       }
 
-      if (b.dy > 0 && b.y >= C.LAUNCH_Y) {
-        b.y = C.LAUNCH_Y;
-        return true;
+      const p = world.paddle;
+      if (p && b.dy > 0 && b.y + R >= C.PADDLE_Y && b.y <= C.PADDLE_Y + C.PADDLE_H / 2 &&
+          Math.abs(b.x - p.x) <= p.w / 2 + R * 0.6) {
+        paddleBounce(b, p);
+        if (onHit) onHit('paddle', p, b);
       }
+
+      if (b.y - R > C.H) return true;
     }
     return false;
   }
@@ -287,16 +338,18 @@
     let bounced = false, tail = 0;
     for (let total = 0; total < 1800; total += 4) {
       let hit = false;
-      const landed = stepBall(b, 4, world, () => { hit = true; });
+      const lost = stepBall(b, 4, world, () => { hit = true; });
       if (hit && !bounced) { pts.push({ x: b.x, y: b.y }); bounced = true; }
       if (bounced && (tail += 4) > 140) break;
-      if (landed) break;
+      if (lost) break;
     }
     pts.push({ x: b.x, y: b.y });
     return pts;
   }
 
   PB.core = {
+    tuning,
+    ITEM_COLORS,
     isBlack,
     songRows,
     buildStage,

@@ -195,6 +195,17 @@
     launch() {
       if (allow('launch', 0.05)) sweep(420, 760, 0.06, 0.06);
     },
+    paddle() {
+      if (!allow('paddle', 0.05)) return;
+      tone(48, { dur: 0.12, vel: 0.3, dest: sfx });
+      noiseBurst(0.03, 1800, 0.1);
+    },
+    item() {
+      [84, 88, 91].forEach((m, i) => tone(m, { at: i * 0.06, dur: 0.12, vel: 0.25, kind: 'bell', dest: sfx }));
+    },
+    lose() {
+      if (allow('lose', 0.1)) sweep(300, 110, 0.18, 0.12);
+    },
     go() {
       [76, 83].forEach((m, i) => tone(m, { at: i * 0.08, dur: 0.15, vel: 0.3, kind: 'bell', dest: sfx }));
     },
