@@ -505,8 +505,8 @@ export class Story {
         <div class="mini-fx"></div>
         <div class="mini-msg"></div>
       </div>
-      <p class="mini-hint">교수님이 <b>!</b> 하고 돌아보려 하면 손을 떼고 연습하는 척!</p>
-      <button type="button" class="mini-hold">꾹 눌러서 눈빛 보내기</button>`;
+      <p class="mini-hint">교수님이 <b>!</b> 하고 돌아보려 하면 손을 떼고 안 보는 척!</p>
+      <button type="button" class="mini-hold"><b class="main">안 보는 척</b><small class="sub">꾹 누르면 선생님 쳐다보기</small></button>`;
     m.hidden = false;
     const q = (s) => m.querySelector(s);
     const ui = {
@@ -520,6 +520,8 @@ export class Story {
       time: q('.time i'),
       strikes: [...m.querySelectorAll('.mini-strikes b')],
       hold: q('.mini-hold'),
+      holdMain: q('.mini-hold .main'),
+      holdSub: q('.mini-hold .sub'),
     };
     const audio = this.hooks.audio;
     const LIMIT = 26;
@@ -566,6 +568,9 @@ export class Story {
       e?.preventDefault?.();
       holding = on;
       ui.hold.classList.toggle('on', on);
+      // 누르는 동안 = 선생님 쳐다보기, 떼면 = 안 보는 척
+      ui.holdMain.textContent = on ? '선생님 쳐다보기' : '안 보는 척';
+      ui.holdSub.textContent = on ? '떼면 안 보는 척' : '꾹 누르면 선생님 쳐다보기';
     };
     ui.hold.addEventListener('pointerdown', press(true));
     ui.hold.addEventListener('pointerup', press(false));
