@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#121513">
-<title>피아노 블록 퍼즐</title>
+<title>피아노 블록</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
@@ -18,45 +18,76 @@
       <span class="hud-title" id="hud-title"></span>
       <span class="hud-value" id="hud-score">0</span>
     </div>
-    <div class="hud-combo" id="hud-combo"><span>콤보</span><b id="hud-combo-n">0</b></div>
+    <div class="hud-right">
+      <div class="timer" id="hud-timer" role="timer" aria-label="남은 시간" hidden><span id="hud-timer-n">30</span></div>
+      <button class="hud-done" id="btn-done" type="button" hidden>완성</button>
+    </div>
     <div class="hud-progress"><i id="hud-progress"></i></div>
   </header>
 
-  <div class="stage" id="stage"><canvas id="board"></canvas></div>
+  <div class="stage" id="stage">
+    <canvas id="board"></canvas>
+    <button class="flow-btn" id="btn-flow" type="button" hidden><span class="tri" aria-hidden="true"></span><span id="btn-flow-label">바로 연주</span></button>
+  </div>
 
   <section class="screen menu" id="menu">
     <div class="menu-inner">
       <div class="hero" aria-hidden="true">
         <div class="hero-keys"></div>
         <div class="hero-roll">
-          <i class="n" style="--r:2;--c:1;--l:2"></i>
-          <i class="n" style="--r:5;--c:3;--l:1"></i>
-          <i class="n" style="--r:3;--c:5;--l:3"></i>
-          <i class="n" style="--r:6;--c:8;--l:2"></i>
-          <i class="n" style="--r:1;--c:9;--l:2"></i>
-          <i class="b" style="--r:2;--c:1;--l:2;--k:#f6c344"></i>
-          <i class="b" style="--r:5;--c:3;--l:1;--k:#3cc1f0"></i>
-          <i class="b" style="--r:3;--c:5;--l:3;--k:#a35ee0"></i>
+          <i class="n" style="--r:2;--c:2;--l:2"></i>
+          <i class="n" style="--r:5;--c:4;--l:1"></i>
+          <i class="n" style="--r:3;--c:6;--l:3"></i>
+          <i class="n" style="--r:6;--c:9;--l:2"></i>
+          <i class="n" style="--r:1;--c:10;--l:2"></i>
+          <i class="b" style="--r:2;--c:2;--l:2;--k:#f3f5f7"></i>
+          <i class="b" style="--r:5;--c:4;--l:1;--k:#f3f5f7"></i>
+          <i class="b" style="--r:3;--c:6;--l:3;--k:#f3f5f7"></i>
+          <i class="b" style="--r:4;--c:9;--l:1;--k:#a35ee0"></i>
           <i class="ph"></i>
         </div>
       </div>
 
-      <h1>피아노<br>블록 퍼즐</h1>
-      <p class="tagline">흘러오는 노트 위에 블록을 놓아 곡을 연주하세요.</p>
+      <h1>피아노 블록</h1>
+      <p class="tagline">노트 위에 블록을 맞춰 곡을 완성하는 음악 퍼즐</p>
 
       <ul class="rules">
-        <li><span class="chip good"></span><span>초록 노트를 덮으면 재생선을 지날 때 그 음이 울려요. 칸당 +100</span></li>
-        <li><span class="chip bad"></span><span>빈칸을 덮으면 칸당 −50, 회색 블록으로 남아요</span></li>
-        <li><span class="chip gold"></span><span>빈칸 없이 딱 맞추면 콤보, 한 마디를 다 채우면 +500</span></li>
+        <li><span class="chip white"></span><span>초록 노트 위에 놓은 칸은 하얗게 바뀌고, 재생선을 지날 때 그 음이 울려요. 칸당 +100</span></li>
+        <li><span class="chip bad"></span><span>노트 밖에 놓은 칸은 블록 색 그대로 남아요. 칸당 −50</span></li>
+        <li><span class="chip bomb"></span><span>폭탄 블록은 놓은 모양만큼 블록을 터뜨려 지워요</span></li>
+        <li><span class="chip gold"></span><span>빈칸 없이 딱 맞추면 FANTASTIC, 연속이면 콤보가 쌓여요</span></li>
       </ul>
 
-      <div class="speed" role="radiogroup" aria-label="속도">
-        <span class="speed-label">속도</span>
-        <button type="button" role="radio" data-speed="0.75">느리게</button>
-        <button type="button" role="radio" data-speed="1">보통</button>
-      </div>
+      <section class="mode-block" aria-labelledby="h-song">
+        <div class="mode-head">
+          <h2 id="h-song">곡 연주</h2>
+          <div class="seg" role="radiogroup" aria-label="진행 방식">
+            <button type="button" role="radio" data-play="stop">정지</button>
+            <button type="button" role="radio" data-play="flow">흐름</button>
+          </div>
+        </div>
+        <p class="mode-desc" id="play-desc"></p>
+        <ol class="songs" id="song-list"></ol>
+      </section>
 
-      <ol class="songs" id="song-list"></ol>
+      <section class="mode-block" aria-labelledby="h-band">
+        <div class="mode-head"><h2 id="h-band">합주</h2></div>
+        <p class="mode-desc">한 페이지마다 피아노 → 드럼 → 보컬 순서로 채우고, 세 악기를 합쳐 짧게 들려줘요. 악기마다 노트 배치가 달라요.</p>
+        <ol class="songs" id="band-list"></ol>
+      </section>
+
+      <section class="mode-block" aria-labelledby="h-free">
+        <div class="mode-head"><h2 id="h-free">자유 작곡</h2></div>
+        <p class="mode-desc">빈 피아노 롤에 블록을 놓는 자리가 그대로 음이 돼요. 시간 제한 없이 페이지를 넘기며 곡을 만들어요.</p>
+        <button type="button" class="song free-card" id="btn-free">
+          <span class="free-icon" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="song-text">
+            <span class="song-title">새 곡 만들기</span>
+            <span class="song-composer">놓은 블록이 곧 멜로디</span>
+          </span>
+          <span class="song-play" aria-hidden="true"></span>
+        </button>
+      </section>
     </div>
   </section>
 
@@ -66,7 +97,7 @@
       <div class="actions">
         <button type="button" class="btn primary" id="btn-resume">계속하기</button>
         <button type="button" class="btn" id="btn-restart">처음부터</button>
-        <button type="button" class="btn ghost" id="btn-quit">곡 선택</button>
+        <button type="button" class="btn ghost" id="btn-quit">메뉴</button>
       </div>
     </div>
   </section>
@@ -81,16 +112,13 @@
       </div>
       <p class="verdict" id="result-verdict"></p>
       <p class="result-score"><span id="result-score">0</span><b class="badge" id="result-best" hidden>최고 기록</b></p>
-      <dl class="stats">
-        <div><dt>정확도</dt><dd id="result-accuracy">0%</dd></div>
-        <div><dt>퍼펙트</dt><dd id="result-perfects">0</dd></div>
-        <div><dt>최대 콤보</dt><dd id="result-combo">0</dd></div>
-        <div><dt>완성한 마디</dt><dd id="result-bars">0</dd></div>
-        <div><dt>빈칸 블록</dt><dd id="result-wrong">0</dd></div>
-      </dl>
-      <div class="actions">
-        <button type="button" class="btn primary" id="btn-again">다시 하기</button>
-        <button type="button" class="btn ghost" id="btn-songs">곡 선택</button>
+      <dl class="stats" id="result-stats"></dl>
+      <div class="actions two">
+        <button type="button" class="btn primary wide" id="btn-listen">다시 듣기</button>
+        <button type="button" class="btn" id="btn-original">원곡 듣기</button>
+        <button type="button" class="btn" id="btn-continue" hidden>이어서 만들기</button>
+        <button type="button" class="btn" id="btn-again">다시 하기</button>
+        <button type="button" class="btn ghost wide" id="btn-songs">메뉴</button>
       </div>
     </div>
   </section>

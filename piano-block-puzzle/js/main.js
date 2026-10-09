@@ -1,4 +1,4 @@
-import { SONGS } from './songs.js';
+import { SONGS, BAND_SONGS, FREE_SONG } from './songs.js';
 import { PianoAudio } from './audio.js';
 import { Game } from './game.js';
 
@@ -24,37 +24,70 @@ const el = {
   menu: $('#menu'),
   pause: $('#pause'),
   result: $('#result'),
-  songList: $('#song-list'),
   hudTitle: $('#hud-title'),
   hudScore: $('#hud-score'),
-  hudCombo: $('#hud-combo'),
-  hudComboN: $('#hud-combo-n'),
+  hudTimer: $('#hud-timer'),
+  hudTimerN: $('#hud-timer-n'),
   hudProgress: $('#hud-progress'),
+  done: $('#btn-done'),
+  flow: $('#btn-flow'),
+  flowLabel: $('#btn-flow-label'),
+};
+
+const PLAY_DESC = {
+  stop: '한 페이지를 30초 동안 멈춰 두고 채워요. 시간이 끝나거나 다 채우면 그 페이지만 흘러가며 연주하고, 마지막에 전체 연주를 들려줘요.',
+  flow: '곡 템포대로 쉬지 않고 흘러가요. 재생선에 닿기 전에 흘러오는 노트 위에 블록을 놓아야 해요.',
 };
 
 const audio = new PianoAudio();
-let speed = store.get('pbp.speed', 1);
-let current = null;
-const shown = { score: -1, combo: -1, progress: -1 };
+let playMode = store.get('pb.play', 'stop');
+let current = null; // { song, mode }
+let lastStats = null;
+const shown = {};
+
+function setText(node, key, text) {
+  if (shown[key] === text) return;
+  shown[key] = text;
+  node.textContent = text;
+}
 
 const game = new Game($('#board'), audio, {
-  hud(score, combo, progress) {
-    if (score !== shown.score) {
-      shown.score = score;
-      el.hudScore.textContent = score.toLocaleString('ko-KR');
+  hud(s) {
+    const { song, mode } = current;
+    let title = song.title;
+    if (mode === 'band') title += ` · ${s.part ? s.part.name : '합주'}`;
+    let sub;
+    if (s.finale) sub = '전체 연주';
+    else if (mode === 'flow') sub = '흐름 모드';
+    else if (mode !== 'free') sub = `${s.scene + 1} / ${s.scenes} 페이지`;
+    setText(el.hudTitle, 'title', sub ? `${title}  ·  ${sub}` : title);
+    setText(el.hudScore, 'score', mode === 'free' ? `${s.scene + 1} 페이지` : s.score.toLocaleString('ko-KR'));
+
+    const showTimer = s.timer != null;
+    if (el.hudTimer.hidden === showTimer) el.hudTimer.hidden = !showTimer;
+    if (showTimer) {
+      setText(el.hudTimerN, 'timer', String(Math.ceil(s.timer)));
+      el.hudTimer.style.setProperty('--p', (s.timer / s.timerTotal).toFixed(3));
+      el.hudTimer.classList.toggle('warn', s.timer <= 5);
     }
-    if (combo !== shown.combo) {
-      shown.combo = combo;
-      el.hudComboN.textContent = combo;
-      el.hudCombo.classList.toggle('on', combo > 1);
-    }
-    const p = Math.round(progress * 1000) / 10;
-    if (p !== shown.progress) {
-      shown.progress = p;
-      el.hudProgress.style.width = `${p}%`;
+    const showDone = mode === 'free' && !s.finale;
+    if (el.done.hidden === showDone) el.done.hidden = !showDone;
+    if (el.flow.hidden === s.placing) el.flow.hidden = !s.placing;
+
+    const p = s.progress != null ? s.progress : (s.scene + (s.placing ? 0 : 1)) / s.scenes;
+    const w = `${Math.round(Math.min(1, p) * 1000) / 10}%`;
+    if (shown.progress !== w) {
+      shown.progress = w;
+      el.hudProgress.style.width = w;
     }
   },
+  layout({ trayTop, H }) {
+    el.flow.style.bottom = `${Math.round(H - trayTop + 12)}px`;
+  },
   end: showResult,
+  listened() {
+    if (lastStats) showResult(lastStats, true);
+  },
 });
 
 new ResizeObserver(([entry]) => {
@@ -64,67 +97,80 @@ new ResizeObserver(([entry]) => {
 
 // ---------- 메뉴 ----------
 
-function bestKey(song) {
-  return `pbp.best.${song.id}`;
+const bestKey = (song, mode) => `pb.best.${song.id}.${mode}`;
+
+function songButton(song, mode) {
+  const best = store.get(bestKey(song, mode), null);
+  const li = document.createElement('li');
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'song';
+  btn.innerHTML = `
+    <span class="song-level" aria-label="난이도 ${song.level}">
+      ${[1, 2, 3].map((i) => `<i class="${i <= song.level ? 'on' : ''}"></i>`).join('')}
+    </span>
+    <span class="song-text">
+      <span class="song-title"></span>
+      <span class="song-composer"></span>
+    </span>
+    <span class="song-best">${best ? `<small>최고</small>${best.score.toLocaleString('ko-KR')}` : '<small>첫 도전</small>'}</span>
+    <span class="song-play" aria-hidden="true"></span>`;
+  btn.querySelector('.song-title').textContent = song.title;
+  btn.querySelector('.song-composer').textContent =
+    mode === 'band' ? `${song.composer} · 피아노 · 드럼 · 보컬` : song.composer;
+  btn.addEventListener('click', () => startGame(song, mode));
+  li.appendChild(btn);
+  return li;
 }
 
-function renderSongs() {
-  el.songList.innerHTML = '';
-  for (const song of SONGS) {
-    const best = store.get(bestKey(song), null);
-    const li = document.createElement('li');
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'song';
-    btn.innerHTML = `
-      <span class="song-level" aria-label="난이도 ${song.level}">
-        ${[1, 2, 3].map((i) => `<i class="${i <= song.level ? 'on' : ''}"></i>`).join('')}
-      </span>
-      <span class="song-text">
-        <span class="song-title"></span>
-        <span class="song-composer"></span>
-      </span>
-      <span class="song-best">${best ? `<small>최고</small>${best.score.toLocaleString('ko-KR')}` : '<small>첫 도전</small>'}</span>
-      <span class="song-play" aria-hidden="true"></span>`;
-    btn.querySelector('.song-title').textContent = song.title;
-    btn.querySelector('.song-composer').textContent = song.composer;
-    btn.addEventListener('click', () => startSong(song));
-    li.appendChild(btn);
-    el.songList.appendChild(li);
+function renderMenu() {
+  const list = $('#song-list');
+  list.innerHTML = '';
+  for (const song of SONGS) list.appendChild(songButton(song, playMode));
+  const band = $('#band-list');
+  band.innerHTML = '';
+  for (const song of BAND_SONGS) band.appendChild(songButton(song, 'band'));
+  for (const b of document.querySelectorAll('[data-play]')) {
+    b.setAttribute('aria-checked', String(b.dataset.play === playMode));
   }
+  $('#play-desc').textContent = PLAY_DESC[playMode];
 }
 
-function renderSpeed() {
-  for (const b of document.querySelectorAll('[data-speed]')) {
-    b.setAttribute('aria-checked', String(Number(b.dataset.speed) === speed));
-  }
-}
-
-for (const b of document.querySelectorAll('[data-speed]')) {
+for (const b of document.querySelectorAll('[data-play]')) {
   b.addEventListener('click', () => {
-    speed = Number(b.dataset.speed);
-    store.set('pbp.speed', speed);
-    renderSpeed();
+    playMode = b.dataset.play;
+    store.set('pb.play', playMode);
+    renderMenu();
   });
 }
 
-function startSong(song) {
-  current = song;
+$('#btn-free').addEventListener('click', () => startGame(FREE_SONG, 'free'));
+
+function startGame(song, mode) {
+  current = { song, mode };
+  lastStats = null;
   audio.ensure();
   el.menu.hidden = true;
   el.pause.hidden = true;
   el.result.hidden = true;
-  el.hudTitle.textContent = song.title;
-  game.start(song, speed);
+  el.flowLabel.textContent = mode === 'free' ? '다음 페이지' : '바로 연주';
+  for (const k of Object.keys(shown)) delete shown[k];
+  game.start(song, mode);
 }
 
 function openMenu() {
   game.stop();
   el.pause.hidden = true;
   el.result.hidden = true;
-  renderSongs();
+  el.flow.hidden = true;
+  renderMenu();
   el.menu.hidden = false;
 }
+
+// ---------- 진행 버튼 ----------
+
+el.flow.addEventListener('click', () => game.skip());
+el.done.addEventListener('click', () => game.completeFree());
 
 // ---------- 일시정지 ----------
 
@@ -139,7 +185,7 @@ $('#btn-resume').addEventListener('click', () => {
   el.pause.hidden = true;
   game.resume();
 });
-$('#btn-restart').addEventListener('click', () => startSong(current));
+$('#btn-restart').addEventListener('click', () => startGame(current.song, current.mode));
 $('#btn-quit').addEventListener('click', openMenu);
 
 document.addEventListener('visibilitychange', () => {
@@ -148,26 +194,62 @@ document.addEventListener('visibilitychange', () => {
 
 // ---------- 결과 ----------
 
-function showResult(stats) {
-  const prev = store.get(bestKey(stats.song), null);
-  const isBest = !prev || stats.score > prev.score;
-  if (isBest) store.set(bestKey(stats.song), { score: stats.score, stars: stats.stars });
+function stat(label, value, wide = false) {
+  return `<div${wide ? ' class="wide"' : ''}><dt>${label}</dt><dd>${value}</dd></div>`;
+}
 
-  $('#result-song').textContent = stats.song.title;
-  $('#result-score').textContent = stats.score.toLocaleString('ko-KR');
-  $('#result-best').hidden = !isBest || stats.score === 0;
-  $('#result-accuracy').textContent = `${Math.round(stats.accuracy * 100)}%`;
-  $('#result-perfects').textContent = stats.perfects;
-  $('#result-combo').textContent = stats.maxCombo;
-  $('#result-bars').textContent = `${stats.perfectBars} / ${stats.barsWithNotes}`;
-  $('#result-wrong').textContent = stats.badCells;
+function showResult(stats, again = false) {
+  lastStats = stats;
+  const free = stats.mode === 'free';
+  let isBest = false;
+  if (!free && !again) {
+    const key = bestKey(stats.song, stats.mode);
+    const prev = store.get(key, null);
+    isBest = stats.score > 0 && (!prev || stats.score > prev.score);
+    if (isBest) store.set(key, { score: stats.score, stars: stats.stars });
+  }
+
+  const modeName = { stop: '정지 모드', flow: '흐름 모드', band: '합주', free: '자유 작곡' }[stats.mode];
+  $('#result-song').textContent = free ? modeName : `${stats.song.title} · ${modeName}`;
+  $('#result-stars').hidden = free;
   document.querySelectorAll('#result-stars .star').forEach((s, i) => s.classList.toggle('on', i < stats.stars));
-  $('#result-verdict').textContent = ['다시 도전해 보세요', '좋아요', '훌륭해요', '완벽한 연주!'][stats.stars];
+  $('#result-verdict').textContent = free ? '작곡 완성!' : ['다시 도전해 보세요', '좋아요', '훌륭해요', '완벽한 연주!'][stats.stars];
+  $('#result-score').textContent = free ? `${stats.blocks}칸` : stats.score.toLocaleString('ko-KR');
+  if (!again) $('#result-best').hidden = !isBest;
+
+  if (free) {
+    const sec = Math.round(stats.scenes * FREE_SONG.sceneSteps * FREE_SONG.stepSec);
+    $('#result-stats').innerHTML = stat('페이지', stats.scenes) + stat('길이', `${sec}초`);
+  } else {
+    let html =
+      stat('정확도', `${Math.round(stats.accuracy * 100)}%`) +
+      stat('FANTASTIC', stats.perfects) +
+      stat('최대 콤보', stats.maxCombo) +
+      stat('빈칸 블록', stats.badCells);
+    if (stats.mode !== 'flow') html += stat('다 채운 페이지', `${stats.sceneClears} / ${stats.scenes}`, true);
+    $('#result-stats').innerHTML = html;
+  }
+
+  $('#btn-original').hidden = free;
+  $('#btn-continue').hidden = !free;
+  $('#btn-again').textContent = free ? '새로 만들기' : '다시 하기';
+  el.flow.hidden = true;
   el.result.hidden = false;
 }
 
-$('#btn-again').addEventListener('click', () => startSong(current));
+$('#btn-listen').addEventListener('click', () => {
+  el.result.hidden = true;
+  game.listen(false);
+});
+$('#btn-original').addEventListener('click', () => {
+  el.result.hidden = true;
+  game.listen(true);
+});
+$('#btn-continue').addEventListener('click', () => {
+  el.result.hidden = true;
+  game.continueFree();
+});
+$('#btn-again').addEventListener('click', () => startGame(current.song, current.mode));
 $('#btn-songs').addEventListener('click', openMenu);
 
-renderSpeed();
-renderSongs();
+renderMenu();

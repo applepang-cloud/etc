@@ -1,38 +1,50 @@
 // 게임 본체: 상단 피아노 롤(보드) + 하단 블록 3개.
-// 재생선은 가운데 고정, 노트가 오른쪽에서 왼쪽으로 흘러온다.
-// 시계는 AudioContext.currentTime을 쓴다. 일시정지하면 컨텍스트를 멈춰 시계도 같이 멈춘다.
+// 재생선은 보드 왼쪽에서 한 칸 위치에 고정되고, 노트가 오른쪽에서 왼쪽으로 흘러온다.
+//
+// 모드
+//   flow  흐름 모드: 곡 템포대로 계속 흘러가고, 흘러오는 노트 위에 블록을 놓는다.
+//   stop  정지 모드: 한 페이지를 30초 동안 멈춰 두고 블록을 놓는다. 시간이 끝나면(또는 다 채우면)
+//         그 페이지만 흘러가며 연주하고 다음 페이지로. 모든 페이지가 끝나면 전체 연주.
+//   band  합주 모드: 페이지마다 피아노 → 드럼 → 보컬을 정지 모드로 채우고 그 페이지를 합주로 들려준다.
+//   free  자유 작곡: 목표 노트 없이 놓은 블록이 그대로 음이 된다. 시간 제한 없음.
+//
+// 시계는 AudioContext.currentTime. 일시정지하면 컨텍스트를 멈춰 시계(제한 시간 포함)도 멈춘다.
 
 import { makeTray } from './pieces.js';
+import { INSTRUMENTS, pianoRows, vocalRows, drumRows, solfege } from './instruments.js';
+import { drawBlock, drawBomb, rrect, shade } from './draw.js';
 
-const PLAYHEAD_FRAC = 0.5; // 재생선 위치 (그리드 폭 기준)
-const VISIBLE_COLS = 14; // 화면에 보이는 칸 수 목표치
-const MAX_ROWS = 40;
-const OFFSCREEN_COLS = 3;
+export const SCENE_TIME = 30; // 정지 모드 한 페이지 제한 시간(초)
+const PLAYHEAD_COLS = 1; // 재생선 왼쪽에 보이는 칸 수
 const SCHEDULE_AHEAD = 0.1; // 오디오 예약 선행 시간(초)
 const RULER_H = 18;
+const MAX_ROWS = 40;
+const MAX_CELL = 44;
+const OFFSCREEN_COLS = 3; // 흐름 모드에서 화면 오른쪽 밖으로 걸쳐 놓을 수 있는 칸 수
 
 const POINTS_GOOD = 100;
 const POINTS_BAD = 50;
-const POINTS_BAR = 500;
+const POINTS_CLEAR = 300;
+const POINTS_PER_SEC = 10;
 
 const KEY = (r, c) => c * 128 + r;
-const BLACK = [false, true, false, true, false, false, true, false, true, false, true, false];
-const WRONG = '#5b6270';
+const WHITE = '#f3f5f7';
 const FONT = '"Black Han Sans", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
 
 const COL = {
   bg: '#121513',
+  void: '#0f1211',
   rowWhite: '#252a27',
   rowBlack: '#1d211f',
+  rowA: '#232825',
+  rowB: '#1d2220',
   rowLine: 'rgba(0,0,0,0.35)',
   step: 'rgba(255,255,255,0.04)',
   beat: 'rgba(255,255,255,0.09)',
   bar: 'rgba(255,255,255,0.24)',
-  past: 'rgba(0,0,0,0.28)',
-  outside: 'rgba(0,0,0,0.4)',
-  note: '#34a853',
-  noteEdge: '#1b6430',
-  noteTop: '#62cf7c',
+  past: 'rgba(0,0,0,0.3)',
+  outside: 'rgba(0,0,0,0.45)',
+  offScene: 'rgba(6,8,7,0.55)',
   noteMiss: 'rgba(8,16,10,0.6)',
   ruler: '#151816',
   rulerText: '#8c958f',
@@ -46,69 +58,20 @@ const COL = {
   hint: 'rgba(255,255,255,0.85)',
 };
 
-const keyboardWidth = (W) => Math.round(Math.min(60, Math.max(40, W * 0.12)));
+const JUDGE_STYLE = {
+  FANTASTIC: { fill: ['#fff3a6', '#ffb02e'], size: 1 },
+  GOOD: { fill: ['#c9fbff', '#3cc1f0'], size: 0.9 },
+  BAD: { fill: ['#ffb3a8', '#f2463a'], size: 0.95 },
+  CLEAR: { fill: ['#d6ffe6', '#34d27a'], size: 0.9 },
+  BOOM: { fill: ['#ffe0a3', '#ff7a2e'], size: 0.95 },
+  'ALL CLEAR': { fill: ['#fff3a6', '#ffb02e'], size: 0.85 },
+  'TIME UP': { fill: ['#ffffff', '#b8c0bb'], size: 0.85 },
+};
+
+const keyboardWidth = (W) => Math.round(Math.min(64, Math.max(46, W * 0.13)));
 // 블록 3줄(트레이 칸은 보드 칸의 80%)과 위아래 여백만큼
 const trayHeight = (cell) => Math.max(84, Math.round(cell * 0.8) * 3 + 24);
-
-const shadeCache = new Map();
-function shade(hex, amt) {
-  const k = hex + amt;
-  let v = shadeCache.get(k);
-  if (v) return v;
-  const n = parseInt(hex.slice(1), 16);
-  const t = amt < 0 ? 0 : 255;
-  const p = Math.abs(amt);
-  const ch = (x) => Math.round(x + (t - x) * p);
-  v = `rgb(${ch(n >> 16)},${ch((n >> 8) & 255)},${ch(n & 255)})`;
-  shadeCache.set(k, v);
-  return v;
-}
-
-function rrect(g, x, y, w, h, r) {
-  r = Math.min(r, w / 2, h / 2);
-  g.beginPath();
-  g.moveTo(x + r, y);
-  g.arcTo(x + w, y, x + w, y + h, r);
-  g.arcTo(x + w, y + h, x, y + h, r);
-  g.arcTo(x, y + h, x, y, r);
-  g.arcTo(x, y, x + w, y, r);
-  g.closePath();
-}
-
-// 블록 블라스트 스타일의 입체 블록 한 칸
-function drawBlock(g, x, y, s, color) {
-  const b = Math.max(2, Math.round(s * 0.15));
-  g.fillStyle = color;
-  g.fillRect(x, y, s, s);
-  g.fillStyle = shade(color, 0.45);
-  g.beginPath();
-  g.moveTo(x, y);
-  g.lineTo(x + s, y);
-  g.lineTo(x + s - b, y + b);
-  g.lineTo(x + b, y + b);
-  g.fill();
-  g.fillStyle = shade(color, 0.2);
-  g.beginPath();
-  g.moveTo(x, y);
-  g.lineTo(x + b, y + b);
-  g.lineTo(x + b, y + s - b);
-  g.lineTo(x, y + s);
-  g.fill();
-  g.fillStyle = shade(color, -0.22);
-  g.beginPath();
-  g.moveTo(x + s, y);
-  g.lineTo(x + s, y + s);
-  g.lineTo(x + s - b, y + s - b);
-  g.lineTo(x + s - b, y + b);
-  g.fill();
-  g.fillStyle = shade(color, -0.38);
-  g.beginPath();
-  g.moveTo(x, y + s);
-  g.lineTo(x + b, y + s - b);
-  g.lineTo(x + s - b, y + s - b);
-  g.lineTo(x + s, y + s);
-  g.fill();
-}
+const pianoMinRows = (p) => Math.max(12, p.src.hi - p.src.lo + 3);
 
 export class Game {
   constructor(canvas, audio, hooks) {
@@ -118,12 +81,16 @@ export class Game {
     this.hooks = hooks;
     this.state = 'idle';
     this.song = null;
+    this.parts = null;
     this.W = 0;
     this.H = 0;
     this.dpr = 1;
     this.pos = 0;
     this.drag = null;
     this.lastTs = null;
+    this.particles = [];
+    this.popups = [];
+    this.rings = [];
 
     canvas.addEventListener('pointerdown', (e) => this.onDown(e));
     canvas.addEventListener('pointermove', (e) => this.onMove(e));
@@ -132,6 +99,10 @@ export class Game {
 
     this.loop = this.loop.bind(this);
     requestAnimationFrame(this.loop);
+  }
+
+  get now() {
+    return this.audio.now;
   }
 
   // ---------- 배치 / 크기 ----------
@@ -147,96 +118,346 @@ export class Game {
     this.layout();
   }
 
-  layout() {
+  layout(refit = false) {
     if (!this.song || !this.W) return;
     const { W, H } = this;
     this.kbW = keyboardWidth(W);
     const gridW = W - this.kbW;
-    // 보드를 최대한 크게: 하단 트레이는 블록 3줄 높이만 남긴다.
-    const rollAvail = H - RULER_H - trayHeight(Math.floor(gridW / VISIBLE_COLS));
-    this.cell = Math.max(10, Math.floor(Math.min(gridW / VISIBLE_COLS, rollAvail / this.rows)));
-    this.gridTop = RULER_H;
-    this.gridBottom = this.gridTop + this.rows * this.cell;
-    this.trayTop = this.gridBottom;
-    this.phX = Math.round(this.kbW + gridW * PLAYHEAD_FRAC);
-    this.aheadCols = (W - this.phX) / this.cell;
-    this.behindCols = (this.phX - this.kbW) / this.cell;
-    const trayH = H - this.trayTop;
-    this.trayCell = Math.max(8, Math.floor(Math.min(this.cell * 0.8, (trayH - 16) / 3, (W / 3 - 16) / 5)));
+    let cw = Math.min(MAX_CELL, gridW / (this.song.sceneSteps + PLAYHEAD_COLS));
+    this.rollTop = RULER_H;
+    this.rollBottom = H - trayHeight(Math.floor(cw));
+    const rollH = this.rollBottom - this.rollTop;
+    for (const p of this.parts) {
+      if (p.inst.id === 'piano') cw = Math.min(cw, rollH / (p.rows ? p.rows.length : pianoMinRows(p)));
+    }
+    this.cellW = Math.max(10, Math.floor(cw));
+    this.phX = this.kbW + this.cellW * PLAYHEAD_COLS;
+    this.aheadCols = (W - this.phX) / this.cellW;
+    this.behindCols = PLAYHEAD_COLS;
+
+    if (refit) for (const p of this.parts) this.assignRows(p);
+    for (const p of this.parts) {
+      const n = p.rows.length;
+      p.cellH = p.inst.id === 'piano' ? this.cellW : Math.floor(Math.min(rollH / n, this.cellW * p.inst.maxAspect));
+      p.top = Math.round(this.rollTop + (rollH - n * p.cellH) / 2);
+    }
+    this.trayTop = this.rollBottom;
+    this.hooks.layout?.({ trayTop: this.trayTop, H });
   }
 
-  // 곡 음역을 가운데 두고, 남는 세로 공간은 건반 줄로 채운다. 곡을 시작할 때 한 번 정한다.
-  fitRows() {
-    const song = this.song;
-    const gridW = this.W - keyboardWidth(this.W);
-    const rollAvail = this.H - RULER_H - trayHeight(Math.floor(gridW / VISIBLE_COLS));
-    const cell = Math.max(10, Math.floor(Math.min(gridW / VISIBLE_COLS, rollAvail / song.rows)));
-    this.rows = Math.min(MAX_ROWS, Math.max(song.rows, Math.floor(rollAvail / cell)));
-    this.topPitch = Math.ceil((song.lowPitch + song.highPitch + this.rows - 1) / 2);
+  // 줄 배치를 정하고 노트를 줄에 매핑한다. 피아노는 남는 세로 공간을 건반 줄로 채운다.
+  assignRows(p) {
+    const id = p.inst.id;
+    if (id === 'piano') {
+      const rollH = this.rollBottom - this.rollTop;
+      const count = Math.min(MAX_ROWS, Math.max(pianoMinRows(p), Math.floor(rollH / this.cellW)));
+      const top = Math.ceil((p.src.lo + p.src.hi + count - 1) / 2);
+      p.rows = pianoRows(top, count);
+    } else if (id === 'vocal') {
+      p.rows = vocalRows(p.src.lo, p.src.hi);
+    } else {
+      p.rows = drumRows();
+    }
+    const index = new Map(p.rows.map((r, i) => [r.key, i]));
+    p.noteAt = new Map();
+    p.byCol = [];
+    for (const n of p.notes) {
+      n.row = index.get(n.key);
+      for (let c = n.start; c < n.start + n.len; c++) {
+        p.noteAt.set(KEY(n.row, c), n);
+        (p.byCol[c] ||= []).push(n);
+      }
+    }
   }
 
   xOf(col) {
-    return this.phX + (col - this.pos) * this.cell;
+    return this.phX + (col - this.pos) * this.cellW;
   }
 
   // ---------- 게임 흐름 ----------
 
-  start(song, speed = 1) {
+  start(song, mode) {
     this.song = song;
-    this.stepSec = song.stepSec / speed;
-    this.fitRows();
-    this.layout();
+    this.mode = mode;
+    this.free = mode === 'free';
+    this.stepSec = song.stepSec;
+    this.length = this.free ? song.sceneSteps : song.length;
+    this.parts = song.parts.map((src) => ({
+      inst: INSTRUMENTS[src.inst],
+      src,
+      notes: src.notes.map((n) => ({ ...n })),
+      rows: null,
+      occupied: new Map(),
+      glow: new Map(),
+    }));
+    this.part = this.parts[0];
+    this.view = 'part';
+    this.layout(true);
 
-    this.notes = song.notes.map((n) => ({ ...n, row: this.topPitch - n.pitch }));
-    this.noteAt = new Map();
-    this.byCol = [];
-    for (const n of this.notes) {
-      for (let c = n.start; c < n.start + n.len; c++) {
-        this.noteAt.set(KEY(n.row, c), n);
-        (this.byCol[c] ||= []).push(n);
-      }
-    }
-    this.totalGreen = this.noteAt.size;
-    this.barCount = Math.ceil(song.length / song.stepsPerBar);
-    this.barsWithNotes = 0;
-    for (let b = 0; b < this.barCount; b++) {
-      for (let c = b * song.stepsPerBar; c < (b + 1) * song.stepsPerBar; c++) {
-        if (this.byCol[c]) {
-          this.barsWithNotes++;
-          break;
-        }
-      }
-    }
-
-    this.occupied = new Map();
     this.score = 0;
     this.combo = 0;
     this.maxCombo = 0;
     this.perfects = 0;
     this.goodCells = 0;
     this.badCells = 0;
-    this.perfectBars = 0;
-
+    this.penaltyBank = 0;
+    this.sceneClears = 0;
+    this.scenesDone = 0;
     this.particles = [];
     this.popups = [];
-    this.flashes = [];
-    this.glow = new Map();
-    this.shake = 0;
+    this.rings = [];
     this.events = [];
+    this.judgement = null;
+    this.banner = null;
+    this.shake = 0;
     this.drag = null;
+    this.tray = null;
+    this.listening = false;
 
     this.audio.ensure();
     this.audio.resetBus();
-    // 첫 노트가 화면 오른쪽 안쪽에 보이는 상태로 시작하고, 마지막 한 마디는 카운트인.
-    const spb = song.stepsPerBeat;
-    this.leadIn = Math.max(song.stepsPerBar, Math.ceil((this.aheadCols * 0.8) / spb) * spb);
-    this.startTime = this.audio.now + 0.15 + this.leadIn * this.stepSec;
-    this.processed = -this.leadIn - 1;
-    this.pos = -this.leadIn;
-    this.endAt = 0;
-    this.tray = makeTray(this.upcomingGreen());
+    this.queue = this.buildQueue();
     this.state = 'playing';
     this.lastTs = null;
+    this.next();
+  }
+
+  get sceneCount() {
+    return Math.max(1, Math.ceil(this.length / this.song.sceneSteps));
+  }
+
+  buildQueue() {
+    if (this.mode === 'flow') return [{ type: 'flow', live: true, parts: this.parts, view: 'part', part: this.parts[0] }];
+    if (this.free) return this.freeScene(0);
+    const q = [];
+    for (let k = 0; k < this.sceneCount; k++) {
+      for (const part of this.parts) {
+        q.push({ type: 'intro', scene: k, part });
+        q.push({ type: 'place', scene: k, part });
+        q.push({ type: 'flow', scene: k, parts: [part], view: 'part', part });
+      }
+      if (this.parts.length > 1) {
+        q.push({ type: 'intro', scene: k, band: true });
+        q.push({ type: 'flow', scene: k, parts: this.parts, view: 'lanes' });
+      }
+    }
+    q.push(...this.finaleQueue());
+    return q;
+  }
+
+  freeScene(k) {
+    const part = this.parts[0];
+    return [
+      { type: 'place', scene: k, part },
+      { type: 'flow', scene: k, parts: [part], view: 'part', part },
+    ];
+  }
+
+  finaleQueue(original = false) {
+    const view = this.parts.length > 1 ? 'lanes' : 'part';
+    return [
+      { type: 'intro', finale: true, original },
+      { type: 'flow', finale: true, original, parts: this.parts, view, part: this.parts[0] },
+    ];
+  }
+
+  next() {
+    const ph = this.queue.shift();
+    if (!ph) {
+      this.phase = null;
+      if (this.listening) {
+        this.listening = false;
+        this.state = 'ended';
+        this.hooks.listened?.();
+      } else {
+        this.finish();
+      }
+      return;
+    }
+    this.phase = ph;
+    this.enter(ph);
+  }
+
+  enter(ph) {
+    const now = this.now;
+    const ss = this.song.sceneSteps;
+    const n = this.sceneCount;
+    this.drag = null;
+    if (ph.type === 'intro') {
+      if (ph.finale) {
+        ph.until = now + 1.4;
+        this.view = this.parts.length > 1 ? 'lanes' : 'part';
+        this.part = this.parts[0];
+        this.pos = 0;
+        this.showBanner(ph.original ? '원곡 듣기' : '전체 연주', this.song.title, '#ffe27a', 1.4);
+      } else if (ph.band) {
+        ph.until = now + 1.1;
+        this.view = 'lanes';
+        this.pos = ph.scene * ss;
+        this.showBanner('합주', `${ph.scene + 1} / ${n} 페이지`, '#ffe27a', 1.1);
+      } else {
+        ph.until = now + 0.9;
+        this.part = ph.part;
+        this.view = 'part';
+        this.pos = ph.scene * ss;
+        if (this.parts.length > 1) this.showBanner(ph.part.inst.name, `${ph.scene + 1} / ${n} 페이지`, ph.part.inst.color, 0.9);
+        else this.showBanner(`${ph.scene + 1} 페이지`, `전체 ${n}페이지`, ph.part.inst.color, 0.9);
+      }
+    } else if (ph.type === 'place') {
+      this.part = ph.part;
+      this.view = 'part';
+      ph.s0 = ph.scene * ss;
+      ph.s1 = Math.min(this.length, ph.s0 + ss);
+      ph.deadline = now + SCENE_TIME;
+      ph.lastSec = SCENE_TIME;
+      this.pos = ph.s0;
+      this.tray = this.newTray(0.08);
+    } else if (ph.type === 'hold') {
+      ph.until = now + ph.dur;
+    } else if (ph.type === 'flow') {
+      if (ph.live) {
+        const spb = this.song.stepsPerBeat;
+        const lead = Math.max(this.song.stepsPerBar, Math.ceil((this.aheadCols * 0.6) / spb) * spb);
+        ph.from = -lead;
+        ph.to = this.length;
+      } else {
+        ph.from = ph.finale ? 0 : ph.scene * ss;
+        ph.to = ph.finale ? this.length : Math.min(this.length, ph.from + ss);
+      }
+      ph.processed = ph.from - 1;
+      ph.t0 = now + (ph.finale || ph.live ? 0.25 : 0.08);
+      ph.end = ph.t0 + (ph.to - ph.from) * this.stepSec + (ph.finale || ph.live ? 1.2 : 0.1);
+      this.view = ph.view;
+      if (ph.part) this.part = ph.part;
+      this.pos = ph.from;
+      if (ph.live) this.tray = this.newTray(0.08);
+    }
+  }
+
+  showBanner(title, sub, color, life) {
+    this.banner = { title, sub, color, t0: this.now, life };
+  }
+
+  newTray(bombChance) {
+    return makeTray(this.upcomingGreen(), { fits: !this.free, bombChance: this.free ? 0.2 : bombChance });
+  }
+
+  // 지금 블록을 놓을 수 있는 열 범위 [첫 열, 끝 열]
+  placeRange() {
+    const ph = this.phase;
+    if (!ph || this.state !== 'playing') return null;
+    if (ph.type === 'place') return [ph.s0, ph.s1 - 1];
+    if (ph.type === 'flow' && ph.live) {
+      return [Math.max(0, ph.processed + 1), Math.min(this.length - 1, Math.floor(this.pos + this.aheadCols) + OFFSCREEN_COLS)];
+    }
+    return null;
+  }
+
+  // 놓을 수 있는 범위 안의 덮이지 않은 노트 칸 (트레이 모양 생성용)
+  upcomingGreen() {
+    const range = this.placeRange();
+    if (!range || this.free) return [];
+    const part = this.part;
+    const from = this.phase.live ? Math.max(range[0] + 2, 0) : range[0];
+    const out = [];
+    for (let c = from; c <= range[1]; c++) {
+      for (const n of part.byCol[c] || []) {
+        if (!part.occupied.has(KEY(n.row, c))) out.push([n.row, c]);
+      }
+    }
+    return out;
+  }
+
+  // 정지 모드 페이지 끝: reason = clear | timeup | skip
+  endPlace(reason) {
+    const ph = this.phase;
+    if (!ph || ph.type !== 'place') return;
+    const now = this.now;
+    this.drag = null;
+    if (reason === 'clear') {
+      const left = Math.max(0, Math.ceil(ph.deadline - now));
+      const bonus = POINTS_CLEAR + left * POINTS_PER_SEC;
+      this.score += bonus;
+      this.sceneClears++;
+      this.judge('ALL CLEAR', `+${bonus}`);
+      this.audio.sparkle();
+    } else if (reason === 'timeup') {
+      this.judge('TIME UP');
+    }
+    this.queue.unshift({ type: 'hold', dur: reason === 'skip' ? 0.15 : 0.75 });
+    this.next();
+  }
+
+  finish() {
+    this.state = 'ended';
+    this.drag = null;
+    let covered = 0;
+    let total = 0;
+    let blocks = 0;
+    for (const p of this.parts) {
+      blocks += p.occupied.size;
+      for (const k of p.noteAt.keys()) {
+        total++;
+        if (p.occupied.has(k)) covered++;
+      }
+    }
+    const accuracy = total ? covered / total : 0;
+    const stars = accuracy >= 0.85 ? 3 : accuracy >= 0.65 ? 2 : accuracy >= 0.4 ? 1 : 0;
+    this.hooks.end?.({
+      song: this.song,
+      mode: this.mode,
+      score: this.score,
+      accuracy,
+      stars,
+      perfects: this.perfects,
+      maxCombo: this.maxCombo,
+      badCells: this.badCells,
+      sceneClears: this.sceneClears,
+      scenes: this.sceneCount * (this.free ? 1 : this.parts.length),
+      blocks,
+      covered,
+      total,
+    });
+  }
+
+  // 결과 화면에서 다시 듣기 / 원곡 듣기
+  listen(original = false) {
+    this.state = 'playing';
+    this.listening = true;
+    this.audio.resetBus();
+    this.queue = this.finaleQueue(original);
+    this.lastTs = null;
+    this.next();
+  }
+
+  // 자유 작곡: 지금까지 만든 곡을 전체 연주하고 완성
+  completeFree() {
+    if (!this.free || this.state !== 'playing') return false;
+    const ph = this.phase;
+    let scenes = this.scenesDone;
+    if (ph && ph.type === 'place') {
+      for (const k of this.part.occupied.keys()) {
+        if (Math.floor(k / 128) >= ph.s0) {
+          scenes = ph.scene + 1;
+          break;
+        }
+      }
+    }
+    if (scenes === 0) return false;
+    this.scenesDone = scenes;
+    this.length = scenes * this.song.sceneSteps;
+    this.queue = this.finaleQueue();
+    this.next();
+    return true;
+  }
+
+  // 자유 작곡 결과 화면에서 이어서 만들기
+  continueFree() {
+    this.state = 'playing';
+    this.length = (this.scenesDone + 1) * this.song.sceneSteps;
+    this.queue = this.freeScene(this.scenesDone);
+    this.lastTs = null;
+    this.next();
   }
 
   pause() {
@@ -256,28 +477,14 @@ export class Game {
   stop() {
     this.state = 'idle';
     this.drag = null;
+    this.phase = null;
     this.audio.resetBus();
     this.audio.resume();
   }
 
-  finish() {
-    this.state = 'ended';
-    this.drag = null;
-    const accuracy = this.totalGreen ? this.goodCells / this.totalGreen : 0;
-    const stars = accuracy >= 0.85 ? 3 : accuracy >= 0.65 ? 2 : accuracy >= 0.4 ? 1 : 0;
-    this.hooks.end?.({
-      song: this.song,
-      score: this.score,
-      accuracy,
-      stars,
-      perfects: this.perfects,
-      maxCombo: this.maxCombo,
-      perfectBars: this.perfectBars,
-      barsWithNotes: this.barsWithNotes,
-      goodCells: this.goodCells,
-      badCells: this.badCells,
-      totalGreen: this.totalGreen,
-    });
+  // 정지 모드에서 시간을 기다리지 않고 바로 흘려보내기 (자유 작곡에서는 다음 페이지)
+  skip() {
+    if (this.state === 'playing' && this.phase?.type === 'place') this.endPlace('skip');
   }
 
   loop(ts) {
@@ -290,23 +497,65 @@ export class Game {
   }
 
   update() {
-    const now = this.audio.now;
-    this.pos = (now - this.startTime) / this.stepSec;
-
-    const horizon = Math.floor((now + SCHEDULE_AHEAD - this.startTime) / this.stepSec);
-    while (this.processed < horizon) {
-      this.processed++;
-      this.processColumn(this.processed, this.startTime + this.processed * this.stepSec);
+    const now = this.now;
+    const ph = this.phase;
+    if (ph) {
+      if (ph.type === 'intro' || ph.type === 'hold') {
+        if (now >= ph.until) this.next();
+      } else if (ph.type === 'place') {
+        if (!this.free) {
+          const left = ph.deadline - now;
+          const sec = Math.ceil(left);
+          if (sec < ph.lastSec) {
+            ph.lastSec = sec;
+            if (sec > 0 && sec <= 5) this.audio.tick(now, sec <= 3);
+          }
+          if (left <= 0) this.endPlace('timeup');
+        }
+      } else if (ph.type === 'flow') {
+        this.updateFlow(now, ph);
+      }
     }
-    while (this.events.length && this.events[0].t <= now) this.fire(this.events.shift(), now);
-
     if (this.drag) this.computeSnap();
+    while (this.events.length && this.events[0].t <= now) this.fire(this.events.shift());
+    this.emitHud();
+  }
 
-    const song = this.song;
-    if (!this.endAt && this.pos > song.length + 1) this.endAt = now + 0.8;
-    if (this.endAt && now >= this.endAt) this.finish();
+  emitHud() {
+    const ph = this.phase;
+    const placing = ph?.type === 'place';
+    let scene = 0;
+    if (ph?.scene != null) scene = ph.scene;
+    else if (ph?.live) scene = Math.max(0, Math.floor(this.pos / this.song.sceneSteps));
+    this.hooks.hud?.({
+      score: this.score,
+      combo: this.combo,
+      timer: placing && !this.free ? Math.max(0, ph.deadline - this.now) : null,
+      timerTotal: SCENE_TIME,
+      placing,
+      part: this.view === 'lanes' ? null : this.part?.inst,
+      scene,
+      scenes: this.sceneCount,
+      finale: !!ph?.finale,
+      live: !!ph?.live,
+      progress: ph?.live ? Math.max(0, Math.min(1, this.pos / this.length)) : null,
+    });
+  }
 
-    this.hooks.hud?.(this.score, this.combo, Math.max(0, Math.min(1, this.pos / song.length)));
+  updateFlow(now, ph) {
+    this.pos = Math.min(ph.to, ph.from + Math.max(0, now - ph.t0) / this.stepSec);
+    const horizon = ph.from + Math.floor((now + SCHEDULE_AHEAD - ph.t0) / this.stepSec);
+    while (ph.processed < ph.to - 1 && ph.processed < horizon) {
+      ph.processed++;
+      this.playColumn(ph.processed, ph.t0 + (ph.processed - ph.from) * this.stepSec, ph);
+    }
+    if (now < ph.end) return;
+    if (this.free && !ph.finale) {
+      this.scenesDone = ph.scene + 1;
+      this.length = (this.scenesDone + 1) * this.song.sceneSteps;
+      this.queue.push(...this.freeScene(this.scenesDone));
+    }
+    this.next();
   }
 
   pushEvent(ev) {
@@ -315,81 +564,86 @@ export class Game {
     this.events.splice(i, 0, ev);
   }
 
-  // 재생선이 c열에 닿기 직전에 한 번 호출된다. 덮인 노트만 소리를 낸다.
-  processColumn(c, t) {
-    const song = this.song;
+  sound(part, key, t, run) {
+    const dur = run * this.stepSec * 0.97;
+    if (part.inst.id === 'drums') this.audio.drum(key, t, 0.9);
+    else if (part.inst.id === 'vocal') this.audio.voice(key, t, dur, 0.85);
+    else this.audio.note(key, t, dur, 0.85);
+  }
+
+  // 재생선이 c열에 닿기 직전에 한 번 호출. 덮인 노트(자유 작곡은 놓인 블록)만 소리를 낸다.
+  playColumn(c, t, ph) {
     if (c < 0) {
-      const spb = song.stepsPerBeat;
-      if (c >= -song.stepsPerBar && ((c % spb) + spb) % spb === 0) this.audio.tick(t, c === -song.stepsPerBar);
+      const { stepsPerBeat: spb, stepsPerBar: bar } = this.song;
+      if (c >= -bar && ((c % spb) + spb) % spb === 0) this.audio.tick(t, c === -bar);
       return;
     }
-    if (c >= song.length) return;
-
-    for (const n of this.byCol[c] || []) {
-      const k = KEY(n.row, c);
-      const occ = this.occupied.get(k);
-      if (!occ) continue;
-      const contFromPrev = c > n.start && this.occupied.has(KEY(n.row, c - 1));
-      if (contFromPrev) continue;
-      let run = 1;
-      while (c + run < n.start + n.len && this.occupied.has(KEY(n.row, c + run))) run++;
-      this.audio.note(n.pitch, t, run * this.stepSec * 0.97, 0.85);
-      this.pushEvent({ t, type: 'hit', row: n.row, col: c, run, color: occ.color });
-    }
-
-    if ((c + 1) % song.stepsPerBar === 0) {
-      const b0 = c + 1 - song.stepsPerBar;
-      let any = false;
-      let full = true;
-      for (let cc = b0; cc <= c && full; cc++) {
-        for (const n of this.byCol[cc] || []) {
-          any = true;
-          if (!this.occupied.has(KEY(n.row, cc))) {
-            full = false;
-            break;
-          }
+    for (const part of ph.parts) {
+      const drum = part.inst.id === 'drums';
+      if (this.free) {
+        for (let r = 0; r < part.rows.length; r++) {
+          const o = part.occupied.get(KEY(r, c));
+          if (!o) continue;
+          if (!drum && c > ph.from && part.occupied.has(KEY(r, c - 1))) continue;
+          let run = 1;
+          while (!drum && c + run < ph.to && part.occupied.has(KEY(r, c + run))) run++;
+          this.sound(part, part.rows[r].key, t, run);
+          this.pushEvent({ t, part, row: r, col: c, run, color: o.color });
         }
+        continue;
       }
-      if (any && full) this.pushEvent({ t: t + this.stepSec, type: 'bar', bar: b0 / song.stepsPerBar });
+      for (const n of part.byCol[c] || []) {
+        const has = (cc) => ph.original || part.occupied.has(KEY(n.row, cc));
+        if (!has(c)) continue;
+        let run = 1;
+        if (!drum) {
+          if (c > n.start && c > ph.from && has(c - 1)) continue;
+          while (c + run < n.start + n.len && c + run < ph.to && has(c + run)) run++;
+        }
+        this.sound(part, n.key, t, run);
+        this.pushEvent({ t, part, row: n.row, col: c, run, color: ph.original ? part.inst.color : WHITE });
+      }
     }
   }
 
-  fire(ev, now) {
-    if (ev.type === 'hit') {
-      const dur = ev.run * this.stepSec;
-      this.glow.set(ev.row, { until: ev.t + dur, color: ev.color });
-      for (let i = 0; i < ev.run; i++) {
-        const o = this.occupied.get(KEY(ev.row, ev.col + i));
-        if (o) o.hitAt = ev.t + i * this.stepSec;
-      }
-      const y = this.gridTop + (ev.row + 0.5) * this.cell;
-      for (let i = 0; i < 9; i++) {
-        this.particles.push({
-          x: this.phX,
-          y,
-          vx: -40 - Math.random() * 140,
-          vy: (Math.random() - 0.5) * 220,
-          life: 0.45 + Math.random() * 0.25,
-          age: 0,
-          size: 2 + Math.random() * 3,
-          color: ev.color,
-        });
-      }
-    } else if (ev.type === 'bar') {
-      this.score += POINTS_BAR;
-      this.perfectBars++;
-      this.flashes.push({ bar: ev.bar, t0: now });
-      this.popups.push({
-        text: `마디 완성 +${POINTS_BAR}`,
-        x: (this.kbW + this.phX) / 2,
-        y: this.gridTop + 28,
-        age: 0,
-        life: 1.1,
-        size: 18,
-        color: '#ffe27a',
-      });
-      this.audio.sparkle();
+  fire(ev) {
+    const { part } = ev;
+    const color = ev.color === WHITE ? part.inst.top : ev.color;
+    part.glow.set(ev.row, { until: ev.t + Math.max(0.12, ev.run * this.stepSec), color });
+    for (let i = 0; i < ev.run; i++) {
+      const o = part.occupied.get(KEY(ev.row, ev.col + i));
+      if (o) o.hitAt = ev.t + i * this.stepSec;
     }
+    const y = this.rowY(part, ev.row);
+    if (y == null) return;
+    for (let i = 0; i < 8; i++) {
+      this.particles.push({
+        x: this.phX,
+        y,
+        vx: -30 - Math.random() * 120,
+        vy: (Math.random() - 0.5) * 200,
+        life: 0.4 + Math.random() * 0.25,
+        age: 0,
+        size: 2 + Math.random() * 3,
+        color,
+      });
+    }
+  }
+
+  // 화면에 보이는 줄의 세로 중앙 (합주 화면에서는 레인 안의 위치)
+  rowY(part, row) {
+    if (this.view === 'lanes') {
+      const lane = this.lane(this.parts.indexOf(part));
+      return lane.top + (row + 0.5) * lane.rowH;
+    }
+    if (part !== this.part) return null;
+    return part.top + (row + 0.5) * part.cellH;
+  }
+
+  lane(i) {
+    const h = (this.rollBottom - this.rollTop) / this.parts.length;
+    const y0 = this.rollTop + i * h;
+    return { y0, h, top: y0 + 4, rowH: (h - 8) / this.parts[i].rows.length };
   }
 
   updateFx(dt) {
@@ -403,32 +657,22 @@ export class Game {
     this.particles = this.particles.filter((p) => p.age < p.life);
     for (const p of this.popups) p.age += dt;
     this.popups = this.popups.filter((p) => p.age < p.life);
+    for (const r of this.rings) r.age += dt;
+    this.rings = this.rings.filter((r) => r.age < r.life);
     this.shake = Math.max(0, this.shake - dt * 3);
   }
 
   // ---------- 블록 ----------
 
-  upcomingGreen() {
-    const from = Math.max(0, this.processed + 3);
-    const to = Math.min(this.song.length - 1, Math.floor(Math.max(this.pos, 0) + this.aheadCols + OFFSCREEN_COLS));
-    const out = [];
-    for (let c = from; c <= to; c++) {
-      for (const n of this.byCol[c] || []) {
-        if (!this.occupied.has(KEY(n.row, c))) out.push([n.row, c]);
-      }
-    }
-    return out;
-  }
-
   canPlace(piece, r0, c0) {
-    const minC = Math.max(0, this.processed + 1);
-    // 긴 블록도 앞부분이 보이면 놓을 수 있게 오른쪽 화면 밖으로 몇 칸 걸쳐도 허용
-    const maxC = Math.min(this.song.length - 1, Math.floor(this.pos + this.aheadCols) + OFFSCREEN_COLS);
+    const range = this.placeRange();
+    if (!range) return false;
+    const part = this.part;
     for (const [dr, dc] of piece.cells) {
       const r = r0 + dr;
       const c = c0 + dc;
-      if (r < 0 || r >= this.rows || c < minC || c > maxC) return false;
-      if (this.occupied.has(KEY(r, c))) return false;
+      if (r < 0 || r >= part.rows.length || c < range[0] || c > range[1]) return false;
+      if (!piece.bomb && part.occupied.has(KEY(r, c))) return false;
     }
     return true;
   }
@@ -436,71 +680,163 @@ export class Game {
   computeSnap() {
     const d = this.drag;
     const p = d.piece;
-    const s = this.cell;
-    d.px = d.x - (p.w * s) / 2;
-    d.py = d.y - d.lift - p.h * s;
-    if (d.py + p.h * s < this.gridTop - s * 0.5 || d.py > this.gridBottom - s * 0.5) {
+    const part = this.part;
+    const cw = this.cellW;
+    const ch = part.cellH;
+    d.px = d.x - (p.w * cw) / 2;
+    d.py = d.y - d.lift(ch) - p.h * ch;
+    const bottom = part.top + part.rows.length * ch;
+    if (d.py + p.h * ch < part.top - ch * 0.5 || d.py > bottom - ch * 0.5) {
       d.snap = null;
       return;
     }
-    const c0 = Math.round((d.px - this.phX) / s + this.pos);
-    const r0 = Math.round((d.py - this.gridTop) / s);
+    const c0 = Math.round((d.px - this.phX) / cw + this.pos);
+    const r0 = Math.round((d.py - part.top) / ch);
     d.snap = this.canPlace(p, r0, c0) ? { r0, c0 } : null;
   }
 
   place(slot, piece, r0, c0) {
-    const now = this.audio.now;
-    let good = 0;
-    let bad = 0;
-    const pitches = new Set();
-    for (const [dr, dc] of piece.cells) {
-      const k = KEY(r0 + dr, c0 + dc);
-      const note = this.noteAt.get(k);
-      this.occupied.set(k, { color: note ? piece.color : WRONG, good: !!note, born: now, hitAt: 0 });
-      if (note) {
-        good++;
-        pitches.add(note.pitch);
-      } else {
-        bad++;
+    const part = this.part;
+    const now = this.now;
+    if (piece.bomb) {
+      this.detonate(piece, r0, c0);
+    } else {
+      let good = 0;
+      let bad = 0;
+      const keys = new Set();
+      for (const [dr, dc] of piece.cells) {
+        const r = r0 + dr;
+        const k = KEY(r, c0 + dc);
+        const note = this.free ? null : part.noteAt.get(k);
+        const ok = this.free || !!note;
+        // 노트 위 칸은 하얀색, 노트 밖 칸은 블록 원래 색
+        part.occupied.set(k, { color: !this.free && note ? WHITE : piece.color, good: ok, born: now, hitAt: 0 });
+        keys.add(part.rows[r].key);
+        if (ok) good++;
+        else bad++;
       }
+      this.previewSound(part, [...keys], bad > 0 && !this.free);
+      if (!this.free) this.scorePlacement(good, bad, piece, r0, c0);
     }
+
+    this.tray[slot] = null;
+    if (this.tray.every((t) => !t)) this.tray = this.newTray(this.wrongInRange() ? 0.45 : 0.1);
+    if (!this.free && this.phase?.type === 'place' && this.sceneComplete()) this.endPlace('clear');
+  }
+
+  // 블록을 놓을 때 덮은 줄의 건반(드럼/보컬) 소리
+  previewSound(part, keys, bad) {
+    const id = part.inst.id;
+    if (id === 'drums') keys.forEach((k, i) => this.audio.drum(k, this.now + i * 0.03, 0.6));
+    else if (id === 'vocal') keys.forEach((k, i) => this.audio.voice(k, this.now + i * 0.04, 0.22, 0.6));
+    else this.audio.preview(keys.sort((a, b) => a - b));
+    if (bad) this.audio.thud();
+  }
+
+  scorePlacement(good, bad, piece, r0, c0) {
     this.goodCells += good;
     this.badCells += bad;
-
     let gain;
-    let label = '';
+    let word;
     if (bad === 0) {
       this.combo++;
       this.perfects++;
       this.maxCombo = Math.max(this.maxCombo, this.combo);
-      const mult = 1 + Math.min(this.combo - 1, 10) * 0.2;
-      gain = Math.round(good * POINTS_GOOD * mult);
-      label = this.combo > 1 ? `PERFECT · 콤보 ${this.combo}` : 'PERFECT';
+      gain = Math.round(good * POINTS_GOOD * (1 + Math.min(this.combo - 1, 10) * 0.2));
+      word = 'FANTASTIC';
     } else {
       this.combo = 0;
       gain = good * POINTS_GOOD - bad * POINTS_BAD;
-      if (good === 0) this.shake = 1;
+      word = good / (good + bad) >= 0.5 ? 'GOOD' : 'BAD';
+      if (word === 'BAD') this.shake = 1;
     }
+    const before = this.score;
     this.score = Math.max(0, this.score + gain);
-
-    if (pitches.size) this.audio.preview([...pitches].sort((a, b) => a - b));
-    if (bad) this.audio.thud();
-
-    const cx = this.xOf(c0) + (piece.w * this.cell) / 2;
-    const cy = this.gridTop + r0 * this.cell;
+    // 실제로 깎인 감점만큼만 폭탄으로 돌려받을 수 있다 (0점 아래로는 안 깎이므로)
+    if (bad) this.penaltyBank += Math.min(bad * POINTS_BAD, before + good * POINTS_GOOD);
+    this.judge(word, this.combo > 1 ? `${this.combo} COMBO` : '');
     this.popups.push({
       text: gain >= 0 ? `+${gain}` : `${gain}`,
-      x: cx,
-      y: cy,
+      x: this.xOf(c0) + (piece.w * this.cellW) / 2,
+      y: this.part.top + r0 * this.part.cellH,
       age: 0,
       life: 0.9,
-      size: 20,
-      color: gain > 0 ? (bad ? '#ffffff' : '#ffe27a') : '#ff7b6e',
+      size: 18,
+      color: gain > 0 ? '#ffe27a' : '#ff7b6e',
     });
-    if (label) this.popups.push({ text: label, x: cx, y: cy + 20, age: 0, life: 0.9, size: 12, color: '#bff5c9' });
+  }
 
-    this.tray[slot] = null;
-    if (this.tray.every((t) => !t)) this.tray = makeTray(this.upcomingGreen());
+  judge(word, sub = '') {
+    this.judgement = { word, sub, t0: this.now };
+  }
+
+  // 폭탄: 모양 안의 블록을 지운다. 빈칸 블록을 지우면 감점을 돌려받고, 노트 위 블록을 지우면 점수를 잃는다.
+  detonate(piece, r0, c0) {
+    const part = this.part;
+    let removedGood = 0;
+    let removedBad = 0;
+    for (const [dr, dc] of piece.cells) {
+      const r = r0 + dr;
+      const c = c0 + dc;
+      const x = this.xOf(c) + this.cellW / 2;
+      const y = part.top + (r + 0.5) * part.cellH;
+      for (let i = 0; i < 10; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 60 + Math.random() * 220;
+        this.particles.push({
+          x,
+          y,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp - 60,
+          life: 0.5 + Math.random() * 0.3,
+          age: 0,
+          size: 3 + Math.random() * 4,
+          color: ['#ffd34d', '#ff7a2e', '#ffffff', '#f2463a'][i % 4],
+        });
+      }
+      const k = KEY(r, c);
+      const o = part.occupied.get(k);
+      if (!o) continue;
+      part.occupied.delete(k);
+      if (o.good) removedGood++;
+      else removedBad++;
+    }
+    const cx = this.xOf(c0) + (piece.w * this.cellW) / 2;
+    const cy = part.top + (r0 + piece.h / 2) * part.cellH;
+    this.rings.push({ x: cx, y: cy, age: 0, life: 0.45, r: Math.max(piece.w, piece.h) * this.cellW });
+    this.shake = 0.7;
+    this.audio.boom();
+    if (!this.free) {
+      this.goodCells -= removedGood;
+      this.badCells -= removedBad;
+      const refund = Math.min(removedBad * POINTS_BAD, this.penaltyBank);
+      this.penaltyBank -= refund;
+      this.score = Math.max(0, this.score + refund - removedGood * POINTS_GOOD);
+    }
+    this.judge(removedBad > 0 || (this.free && removedGood > 0) ? 'CLEAR' : 'BOOM');
+  }
+
+  wrongInRange() {
+    const range = this.placeRange();
+    if (!range || this.free) return false;
+    for (const [k, o] of this.part.occupied) {
+      const c = Math.floor(k / 128);
+      if (!o.good && c >= range[0] && c <= range[1]) return true;
+    }
+    return false;
+  }
+
+  sceneComplete() {
+    const ph = this.phase;
+    const part = this.part;
+    let any = false;
+    for (let c = ph.s0; c < ph.s1; c++) {
+      for (const n of part.byCol[c] || []) {
+        any = true;
+        if (!part.occupied.has(KEY(n.row, c))) return false;
+      }
+    }
+    return any;
   }
 
   // ---------- 입력 ----------
@@ -511,7 +847,7 @@ export class Game {
   }
 
   onDown(e) {
-    if (this.state !== 'playing' || this.drag) return;
+    if (this.drag || !this.placeRange() || !this.tray) return;
     const { x, y } = this.point(e);
     if (y < this.trayTop) return;
     const slot = Math.min(2, Math.floor(x / (this.W / 3)));
@@ -521,7 +857,8 @@ export class Game {
     try {
       this.cv.setPointerCapture(e.pointerId);
     } catch {}
-    const lift = e.pointerType === 'mouse' ? -(piece.h * this.cell) / 2 : this.cell * 1.3 + 26;
+    const touch = e.pointerType !== 'mouse';
+    const lift = (ch) => (touch ? ch * 1.2 + 26 : -(piece.h * ch) / 2);
     this.drag = { id: e.pointerId, slot, piece, x, y, lift, snap: null };
     this.computeSnap();
   }
@@ -538,10 +875,10 @@ export class Game {
   onUp(e, cancelled = false) {
     const d = this.drag;
     if (!d || e.pointerId !== d.id) return;
-    if (!cancelled && this.state === 'playing') this.computeSnap();
+    if (!cancelled && this.placeRange()) this.computeSnap();
     this.drag = null;
-    if (cancelled || this.state !== 'playing') return;
-    if (d.snap && this.tray[d.slot] === d.piece) this.place(d.slot, d.piece, d.snap.r0, d.snap.c0);
+    if (cancelled || !d.snap || this.tray?.[d.slot] !== d.piece) return;
+    this.place(d.slot, d.piece, d.snap.r0, d.snap.c0);
   }
 
   // ---------- 그리기 ----------
@@ -552,26 +889,17 @@ export class Game {
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     g.fillStyle = COL.bg;
     g.fillRect(0, 0, W, H);
-    if (!this.song || !this.cell) return;
+    if (!this.song || !this.cellW || !this.parts) return;
 
     g.save();
     if (this.shake > 0) {
       const m = this.shake * 5;
       g.translate((Math.random() - 0.5) * m, (Math.random() - 0.5) * m);
     }
-    g.save();
-    g.beginPath();
-    g.rect(this.kbW, this.gridTop, W - this.kbW, this.gridBottom - this.gridTop);
-    g.clip();
-    this.drawGrid();
-    this.drawFlashes();
-    this.drawNotes();
-    this.drawBlocks();
-    this.drawGhost();
-    g.restore();
+    if (this.view === 'lanes') this.drawLanes();
+    else this.drawPart(this.part);
     this.drawPlayhead();
     this.drawParticles();
-    this.drawKeyboard();
     this.drawRuler();
     g.restore();
 
@@ -579,201 +907,357 @@ export class Game {
     this.drawHint();
     this.drawDrag();
     this.drawPopups();
-    this.drawCountdown();
+    this.drawJudgement();
+    this.drawBanner();
   }
 
-  drawGrid() {
+  visibleCols() {
+    return [Math.floor(this.pos - this.behindCols) - 1, Math.ceil(this.pos + this.aheadCols) + 1];
+  }
+
+  drawGridLines(top, bottom) {
     const g = this.g;
-    const { W, kbW, gridTop, gridBottom, cell, song, phX } = this;
-    for (let r = 0; r < this.rows; r++) {
-      const pitch = this.topPitch - r;
-      g.fillStyle = BLACK[pitch % 12] ? COL.rowBlack : COL.rowWhite;
-      g.fillRect(kbW, gridTop + r * cell, W - kbW, cell);
-      g.fillStyle = COL.rowLine;
-      g.fillRect(kbW, gridTop + r * cell, W - kbW, 1);
-    }
-    const c0 = Math.floor(this.pos - this.behindCols) - 1;
-    const c1 = Math.ceil(this.pos + this.aheadCols) + 1;
+    const [c0, c1] = this.visibleCols();
+    const { stepsPerBar: bar, stepsPerBeat: beat } = this.song;
     for (let c = c0; c <= c1; c++) {
       const x = Math.round(this.xOf(c));
-      if (x < kbW) continue;
-      g.fillStyle = c % song.stepsPerBar === 0 ? COL.bar : c % song.stepsPerBeat === 0 ? COL.beat : COL.step;
-      g.fillRect(x, gridTop, 1, gridBottom - gridTop);
+      if (x < this.kbW) continue;
+      g.fillStyle = c % bar === 0 ? COL.bar : c % beat === 0 ? COL.beat : COL.step;
+      g.fillRect(x, top, 1, bottom - top);
+    }
+  }
+
+  drawShading(top, bottom) {
+    const g = this.g;
+    const { W, kbW, phX } = this;
+    const h = bottom - top;
+    if (this.phase?.type === 'place') {
+      // 정지 모드: 이번 페이지 밖은 어둡게
+      const x1 = this.xOf(this.phase.s1);
+      if (x1 < W) {
+        g.fillStyle = COL.offScene;
+        g.fillRect(x1, top, W - x1, h);
+        g.fillStyle = 'rgba(255,226,122,0.6)';
+        g.fillRect(Math.round(x1) - 1, top, 2, h);
+      }
     }
     g.fillStyle = COL.past;
-    g.fillRect(kbW, gridTop, phX - kbW, gridBottom - gridTop);
+    g.fillRect(kbW, top, phX - kbW, h);
     g.fillStyle = COL.outside;
     const xs = this.xOf(0);
-    if (xs > kbW) g.fillRect(kbW, gridTop, xs - kbW, gridBottom - gridTop);
-    const xe = this.xOf(song.length);
-    if (xe < W) g.fillRect(xe, gridTop, W - xe, gridBottom - gridTop);
+    if (xs > kbW) g.fillRect(kbW, top, Math.min(W, xs) - kbW, h);
+    const xe = Math.max(kbW, this.xOf(this.length));
+    if (xe < W) g.fillRect(xe, top, W - xe, h);
   }
 
-  drawFlashes() {
+  drawPart(part) {
     const g = this.g;
-    const now = this.audio.now;
-    const spb = this.song.stepsPerBar;
-    this.flashes = this.flashes.filter((f) => now - f.t0 < 0.6);
-    for (const f of this.flashes) {
-      const a = 1 - (now - f.t0) / 0.6;
-      const x0 = this.xOf(f.bar * spb);
-      g.fillStyle = `rgba(255,236,150,${0.35 * a})`;
-      g.fillRect(x0, this.gridTop, spb * this.cell, this.gridBottom - this.gridTop);
+    const { W, kbW, rollTop, rollBottom, cellW } = this;
+    const ch = part.cellH;
+    const top = part.top;
+    const n = part.rows.length;
+    const bottom = top + n * ch;
+    const id = part.inst.id;
+    const inst = part.inst;
+    const now = this.now;
+
+    g.fillStyle = COL.void;
+    g.fillRect(kbW, rollTop, W - kbW, rollBottom - rollTop);
+    g.save();
+    g.beginPath();
+    g.rect(kbW, rollTop, W - kbW, rollBottom - rollTop);
+    g.clip();
+
+    for (let r = 0; r < n; r++) {
+      const row = part.rows[r];
+      if (id === 'piano') g.fillStyle = row.black ? COL.rowBlack : COL.rowWhite;
+      else if (id === 'vocal') g.fillStyle = row.key % 12 === 0 ? '#2b2429' : r % 2 ? COL.rowA : COL.rowB;
+      else g.fillStyle = r % 2 ? COL.rowA : COL.rowB;
+      g.fillRect(kbW, top + r * ch, W - kbW, ch);
+      g.fillStyle = COL.rowLine;
+      g.fillRect(kbW, top + r * ch, W - kbW, 1);
     }
-  }
+    this.drawGridLines(top, bottom);
+    this.drawShading(top, bottom);
 
-  drawNotes() {
-    const g = this.g;
-    const { cell, gridTop, kbW, W, phX } = this;
-    for (const n of this.notes) {
-      const x0 = this.xOf(n.start);
-      const x1 = this.xOf(n.start + n.len);
+    // 목표 노트
+    for (const note of part.notes) {
+      const x0 = this.xOf(note.start);
+      const x1 = this.xOf(note.start + note.len);
       if (x1 < kbW || x0 > W) continue;
-      const y = gridTop + n.row * cell;
-      rrect(g, x0 + 1, y + 1, x1 - x0 - 2, cell - 2, 3);
-      g.fillStyle = COL.note;
+      const y = top + note.row * ch;
+      if (id === 'drums') rrect(g, x0 + 3, y + 3, x1 - x0 - 6, ch - 6, Math.min(8, ch / 3));
+      else rrect(g, x0 + 1, y + 1, x1 - x0 - 2, ch - 2, id === 'vocal' ? ch / 2 : 3);
+      g.fillStyle = inst.color;
       g.fill();
-      g.strokeStyle = COL.noteEdge;
+      g.strokeStyle = inst.edge;
       g.lineWidth = 1;
       g.stroke();
-      g.fillStyle = COL.noteTop;
-      g.fillRect(x0 + 3, y + 2, x1 - x0 - 6, Math.max(1, cell * 0.12));
-      // 재생선을 지나간 빈 노트는 어둡게
-      for (let c = n.start; c < n.start + n.len; c++) {
-        const cx1 = this.xOf(c + 1);
-        if (cx1 > phX) break;
-        if (!this.occupied.has(KEY(n.row, c))) {
+      if (id === 'piano') {
+        g.fillStyle = inst.top;
+        g.fillRect(x0 + 3, y + 2, x1 - x0 - 6, Math.max(1, ch * 0.12));
+      }
+      if (id === 'vocal') {
+        g.fillStyle = 'rgba(255,255,255,0.9)';
+        g.font = `${Math.round(Math.min(ch * 0.45, cellW * 0.6))}px ${FONT}`;
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillText(solfege(note.key), x0 + Math.min(cellW, x1 - x0) / 2, y + ch / 2 + 1);
+      }
+      for (let c = note.start; c < note.start + note.len; c++) {
+        if (this.xOf(c + 1) > this.phX) break;
+        if (!part.occupied.has(KEY(note.row, c))) {
           g.fillStyle = COL.noteMiss;
-          g.fillRect(this.xOf(c), y, cell, cell);
+          g.fillRect(this.xOf(c), y, cellW, ch);
         }
       }
     }
-  }
 
-  drawBlocks() {
-    const g = this.g;
-    const { cell, gridTop, kbW, W, phX } = this;
-    const now = this.audio.now;
-    for (const [k, o] of this.occupied) {
+    // 놓은 블록
+    for (const [k, o] of part.occupied) {
       const c = Math.floor(k / 128);
       const r = k % 128;
       const x = this.xOf(c);
-      if (x + cell < kbW || x > W) continue;
-      const y = gridTop + r * cell;
+      if (x + cellW < kbW || x > W) continue;
+      const y = top + r * ch;
       const age = now - o.born;
       const sc = age < 0.14 ? 0.6 + 0.4 * (age / 0.14) : 1;
-      const s = cell * sc;
-      const off = (cell - s) / 2;
-      g.globalAlpha = x + cell <= phX ? 0.78 : 1;
-      drawBlock(g, x + off, y + off, s, o.color);
+      g.globalAlpha = x + cellW <= this.phX ? 0.82 : 1;
+      drawBlock(g, x + (cellW * (1 - sc)) / 2, y + (ch * (1 - sc)) / 2, cellW * sc, ch * sc, o.color);
       g.globalAlpha = 1;
       if (o.hitAt && now >= o.hitAt && now - o.hitAt < 0.3) {
-        g.fillStyle = `rgba(255,255,255,${0.75 * (1 - (now - o.hitAt) / 0.3)})`;
-        g.fillRect(x, y, cell, cell);
+        g.fillStyle = `rgba(255,255,255,${0.8 * (1 - (now - o.hitAt) / 0.3)})`;
+        g.fillRect(x, y, cellW, ch);
       }
     }
+
+    this.drawGhost(part);
+
+    for (const ring of this.rings) {
+      const k = ring.age / ring.life;
+      g.strokeStyle = `rgba(255,190,80,${1 - k})`;
+      g.lineWidth = 6 * (1 - k) + 1;
+      g.beginPath();
+      g.arc(ring.x, ring.y, ring.r * (0.4 + k * 1.2), 0, Math.PI * 2);
+      g.stroke();
+    }
+    g.restore();
+
+    this.drawSidePanel(part);
   }
 
-  drawGhost() {
+  drawGhost(part) {
     const d = this.drag;
     if (!d || !d.snap) return;
     const g = this.g;
-    const { cell, gridTop } = this;
+    const ch = part.cellH;
+    const cw = this.cellW;
     for (const [dr, dc] of d.piece.cells) {
       const r = d.snap.r0 + dr;
       const c = d.snap.c0 + dc;
       const x = this.xOf(c);
-      const y = gridTop + r * cell;
-      if (this.noteAt.has(KEY(r, c))) {
-        g.globalAlpha = 0.75;
-        drawBlock(g, x, y, cell, d.piece.color);
+      const y = part.top + r * ch;
+      const k = KEY(r, c);
+      if (d.piece.bomb) {
+        g.fillStyle = part.occupied.has(k) ? 'rgba(255,120,40,0.55)' : 'rgba(255,120,40,0.22)';
+        g.fillRect(x, y, cw, ch);
+        g.strokeStyle = '#ffb347';
+      } else if (this.free || part.noteAt.has(k)) {
+        g.globalAlpha = 0.85;
+        drawBlock(g, x, y, cw, ch, this.free ? d.piece.color : WHITE);
         g.globalAlpha = 1;
         g.strokeStyle = '#ffffff';
-        g.lineWidth = 2;
-        g.strokeRect(x + 1, y + 1, cell - 2, cell - 2);
       } else {
-        g.fillStyle = 'rgba(242,96,79,0.35)';
-        g.fillRect(x, y, cell, cell);
+        g.globalAlpha = 0.5;
+        drawBlock(g, x, y, cw, ch, d.piece.color);
+        g.globalAlpha = 1;
         g.strokeStyle = '#f2604f';
-        g.lineWidth = 2;
-        g.strokeRect(x + 1, y + 1, cell - 2, cell - 2);
+      }
+      g.lineWidth = 2;
+      g.strokeRect(x + 1, y + 1, cw - 2, ch - 2);
+    }
+  }
+
+  drawSidePanel(part) {
+    const g = this.g;
+    const { kbW, rollTop, rollBottom } = this;
+    const ch = part.cellH;
+    const top = part.top;
+    const n = part.rows.length;
+    const now = this.now;
+    const lit = (r) => {
+      const gl = part.glow.get(r);
+      return gl && now < gl.until ? gl.color : null;
+    };
+    g.fillStyle = COL.void;
+    g.fillRect(0, rollTop, kbW, rollBottom - rollTop);
+
+    if (part.inst.id === 'piano') {
+      const bw = Math.round(kbW * 0.6);
+      g.fillStyle = COL.keyWhite;
+      g.fillRect(0, top, kbW, n * ch);
+      for (let r = 0; r < n; r++) {
+        if (part.rows[r].black) continue;
+        const color = lit(r);
+        if (color) {
+          g.fillStyle = color;
+          g.fillRect(0, top + r * ch, kbW, ch);
+        }
+      }
+      g.fillStyle = COL.keyLine;
+      for (let r = 0; r < n; r++) {
+        const pc = part.rows[r].key % 12;
+        const y = top + r * ch;
+        if (pc === 4 || pc === 11) g.fillRect(0, y, kbW, 1);
+        if (part.rows[r].black) g.fillRect(bw, Math.round(y + ch / 2), kbW - bw, 1);
+      }
+      for (let r = 0; r < n; r++) {
+        if (!part.rows[r].black) continue;
+        const y = top + r * ch;
+        const inset = Math.max(1, ch * 0.06);
+        const color = lit(r);
+        rrect(g, -4, y + inset, bw + 4, ch - inset * 2, 3);
+        g.fillStyle = color ? shade(color, -0.25) : COL.keyBlack;
+        g.fill();
+        g.fillStyle = 'rgba(255,255,255,0.12)';
+        g.fillRect(2, y + inset + 1, bw - 5, 1);
+      }
+      g.fillStyle = COL.keyLabel;
+      g.font = `${Math.max(8, Math.min(11, ch * 0.45))}px ${FONT}`;
+      g.textAlign = 'right';
+      g.textBaseline = 'middle';
+      for (let r = 0; r < n; r++) {
+        const pitch = part.rows[r].key;
+        if (pitch % 12 === 0) g.fillText(`C${Math.floor(pitch / 12) - 1}`, kbW - 4, top + (r + 0.5) * ch);
+      }
+    } else if (part.inst.id === 'drums') {
+      for (let r = 0; r < n; r++) {
+        const row = part.rows[r];
+        const y = top + r * ch;
+        const color = lit(r);
+        g.fillStyle = color ? shade(row.color, -0.2) : r % 2 ? '#1e2321' : '#252b28';
+        g.fillRect(0, y, kbW, ch);
+        g.fillStyle = 'rgba(0,0,0,0.35)';
+        g.fillRect(0, y, kbW, 1);
+        g.fillStyle = row.color;
+        g.beginPath();
+        g.arc(9, y + ch / 2, Math.min(5, ch * 0.18), 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = color ? '#ffffff' : '#d9dfdb';
+        g.font = `${Math.max(9, Math.min(12, ch * 0.32))}px ${FONT}`;
+        g.textAlign = 'left';
+        g.textBaseline = 'middle';
+        g.fillText(row.label, 17, y + ch / 2 + 1);
+      }
+    } else {
+      for (let r = 0; r < n; r++) {
+        const row = part.rows[r];
+        const y = top + r * ch;
+        const color = lit(r);
+        g.fillStyle = color || (row.key % 12 === 0 ? '#f6dbe9' : '#efe6eb');
+        g.fillRect(0, y, kbW, ch);
+        g.fillStyle = 'rgba(120,40,80,0.25)';
+        g.fillRect(0, y, kbW, 1);
+        g.fillStyle = color ? '#ffffff' : '#7a2d55';
+        g.font = `${Math.max(10, Math.min(16, ch * 0.42))}px ${FONT}`;
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillText(row.label, kbW / 2, y + ch / 2 + 1);
+        const oct = Math.floor(row.key / 12) - 5; // C4 기준 옥타브 점
+        if (oct !== 0) {
+          g.beginPath();
+          g.arc(kbW / 2 + 12, y + ch / 2 + (oct > 0 ? -ch * 0.22 : ch * 0.22), 2, 0, Math.PI * 2);
+          g.fill();
+        }
       }
     }
+    g.fillStyle = '#0a0b0a';
+    g.fillRect(kbW - 1, rollTop, 1, rollBottom - rollTop);
+  }
+
+  // 합주: 세 악기를 레인으로 나눠 한 화면에
+  drawLanes() {
+    const g = this.g;
+    const { W, kbW, cellW } = this;
+    const now = this.now;
+    this.parts.forEach((part, i) => {
+      const lane = this.lane(i);
+      const inst = part.inst;
+      g.fillStyle = i % 2 ? '#181c1a' : '#1d2220';
+      g.fillRect(kbW, lane.y0, W - kbW, lane.h);
+      g.save();
+      g.beginPath();
+      g.rect(kbW, lane.y0, W - kbW, lane.h);
+      g.clip();
+      this.drawGridLines(lane.y0, lane.y0 + lane.h);
+      this.drawShading(lane.y0, lane.y0 + lane.h);
+      const bh = Math.max(2, lane.rowH - 1);
+      for (const note of part.notes) {
+        const x0 = this.xOf(note.start);
+        const x1 = this.xOf(note.start + note.len);
+        if (x1 < kbW || x0 > W) continue;
+        const y = lane.top + note.row * lane.rowH;
+        if (this.phase?.original) {
+          g.fillStyle = inst.color;
+          g.fillRect(x0 + 1, y, x1 - x0 - 2, bh);
+        } else {
+          g.strokeStyle = inst.color;
+          g.globalAlpha = 0.6;
+          g.lineWidth = 1;
+          g.strokeRect(x0 + 0.5, y + 0.5, x1 - x0 - 1, bh);
+          g.globalAlpha = 1;
+        }
+      }
+      if (!this.phase?.original) {
+        for (const [k, o] of part.occupied) {
+          const c = Math.floor(k / 128);
+          const r = k % 128;
+          const x = this.xOf(c);
+          if (x + cellW < kbW || x > W) continue;
+          const y = lane.top + r * lane.rowH;
+          g.fillStyle = o.good ? o.color : shade(o.color, -0.35);
+          g.fillRect(x + 1, y, cellW - 2, bh);
+          if (o.hitAt && now >= o.hitAt && now - o.hitAt < 0.25) {
+            g.fillStyle = inst.top;
+            g.fillRect(x - 1, y - 1, cellW + 2, bh + 2);
+          }
+        }
+      }
+      g.restore();
+
+      let active = false;
+      for (const gl of part.glow.values()) if (now < gl.until) active = true;
+      g.fillStyle = active ? inst.color : shade(inst.color, -0.65);
+      g.fillRect(0, lane.y0, kbW, lane.h);
+      g.fillStyle = active ? '#111111' : inst.color;
+      g.font = `14px ${FONT}`;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(inst.name, kbW / 2, lane.y0 + lane.h / 2);
+      g.fillStyle = 'rgba(0,0,0,0.5)';
+      g.fillRect(0, lane.y0 + lane.h - 1, W, 1);
+    });
   }
 
   drawPlayhead() {
     const g = this.g;
     const x = this.phX;
+    const top = this.rollTop;
+    const h = this.rollBottom - this.rollTop;
     g.fillStyle = 'rgba(255,255,255,0.12)';
-    g.fillRect(x - 3, this.gridTop, 6, this.gridBottom - this.gridTop);
+    g.fillRect(x - 3, top, 6, h);
     g.fillStyle = COL.playhead;
-    g.fillRect(x - 1, this.gridTop, 2, this.gridBottom - this.gridTop);
+    g.fillRect(x - 1, top, 2, h);
   }
 
   drawParticles() {
     const g = this.g;
     for (const p of this.particles) {
-      g.globalAlpha = 1 - p.age / p.life;
+      g.globalAlpha = Math.max(0, 1 - p.age / p.life);
       g.fillStyle = p.color;
       g.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
     }
     g.globalAlpha = 1;
-  }
-
-  drawKeyboard() {
-    const g = this.g;
-    const { kbW, cell, gridTop, rows, topPitch } = this;
-    const now = this.audio.now;
-    const bw = Math.round(kbW * 0.6);
-    const h = rows * cell;
-    g.fillStyle = COL.keyWhite;
-    g.fillRect(0, gridTop, kbW, h);
-
-    const lit = (r) => {
-      const gl = this.glow.get(r);
-      return gl && now < gl.until ? gl.color : null;
-    };
-
-    for (let r = 0; r < rows; r++) {
-      const pitch = topPitch - r;
-      if (BLACK[pitch % 12]) continue;
-      const color = lit(r);
-      if (color) {
-        g.fillStyle = color;
-        g.fillRect(0, gridTop + r * cell, kbW, cell);
-      }
-    }
-    g.fillStyle = COL.keyLine;
-    for (let r = 0; r < rows; r++) {
-      const pitch = topPitch - r;
-      const pc = pitch % 12;
-      const y = gridTop + r * cell;
-      if (pc === 4 || pc === 11) g.fillRect(0, y, kbW, 1);
-      if (BLACK[pc]) g.fillRect(bw, Math.round(y + cell / 2), kbW - bw, 1);
-    }
-    for (let r = 0; r < rows; r++) {
-      const pitch = topPitch - r;
-      if (!BLACK[pitch % 12]) continue;
-      const y = gridTop + r * cell;
-      const inset = Math.max(1, cell * 0.06);
-      const color = lit(r);
-      rrect(g, -4, y + inset, bw + 4, cell - inset * 2, 3);
-      g.fillStyle = color ? shade(color, -0.25) : COL.keyBlack;
-      g.fill();
-      g.fillStyle = 'rgba(255,255,255,0.12)';
-      g.fillRect(2, y + inset + 1, bw - 5, 1);
-    }
-    g.fillStyle = COL.keyLabel;
-    g.font = `600 ${Math.max(8, Math.min(11, cell * 0.45))}px ${FONT}`;
-    g.textAlign = 'right';
-    g.textBaseline = 'middle';
-    for (let r = 0; r < rows; r++) {
-      const pitch = topPitch - r;
-      if (pitch % 12 !== 0) continue;
-      g.fillText(`C${Math.floor(pitch / 12) - 1}`, kbW - 4, gridTop + (r + 0.5) * cell);
-    }
-    g.fillStyle = '#0a0b0a';
-    g.fillRect(kbW - 1, gridTop, 1, h);
   }
 
   drawRuler() {
@@ -784,20 +1268,18 @@ export class Game {
     g.fillStyle = '#0d0f0e';
     g.fillRect(0, 0, kbW, RULER_H);
     g.fillRect(0, RULER_H - 1, W, 1);
-
     g.font = `10px ${FONT}`;
     g.textAlign = 'left';
     g.textBaseline = 'middle';
-    const c0 = Math.floor(this.pos - this.behindCols) - 1;
-    const c1 = Math.ceil(this.pos + this.aheadCols) + 1;
+    const [c0, c1] = this.visibleCols();
     for (let c = c0; c <= c1; c++) {
-      if (c < 0 || c > song.length) continue;
+      if (c < 0 || c > this.length) continue;
       const x = Math.round(this.xOf(c));
       if (x < kbW) continue;
       if (c % song.stepsPerBar === 0) {
         g.fillStyle = COL.rulerText;
         g.fillRect(x, 3, 1, RULER_H - 4);
-        if (c < song.length) g.fillText(String(c / song.stepsPerBar + 1), x + 3, RULER_H / 2);
+        if (c < this.length) g.fillText(String(c / song.stepsPerBar + 1), x + 3, RULER_H / 2);
       } else if (c % song.stepsPerBeat === 0) {
         g.fillStyle = 'rgba(140,149,143,0.5)';
         g.fillRect(x, RULER_H - 6, 1, 5);
@@ -817,39 +1299,72 @@ export class Game {
   drawTray() {
     const g = this.g;
     const { W, H, trayTop } = this;
+    const trayH = H - trayTop;
     const grad = g.createLinearGradient(0, trayTop, 0, H);
     grad.addColorStop(0, COL.trayTop);
     grad.addColorStop(1, COL.trayBottom);
     g.fillStyle = grad;
-    g.fillRect(0, trayTop, W, H - trayTop);
+    g.fillRect(0, trayTop, W, trayH);
     g.fillStyle = 'rgba(0,0,0,0.45)';
     g.fillRect(0, trayTop, W, 2);
 
-    const s = this.trayCell;
+    if (!this.placeRange() || !this.tray) {
+      const ph = this.phase;
+      let text = '';
+      if (this.state === 'playing' && ph?.type === 'flow') {
+        text = ph.finale ? (ph.original ? '원곡 연주 중' : '전체 연주 중') : ph.view === 'lanes' ? '합주 중' : '연주 중';
+      }
+      if (text) {
+        g.fillStyle = 'rgba(255,255,255,0.55)';
+        g.font = `16px ${FONT}`;
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillText(text, W / 2, trayTop + trayH / 2);
+      }
+      return;
+    }
+
+    const aspect = this.part.cellH / this.cellW;
+    let sw = Math.min(this.cellW * 0.8, (W / 3 - 16) / 5);
+    let sh = sw * aspect;
+    if (sh * 3 > trayH - 16) {
+      sh = (trayH - 16) / 3;
+      sw = sh / aspect;
+    }
     const slotW = W / 3;
-    const cy = trayTop + (H - trayTop) / 2;
+    const cy = trayTop + trayH / 2;
     for (let i = 0; i < 3; i++) {
       if (i > 0) {
         g.fillStyle = 'rgba(0,0,0,0.18)';
-        g.fillRect(Math.round(slotW * i), trayTop + 12, 1, H - trayTop - 24);
+        g.fillRect(Math.round(slotW * i), trayTop + 12, 1, trayH - 24);
       }
-      const p = this.tray?.[i];
+      const p = this.tray[i];
       if (!p || (this.drag && this.drag.slot === i)) continue;
-      const ox = slotW * (i + 0.5) - (p.w * s) / 2;
-      const oy = cy - (p.h * s) / 2;
-      for (const [r, c] of p.cells) drawBlock(g, ox + c * s, oy + r * s, s, p.color);
+      const ox = slotW * (i + 0.5) - (p.w * sw) / 2;
+      const oy = cy - (p.h * sh) / 2;
+      p.cells.forEach(([r, c], j) => {
+        if (p.bomb) drawBomb(g, ox + c * sw, oy + r * sh, sw, sh, j === 0, this.now);
+        else drawBlock(g, ox + c * sw, oy + r * sh, sw, sh, p.color);
+      });
     }
   }
 
   drawHint() {
-    if (this.state !== 'playing' || this.pos >= this.song.stepsPerBar * 2) return;
+    const ph = this.phase;
+    if (this.state !== 'playing' || !ph) return;
+    let text = '';
+    if (ph.type === 'place' && ph.scene === 0 && this.now - (ph.deadline - SCENE_TIME) < 5) {
+      text = this.free ? '블록을 놓으면 그 자리의 음이 연주돼요' : '아래 블록을 끌어서 초록 노트 위에 놓으세요';
+    } else if (ph.live && this.pos < this.song.stepsPerBar) {
+      text = '아래 블록을 끌어서 흘러오는 노트 위에 놓으세요';
+    }
+    if (!text) return;
     const g = this.g;
-    const text = '아래 블록을 끌어서 초록 노트 위에 놓으세요';
     g.font = `13px ${FONT}`;
     const w = g.measureText(text).width + 24;
     const x = (this.W - w) / 2;
-    const y = this.gridBottom - 40;
-    g.fillStyle = 'rgba(0,0,0,0.65)';
+    const y = this.rollTop + 10;
+    g.fillStyle = 'rgba(0,0,0,0.7)';
     rrect(g, x, y, w, 28, 14);
     g.fill();
     g.fillStyle = COL.hint;
@@ -862,9 +1377,13 @@ export class Game {
     const d = this.drag;
     if (!d || d.px == null) return;
     const g = this.g;
-    const s = this.cell;
+    const cw = this.cellW;
+    const ch = this.part.cellH;
     g.globalAlpha = d.snap ? 0.45 : 0.95;
-    for (const [r, c] of d.piece.cells) drawBlock(g, d.px + c * s, d.py + r * s, s, d.piece.color);
+    d.piece.cells.forEach(([r, c], j) => {
+      if (d.piece.bomb) drawBomb(g, d.px + c * cw, d.py + r * ch, cw, ch, j === 0, this.now);
+      else drawBlock(g, d.px + c * cw, d.py + r * ch, cw, ch, d.piece.color);
+    });
     g.globalAlpha = 1;
   }
 
@@ -887,30 +1406,79 @@ export class Game {
     g.globalAlpha = 1;
   }
 
-  drawCountdown() {
-    if (this.state !== 'playing' && this.state !== 'paused') return;
-    const spb = this.song.stepsPerBeat;
-    if (this.pos >= spb * 2) return;
-    const beats = Math.ceil(-this.pos / spb);
-    let text;
-    if (beats > 3) text = 'READY';
-    else if (beats >= 1) text = String(beats);
-    else text = 'GO!';
-    const frac = beats >= 1 ? 1 - (-this.pos / spb - (beats - 1)) : this.pos / (spb * 2);
+  // FANTASTIC / GOOD / BAD 같은 판정 글자
+  drawJudgement() {
+    const j = this.judgement;
+    if (!j) return;
+    const age = this.now - j.t0;
+    const life = 0.95;
+    if (age > life) {
+      this.judgement = null;
+      return;
+    }
+    if (age < 0) return;
+    const style = JUDGE_STYLE[j.word] || JUDGE_STYLE.GOOD;
     const g = this.g;
-    const cx = (this.kbW + this.W) / 2;
-    const cy = (this.gridTop + this.gridBottom) / 2;
-    const size = text === 'READY' ? 40 : 64;
-    g.globalAlpha = text === 'READY' ? 0.9 : Math.max(0, 1 - frac * 0.8);
-    g.font = `${size * (1 + frac * 0.15)}px ${FONT}`;
+    const cy = this.rollTop + (this.rollBottom - this.rollTop) * 0.38;
+    const base = Math.min(52, this.W * 0.12) * style.size;
+    const pop = age < 0.12 ? 1.5 - 0.5 * (age / 0.12) : 1;
+    g.save();
+    g.globalAlpha = age > 0.7 ? Math.max(0, 1 - (age - 0.7) / 0.25) : 1;
+    g.translate(this.W / 2, cy);
+    if (j.word === 'BAD') g.rotate(Math.sin(age * 40) * 0.05 * (1 - age));
+    g.scale(pop, pop);
+    g.font = `${base}px ${FONT}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.lineWidth = 6;
     g.lineJoin = 'round';
-    g.strokeStyle = 'rgba(0,0,0,0.75)';
-    g.strokeText(text, cx, cy);
-    g.fillStyle = text === 'GO!' ? '#ffe27a' : '#ffffff';
-    g.fillText(text, cx, cy);
-    g.globalAlpha = 1;
+    g.lineWidth = base * 0.18;
+    g.strokeStyle = 'rgba(0,0,0,0.85)';
+    g.strokeText(j.word, 0, 0);
+    const grad = g.createLinearGradient(0, -base / 2, 0, base / 2);
+    grad.addColorStop(0, style.fill[0]);
+    grad.addColorStop(1, style.fill[1]);
+    g.fillStyle = grad;
+    g.fillText(j.word, 0, 0);
+    if (j.sub) {
+      g.font = `${base * 0.38}px ${FONT}`;
+      g.lineWidth = 4;
+      g.strokeText(j.sub, 0, base * 0.72);
+      g.fillStyle = '#ffffff';
+      g.fillText(j.sub, 0, base * 0.72);
+    }
+    g.restore();
+  }
+
+  // 페이지/악기 전환 배너
+  drawBanner() {
+    const b = this.banner;
+    if (!b) return;
+    const age = this.now - b.t0;
+    if (age > b.life) {
+      this.banner = null;
+      return;
+    }
+    if (age < 0) return;
+    const g = this.g;
+    const k = age / b.life;
+    const slide = k < 0.18 ? (1 - k / 0.18) * this.W : k > 0.85 ? -((k - 0.85) / 0.15) * this.W : 0;
+    const cy = (this.rollTop + this.rollBottom) / 2;
+    const h = 92;
+    g.save();
+    g.translate(slide, 0);
+    g.fillStyle = 'rgba(8,10,9,0.82)';
+    g.fillRect(0, cy - h / 2, this.W, h);
+    g.fillStyle = b.color;
+    g.fillRect(0, cy - h / 2, this.W, 3);
+    g.fillRect(0, cy + h / 2 - 3, this.W, 3);
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = `40px ${FONT}`;
+    g.fillStyle = b.color;
+    g.fillText(b.title, this.W / 2, cy - 10);
+    g.font = `14px ${FONT}`;
+    g.fillStyle = 'rgba(255,255,255,0.75)';
+    g.fillText(b.sub, this.W / 2, cy + 26);
+    g.restore();
   }
 }

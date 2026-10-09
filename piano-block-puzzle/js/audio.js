@@ -47,7 +47,7 @@ export class PianoAudio {
       verb.connect(wet);
       wet.connect(comp);
 
-      const len = Math.floor(ctx.sampleRate * 0.06);
+      const len = Math.floor(ctx.sampleRate * 1.5);
       this.noise = ctx.createBuffer(1, len, ctx.sampleRate);
       const data = this.noise.getChannelData(0);
       for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
@@ -155,6 +155,131 @@ export class PianoAudio {
     bp.connect(ng);
     ng.connect(out);
     src.start(when);
+    src.stop(when + 0.06);
+  }
+
+  // 보컬: 톱니파 두 개를 '아' 모음 포먼트 필터로 걸러 사람 목소리처럼 만든다.
+  voice(midi, when, dur, vel = 0.8) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    when = Math.max(when, ctx.currentTime);
+    const f = 440 * Math.pow(2, (midi - 69) / 12);
+    const end = when + Math.max(dur, 0.12);
+
+    const out = ctx.createGain();
+    out.gain.setValueAtTime(0.0001, when);
+    out.gain.linearRampToValueAtTime(0.32 * vel, when + 0.05);
+    out.gain.setTargetAtTime(0.26 * vel, when + 0.05, 0.2);
+    out.gain.setTargetAtTime(0, end, 0.06);
+    out.connect(this.bus);
+
+    const vib = ctx.createOscillator();
+    vib.frequency.value = 5.4;
+    const vibAmt = ctx.createGain();
+    vibAmt.gain.setValueAtTime(0, when);
+    vibAmt.gain.linearRampToValueAtTime(f * 0.008, when + 0.35);
+    vib.connect(vibAmt);
+
+    const src = ctx.createGain();
+    let o;
+    for (const det of [1, 1.005]) {
+      o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = f * det;
+      vibAmt.connect(o.frequency);
+      o.connect(src);
+      o.start(when);
+      o.stop(end + 0.4);
+    }
+    vib.start(when);
+    vib.stop(end + 0.4);
+
+    for (const [freq, amp, q] of [[800, 1, 9], [1150, 0.55, 11], [2900, 0.22, 20], [3400, 0.1, 22]]) {
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = freq;
+      bp.Q.value = q;
+      const g = ctx.createGain();
+      g.gain.value = amp * 2.2;
+      src.connect(bp);
+      bp.connect(g);
+      g.connect(out);
+    }
+    o.onended = () => out.disconnect();
+  }
+
+  noiseHit(when, { type = 'highpass', freq = 1000, q = 0.7, gain = 0.3, decay = 0.1, dest = this.bus }) {
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const f = ctx.createBiquadFilter();
+    f.type = type;
+    f.frequency.value = freq;
+    f.Q.value = q;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gain, when);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + decay);
+    src.connect(f);
+    f.connect(g);
+    g.connect(dest);
+    src.start(when);
+    src.stop(when + decay + 0.05);
+  }
+
+  toneHit(when, { type = 'sine', from, to, gain, decay, sweep = 0.1, dest = this.bus }) {
+    const ctx = this.ctx;
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.setValueAtTime(from, when);
+    o.frequency.exponentialRampToValueAtTime(to, when + sweep);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.linearRampToValueAtTime(gain, when + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + decay);
+    o.connect(g);
+    g.connect(dest);
+    o.start(when);
+    o.stop(when + decay + 0.05);
+  }
+
+  drum(key, when, vel = 0.9) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    when = Math.max(when, ctx.currentTime);
+    const v = vel;
+    switch (key) {
+      case 'KK':
+        this.toneHit(when, { from: 160, to: 42, gain: 0.95 * v, decay: 0.42, sweep: 0.13 });
+        this.noiseHit(when, { type: 'lowpass', freq: 2500, gain: 0.25 * v, decay: 0.012 });
+        break;
+      case 'SN':
+        this.toneHit(when, { type: 'triangle', from: 220, to: 160, gain: 0.35 * v, decay: 0.1, sweep: 0.05 });
+        this.noiseHit(when, { type: 'bandpass', freq: 2200, q: 0.6, gain: 0.55 * v, decay: 0.2 });
+        break;
+      case 'HH':
+        this.noiseHit(when, { type: 'highpass', freq: 7500, gain: 0.22 * v, decay: 0.05 });
+        break;
+      case 'CR':
+        this.noiseHit(when, { type: 'highpass', freq: 4500, gain: 0.3 * v, decay: 1.4 });
+        this.noiseHit(when, { type: 'bandpass', freq: 9000, q: 0.5, gain: 0.15 * v, decay: 0.9 });
+        break;
+      case 'TH':
+        this.toneHit(when, { from: 260, to: 180, gain: 0.7 * v, decay: 0.32, sweep: 0.2 });
+        break;
+      case 'TL':
+        this.toneHit(when, { from: 170, to: 110, gain: 0.75 * v, decay: 0.4, sweep: 0.25 });
+        break;
+    }
+  }
+
+  // 폭탄
+  boom() {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    this.toneHit(t, { from: 120, to: 30, gain: 0.9, decay: 0.6, sweep: 0.4, dest: this.master });
+    this.noiseHit(t, { type: 'lowpass', freq: 900, gain: 0.8, decay: 0.5, dest: this.master });
+    this.noiseHit(t, { type: 'highpass', freq: 3000, gain: 0.2, decay: 0.15, dest: this.master });
   }
 
   // 블록을 노트 위에 놓았을 때 짧게 들려주는 소리
@@ -194,6 +319,7 @@ export class PianoAudio {
     lp.connect(ng);
     ng.connect(this.master);
     src.start(t);
+    src.stop(t + 0.1);
   }
 
   // 카운트인 박자

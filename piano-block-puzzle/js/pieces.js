@@ -1,6 +1,7 @@
 // 하단에 주어지는 블록 3개를 만든다.
 
-export const PALETTE = ['#f6c344', '#a35ee0', '#3cc1f0', '#f2604f', '#f39233', '#4d7cf0', '#ef5fae', '#7fd34a'];
+// 초록은 노트 색과 헷갈려서 뺐다.
+export const PALETTE = ['#f6c344', '#a35ee0', '#3cc1f0', '#f2604f', '#f39233', '#4d7cf0', '#ef5fae'];
 
 // 블록 블라스트식 랜덤 모양. [가중치, 칸 목록([행, 열])]
 // 노트는 가로로 긴 막대라 가로 모양을 더 자주 낸다.
@@ -25,7 +26,16 @@ const LIB = [
   [1, [[0, 1], [0, 2], [1, 0], [1, 1]]],
   [1, [[0, 0], [0, 1], [1, 1], [1, 2]]],
 ];
-const TOTAL = LIB.reduce((sum, [w]) => sum + w, 0);
+// 폭탄 모양: 놓은 자리의 블록을 이 모양만큼 지운다.
+const BOMBS = [
+  [3, [[0, 0]]],
+  [3, [[0, 0], [0, 1]]],
+  [2, [[0, 0], [1, 0]]],
+  [3, [[0, 0], [0, 1], [1, 0], [1, 1]]],
+  [2, [[0, 0], [0, 1], [0, 2]]],
+  [2, [[0, 1], [1, 0], [1, 1], [1, 2], [2, 1]]],
+  [1, [[0, 0], [0, 1], [0, 2], [1, 0], [1, 1], [1, 2]]],
+];
 const MAX_RUN = 4;
 
 export function makePiece(cells, color) {
@@ -44,12 +54,12 @@ export function makePiece(cells, color) {
   };
 }
 
-function randomShape() {
-  let x = Math.random() * TOTAL;
-  for (const [w, cells] of LIB) {
+function pick(lib) {
+  let x = Math.random() * lib.reduce((sum, [w]) => sum + w, 0);
+  for (const [w, cells] of lib) {
     if ((x -= w) < 0) return cells;
   }
-  return LIB[1][1];
+  return lib[0][1];
 }
 
 function shuffle(arr) {
@@ -114,17 +124,25 @@ export function fitShapes(green) {
   return out.sort((a, b) => a.col - b.col);
 }
 
-// 3개 중 최대 2개는 다가오는 노트에 딱 맞는 모양, 나머지는 랜덤.
-export function makeTray(green) {
-  const fits = fitShapes(green);
+// 3개 중 최대 2개는 노트에 딱 맞는 모양(fits=true일 때), 나머지는 랜덤.
+// bombChance 확률로 랜덤 블록 하나가 폭탄으로 바뀐다.
+export function makeTray(green, { fits = true, bombChance = 0 } = {}) {
   const shapes = [];
-  if (fits.length > 0) shapes.push(fits[0].cells);
-  if (fits.length > 1) {
-    const i = 1 + Math.floor(Math.random() * Math.min(3, fits.length - 1));
-    shapes.push(fits[i].cells);
+  if (fits) {
+    const found = fitShapes(green);
+    if (found.length > 0) shapes.push(found[0].cells);
+    if (found.length > 1) {
+      const i = 1 + Math.floor(Math.random() * Math.min(3, found.length - 1));
+      shapes.push(found[i].cells);
+    }
   }
-  while (shapes.length < 3) shapes.push(randomShape());
-  shuffle(shapes);
+  const fixed = shapes.length;
+  while (shapes.length < 3) shapes.push(pick(LIB));
   const colors = shuffle(PALETTE.slice());
-  return shapes.map((cells, i) => makePiece(cells, colors[i]));
+  const pieces = shapes.map((cells, i) => makePiece(cells, colors[i]));
+  if (fixed < 3 && Math.random() < bombChance) {
+    const i = fixed + Math.floor(Math.random() * (3 - fixed));
+    pieces[i] = { ...makePiece(pick(BOMBS), '#3b2a2e'), bomb: true };
+  }
+  return shuffle(pieces);
 }
