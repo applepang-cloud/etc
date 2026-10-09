@@ -2992,8 +2992,17 @@ function birthday(h) {
   S.bday = S.bday || {}; S.bday[h] = true; const b = BIRTHDAYS[h];
   showHub(false); UI.strip = false; sfx('event'); UI.stageLabel = `${weekLabel(S.week)} · ${CAST[h].name} 생일 (${b.date})`; UI.bg = PLACE_BG[h]; bgm('heart');
   scene('me', [b.intro], () => { setChar('me'); say('어떤 선물을 줄까?', true, b.gifts.map(([g, tier]) => [g, () => {
-    like(h, { good: 15, ok: 8, bad: 2 }[tier]); scene(h, [b[tier], b.thanks], hub); }, 'choice'])); });
+    like(h, { good: 15, ok: 8, bad: 2 }[tier]); scene(h, [b[tier], b.thanks], () => birthdayJam(h)); }, 'choice'])); });
 }
+function birthdayJam(h) { // candles first, then a birthday bar made on the spot (an easy improv board in her voice)
+  const st = makeImprov(0); if (!st) return hub();
+  scene('me', ['#케이크에 초를 꽂고, 즉석 생일 축하 소절을 같이 맞춰 보기로 했다.'], () => {
+    const mine = SONGS.find(x => x.id === SIM[h].song), sg = { id: 'bday', improv: true, title: '생일 축하 소절', bpm: 96, lead: mine ? mine.lead : 'piano', singer: h, ending: ['…생일 축하해.'], stages: [Object.assign(st, { id: 'bday1', title: '생일 축하', clear: b0(h) })] };
+    const old = SONGS.findIndex(x => x.id === 'bday'); if (old >= 0) SONGS.splice(old, 1); SONGS.push(sg); P.songs.bday = { unlocked: 0, stars: [0] };
+    selectSong('bday'); UI.strip = true; G.after = () => { like(h, 4); scene('me', ['#노래가 끝나자 촛불이 한 번 흔들렸다. 그리고 다 같이 박수.'], hub); }; openStage(0);
+  }, '합주 ▸');
+}
+const b0 = h => BIRTHDAYS[h].thanks;
 function textMessage() { // at most one a week, from someone who likes you a little
   S.texted = S.texted || {};
   const h = HEROINES.find(k => S.met[k] && S.aff[k] >= 20 && (TEXTS[k] || []).some(t => t.week === S.week) && !S.texted[k + S.week]);
