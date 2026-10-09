@@ -9,8 +9,9 @@ python -c "import json; d=json.load(open('poke.json',encoding='utf-8')); json.du
 LINES=lines.json python tts.py ../voice           # 없는 줄만 새로 만든다 (eleven_v3)
 LINES=lines_me.json python tts.py ../voice
 LINES=lines_poke.json python tts.py ../voice
+LINES=lines_friend.json python tts.py ../voice  # 민준 통화 대사(FRIEND_DATA에서 뽑은 목록)
 python lips.py                                    # lips.json: 0.05초 단위 입 모양
 ```
 - 파일 이름은 `<누구>_<FNV-1a(누구|대사)>.mp3` (게임의 `voiceId()`와 같은 계산). 대사가 바뀌면 그 줄만 새 파일이 생기니, 쓰지 않는 옛 파일은 지워도 된다.
 - `lips.json` 내용은 게임의 `const VOICE_LIPS = …;` 한 줄에 그대로 넣는다.
-- `chosen_voices.json`: 고른 목소리 ID(리아 6, 유나 5, 하나 4, 소라 1, 아린 5, 세나 4, 주인공 11번 후보).
+- `chosen_voices.json`: 고른 목소리 ID(리아 6, 유나 5, 하나 4, 소라 1, 아린 5, 세나 4, 주인공 11번 후보), 민준(통화 친구, 장난스러운 20대 초반 남자 목소리로 새로 디자인).
