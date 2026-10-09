@@ -2445,15 +2445,16 @@ function onSongEnd() {
   if (G.afterSong) { const fn = G.afterSong; G.afterSong = null; return fn(); }
   talk(SONG.ending, () => say(CAST[G.char].again, true, [['다시 듣기', playSong], ['곡 고르기', freePlay, true]]), '다음 ▸');
 }
-function freePlay() {
+function freePlay(page = 0) {
   bgm('school');
   G.mode = 'free'; G.simLock = false; UI.strip = true; UI.hub = false; setChar('ria'); expr.base = 'idle'; setScene('big'); showPlayUI(false);
-  const fresh = SONGS.every(sg => P.songs[sg.id].stars.every(n => !n));
+  const fresh = SONGS.every(sg => P.songs[sg.id].stars.every(n => !n)), pages = Math.ceil(SONGS.filter(sg => !sg.ai).length / 6);
   stopLoop(); UI.stageLabel = '옥상 라이브 D-3';
   say(fresh ? '와 줬구나! 나는 리아. 이번 주말 옥상 라이브에서 부를 곡들 악보가 다 번져 버렸어. 처음이라면 풀이 연습으로 숫자 보는 법부터 알려 줄게!'
     : '어서 와! 오늘은 어떤 곡을 복원해 볼까?', false,
-    SONGS.filter(sg => !sg.ai).map(sg => { const st = P.songs[sg.id].stars, done = st.filter(Boolean).length;
-      return [`${sg.title}\n${sg.lesson ? '숫자 맞추는 요령' : CAST[sg.singer].name + ' · ' + LEADS[sg.lead]} · ${done}/${st.length}`, () => { selectSong(sg.id); openStage(done ? Math.min(P.songs[sg.id].unlocked, st.length - 1) : 0); }, sg.id !== (fresh ? 'lesson' : P.last)]; }).concat([['AI 뮤직맵 ✦\n노래 검색해서 맵 만들기', aiMenu], ['← 처음으로\n메인 메뉴', mainMenu, true]]));
+    SONGS.filter(sg => !sg.ai).slice(page * 6, page * 6 + 6).map(sg => { const st = P.songs[sg.id].stars, done = st.filter(Boolean).length;
+      return [`${sg.title}\n${sg.lesson ? '숫자 맞추는 요령' : CAST[sg.singer].name + ' · ' + LEADS[sg.lead]} · ${done}/${st.length}`, () => { selectSong(sg.id); openStage(done ? Math.min(P.songs[sg.id].unlocked, st.length - 1) : 0); }, sg.id !== (fresh ? 'lesson' : P.last)]; }).concat(pages > 1 ? [[`다른 곡 ▸\n${page + 1}/${pages}쪽`, () => freePlay((page + 1) % pages), true]] : [])
+      .concat([['AI 뮤직맵 ✦\n노래 검색해서 맵 만들기', aiMenu], ['← 처음으로\n메인 메뉴', mainMenu, true]]));
 }
 
 /* ---------- AI music map: type a song, Codex (through the local helper server) turns it into a five-bar map ---------- */
@@ -2661,14 +2662,21 @@ const seasonOf = w => ['봄', '여름', '가을', '겨울'][Math.floor((w - 1) /
 const TALK_GATE = [0, 8, 18, 30, 42, 55, 66, 78]; // affection each deeper talk waits for
 /* --- school events on fixed weeks (YEAR_EVENTS): narration, then whoever you are closest to shows up --- */
 const EVENTS = typeof YEAR_EVENTS !== 'undefined' ? YEAR_EVENTS : {};
-const EVENT_PREFER = { 34: 'sena', 47: 'sena' }; // 수능 and graduation are Sena's days if you know her
+const EVENT_PREFER = { 34: 'sena', 47: 'sena' };
+const EVENT_JAM = { 12: '응원석이 들썩이는 틈에, 우리 곡 한 소절을 즉석에서 맞춰 보기로 했다.', 21: '모래사장에 건반 앱 하나. 우리 곡 한 소절을 즉석에서 맞춰 보기로 했다.', 40: '역 앞 광장 버스킹 자리가 비어 있었다. 우리 곡 한 소절로 길을 멈춰 세우기로 했다.' }; // 수능 and graduation are Sena's days if you know her
 function schoolEvent() {
   const ev = EVENTS[S.week]; S.seen[S.week] = true;
   const met = HEROINES.filter(k => S.met[k]).sort((a, b) => S.aff[b] - S.aff[a]);
   const h = EVENT_PREFER[S.week] && S.met[EVENT_PREFER[S.week]] ? EVENT_PREFER[S.week] : met[0];
   const after = () => { if (ev.stat) S.stats[ev.stat] = Math.min(10, S.stats[ev.stat] + 1); scene('me', [ev.after + (ev.stat ? ` (${STATS[ev.stat]} +1)` : '')], hub, '이번 주로 ▸'); };
   showHub(false); UI.strip = false; sfx('event'); UI.stageLabel = `${weekLabel(S.week)} · ${ev.title}`;
-  scene('me', ev.lines, () => h ? scene(h, [ev.who[h]], () => { like(h, 4); after(); }) : after());
+  const jam = () => { // 즉석 합주: replay a bar of her song you have already finished
+    const done = S.bars[h]; if (!EVENT_JAM[S.week] || !done) return after();
+    scene('me', ['#' + EVENT_JAM[S.week]], () => {
+      selectSong(SIM[h].song); UI.strip = true; G.after = () => { like(h, 6); after(); }; openStage(Math.floor(Math.random() * done));
+    }, '합주 ▸');
+  };
+  scene('me', ev.lines, () => h ? scene(h, [ev.who[h]], () => { like(h, 4); jam(); }) : after());
 }
 const PRACTICE = { play: '건반 앞에서 손가락이 저릴 때까지 연습했다.', comp: '노트에 멜로디를 적고 지우기를 몇 번이고 반복했다.', sense: '잡지와 영상을 보며 무대 연출을 연구했다.' };
 let S = null;
@@ -2765,7 +2773,15 @@ const back = ['← 돌아가기', () => hub(), true];
 const tire = n => { S.cond = Math.max(0, Math.min(100, S.cond + n)); };
 function spend() { // one action used; the week turns over after three
   S.ap--; if (S.ap <= 0) return endWeek();
-  simStore.save(); hub();
+  simStore.save();
+  const met = HEROINES.filter(h => S.met[h]);
+  if (met.length && Math.random() < 0.25) return encounter(met[Math.floor(Math.random() * met.length)]);
+  hub();
+}
+const BUMP = ['#복도 모퉁이에서 누군가와 부딪칠 뻔했다.', '#매점 앞 줄에서 아는 얼굴을 발견했다.', '#하굣길 버스 정류장에서 우연히 마주쳤다.', '#계단을 내려가는데 누가 내 이름을 불렀다.'];
+function encounter(h) { // a chance meeting: free, short, a little affection
+  showHub(false); UI.strip = false; expr.base = 'idle';
+  scene('me', [BUMP[Math.floor(Math.random() * BUMP.length)]], () => scene(h, [SIM[h].small[Math.floor(Math.random() * SIM[h].small.length)]], () => { like(h, 2); hub(); }));
 }
 function endWeek() {
   S.week++; S.ap = AP; tire(8); simStore.save();
