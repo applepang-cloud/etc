@@ -1111,7 +1111,8 @@
 
   function resize() {
     const frame = $('frame');
-    const vw = window.innerWidth, vh = window.innerHeight;
+    const vw = document.body.clientWidth || window.innerWidth;
+    const vh = document.body.clientHeight || window.innerHeight;
     // Tall phones get a taller launch area instead of empty bars.
     C.H = Math.round(clamp((C.W * vh) / vw, 960, 1200));
     C.LAUNCH_Y = C.H - 66;
