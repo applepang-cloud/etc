@@ -2786,10 +2786,11 @@ function encounter(h) { // a chance meeting: free, short, a little affection
 function endWeek() {
   S.week++; S.ap = AP; tire(8);
   // someone you have not seen for six weeks starts to feel left out
-  S.last = S.last || {}; const sulky = HEROINES.filter(h => S.met[h] && S.aff[h] > 20 && S.week - (S.last[h] || 0) > 6);
+  S.last = S.last || {}; const sulky = HEROINES.filter(h => S.met[h] && S.aff[h] > 20 && S.week - (S.last[h] || S.week) > 6);
   sulky.forEach(h => { S.aff[h] = Math.max(0, S.aff[h] - 2); });
   simStore.save();
   if (S.week > WEEKS) return finalEnding();
+  if ((S.week - 1) % 4 === 0) UI.card = { title: MONTHS[(S.week - 1) / 4], sub: seasonOf(S.week), t0: performance.now() }; // a new month
   toast(sulky.length ? `${CAST[sulky[0]].name}${jong(CAST[sulky[0]].name) ? '이' : '가'} 서운해하는 것 같다…` : `${weekLabel(S.week)} · ${seasonOf(S.week)}`); hub();
 }
 const REST = ['#하루 푹 쉬었다. 몸이 가벼워졌다.', '#창가에 누워 좋아하는 음악만 들었다.', '#일찍 잠들었다. 꿈에서 누군가 노래하고 있었다.'];
@@ -2997,6 +2998,7 @@ function render(now) {
   if (ctlH) { drawControls(PADX, y, CW, ctlH); y += ctlH + 4; }
   if (hintLines) hintLines.forEach((l, i) => txt(l, PADX + 2, y + 8 + i * 17, font(12), COL.dim));
   if (G.guide && G.mode === 'play' && UI.board && B.geom) drawSpotlight(now);
+  drawCard(now);
   drawToast(now);
   if (UI.help) { hits = []; drawHelp(); }
   placeNameInput();
@@ -3269,6 +3271,17 @@ function drawControls(x, y, w, h) {
   let xx = x; items.forEach((it, i) => { drawBtn(it[0], xx, y, ws[i], h - 3, it[2], it[3], it[1], null, { f }); xx += ws[i] + gap; });
 }
 
+const SEASON_COL = { 봄: '#ff8fc8', 여름: '#6ccbff', 가을: '#ffb35c', 겨울: '#d9def2' };
+function drawCard(now) { // month title card: fades in, holds, fades out
+  const C = UI.card; if (!C) return; const t = (now - C.t0) / 1900; if (t >= 1) { UI.card = null; return; }
+  const a = reduceMotion ? 1 : t < .15 ? t / .15 : t > .75 ? (1 - t) / .25 : 1, y = VH * 0.36 - (reduceMotion ? 0 : (1 - a) * 10);
+  cx.save(); cx.globalAlpha = a;
+  const g = cx.createLinearGradient(0, y - 48, 0, y + 48); g.addColorStop(0, 'rgba(11,9,32,0)'); g.addColorStop(.5, 'rgba(11,9,32,.82)'); g.addColorStop(1, 'rgba(11,9,32,0)');
+  cx.fillStyle = g; cx.fillRect(0, y - 48, VW, 96);
+  txt(C.title, VW / 2 + 2, y - 6 + 2, font(34), COL.shadow, 'center'); txt(C.title, VW / 2, y - 6, font(34), COL.ink, 'center');
+  if ('letterSpacing' in cx) cx.letterSpacing = '4px'; txt(C.sub, VW / 2, y + 26, font(13, true), SEASON_COL[C.sub] || COL.gold, 'center');
+  cx.restore();
+}
 function drawToast(now) {
   const T = UI.toast; if (!T) return; const e = now - T.t0; if (e > 2500) { UI.toast = null; return; }
   const k = reduceMotion ? 1 : e < 300 ? e / 300 : e < 2200 ? 1 : Math.max(0, 1 - (e - 2200) / 300), ease = 1 - (1 - k) * (1 - k);
