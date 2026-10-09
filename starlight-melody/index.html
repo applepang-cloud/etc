@@ -2759,6 +2759,7 @@ function hub() {
   G.mode = 'sim'; G.simLock = true; stopLoop();
   if (S.week === FESTIVAL && !S.live) return festival();
   if (EVENTS[S.week] && !S.seen[S.week]) return schoolEvent();
+  const heart = heartDue(); if (heart) return heartEvent(...heart);
   simStore.save(); setScene('big'); setChar('me'); expr.base = 'idle'; showHub(true);
   UI.stageLabel = `${weekLabel(S.week)} · ${S.week < FESTIVAL ? `축제 D-${FESTIVAL - S.week}주` : S.week === WEEKS ? '마지막 주' : `종업식 D-${WEEKS - S.week}주`}`;
   const anyMet = HEROINES.some(h => S.met[h]), dateOk = HEROINES.some(h => S.met[h] && S.aff[h] >= 30) && S.dated !== S.week;
@@ -2771,6 +2772,19 @@ function hub() {
     ['쉬기\n컨디션 회복', rest]]);
 }
 const back = ['← 돌아가기', () => hub(), true];
+/* --- 두근 events: the first time her affection reaches 50 and 75, a scene alone with her (no action spent) --- */
+const HEARTS = typeof HEART_DATA !== 'undefined' ? HEART_DATA : {};
+function heartDue() {
+  S.hearts = S.hearts || {};
+  for (const h of HEROINES) for (const [n, at] of [[2, 75], [1, 50]])
+    if (S.met[h] && S.aff[h] >= at && HEARTS[h] && HEARTS[h]['heart' + n] && !S.hearts[h + n]) return [h, n];
+  return null;
+}
+function heartEvent(h, n) {
+  S.hearts[h + n] = true; S.hearts[h + 1] = S.hearts[h + 1] || n === 2; const ev = HEARTS[h]['heart' + n];
+  showHub(false); UI.strip = false; sfx('heart'); UI.stageLabel = `${weekLabel(S.week)} · ♥ ${CAST[h].name}`; emote('love');
+  scene(h, ev.lines, () => choose(h, ev.opts, hub));
+}
 const tire = n => { S.cond = Math.max(0, Math.min(100, S.cond + n)); };
 function spend() { // one action used; the week turns over after three
   S.ap--; if (S.ap <= 0) return endWeek();
