@@ -237,16 +237,37 @@ test('성장 포인트: 10일마다 1개, 숙련도 레벨업과 생일에 더 �
   assert.ok(s2.run.points >= D.DAYS_PER_YEAR / D.POINT_EVERY + D.POINT_BIRTHDAY);
 });
 
-test('성장 포인트는 지력·체력·매력·인성·감성·영성에만, 1개당 +2', () => {
+test('성장 포인트: 필요 포인트는 능력치마다 다르고, 높을수록 늘어난다', () => {
   const state = fresh(22);
-  state.run.points = 3;
-  const before = state.run.stats.mor;
-  assert.ok(E.spendPoints(state, 'mor').ok);
-  assert.equal(state.run.stats.mor, before + D.POINT_GAIN);
-  assert.equal(E.spendPoints(state, 'mag').reason, 'invalid', '마력은 포인트로 못 올린다');
-  assert.equal(E.spendPoints(state, 'int', 5).reason, 'points');
-  assert.equal(state.run.points, 2);
+  for (const id of D.POINT_STATS) state.run.stats[id] = 50;
+  const costs = D.POINT_STATS.map((id) => E.pointCost(state.run, id));
+  assert.ok(new Set(costs).size > 1, '능력치마다 필요 포인트가 다르다');
+  assert.equal(E.pointCost(state.run, 'int'), D.POINT_BASE_COST.int);
+  state.run.stats.int = 250;
+  assert.equal(E.pointCost(state.run, 'int'), D.POINT_BASE_COST.int + 2);
   assert.deepEqual(D.POINT_STATS.map((id) => E.STAT[id].name), ['지력', '체력', '매력', '인성', '감성', '영성']);
+});
+
+test('성장 포인트: 모자라면 못 올리고, 넉넉하면 필요한 만큼만 쓴다', () => {
+  const state = fresh(27);
+  state.run.stats.mor = 50;
+  state.run.points = 1;
+  const res = E.spendPoints(state, 'mor');
+  assert.equal(res.reason, 'points');
+  assert.equal(res.cost, 2);
+  assert.equal(state.run.points, 1, '실패하면 포인트가 그대로 남는다');
+  state.run.points = 5;
+  assert.ok(E.spendPoints(state, 'mor').ok);
+  assert.equal(state.run.stats.mor, 50 + D.POINT_GAIN);
+  assert.equal(state.run.points, 3);
+  assert.equal(E.spendPoints(state, 'mag').reason, 'invalid', '마력은 포인트로 못 올린다');
+});
+
+test('다음 성장 포인트까지 남은 날', () => {
+  const state = fresh(28);
+  assert.equal(E.daysToNextPoint(state.run), D.POINT_EVERY);
+  E.simulate(state, 3);
+  assert.equal(E.daysToNextPoint(state.run), D.POINT_EVERY - 3);
 });
 
 test('자동 선택: 골고루면 가장 낮은 능력치, 정해 두면 그 능력치에 쓴다', () => {
@@ -259,8 +280,9 @@ test('자동 선택: 골고루면 가장 낮은 능력치, 정해 두면 그 능
   assert.equal(state.run.points, 0);
   assert.ok(E.setAutoTarget(state, 'cha'));
   assert.equal(E.setAutoTarget(state, 'mag'), false);
-  state.run.points = 2;
-  assert.deepEqual(E.autoSpend(state), { cha: 2 });
+  state.run.points = 5;
+  assert.deepEqual(E.autoSpend(state), { cha: 2 }, '매력은 한 번에 2포인트');
+  assert.equal(state.run.points, 1, '모자란 1포인트는 다음을 위해 남긴다');
   state.run.stats.cha = D.STAT_MAX;
   assert.notEqual(E.autoPick(state), 'cha', '최대치면 다른 능력치로 넘어간다');
 });

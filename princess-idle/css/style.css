@@ -335,18 +335,29 @@ p { margin: 0; }
 }
 @keyframes glow { 50% { opacity: 0.7; } }
 .pt-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.pt-next { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 12px; color: var(--ink-soft); }
+.pt-next .bar { height: 6px; background: var(--card); }
+.pt-next .bar i { background: var(--accent); transition: width 0.1s linear; }
 .pt {
-  display: grid; justify-items: center; gap: 0;
-  padding: 8px 4px; border-radius: 10px; cursor: pointer;
+  display: grid; gap: 5px; min-width: 0;
+  padding: 8px 8px 7px; border-radius: 10px; cursor: pointer; text-align: left;
   border: 1px solid var(--line); background: var(--card); color: var(--ink);
-  transition: border-color 0.15s, transform 0.1s;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
 }
-.pt:hover:not(:disabled) { border-color: var(--accent); }
-.pt:active:not(:disabled) { transform: translateY(1px); }
-.pt:disabled { cursor: default; opacity: 0.6; }
-.pt.target { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); opacity: 1; }
+.pt:disabled { cursor: default; }
+.pt:disabled .pt-name { color: var(--ink-soft); }
+.pt.ready { border-color: var(--accent); background: var(--accent-soft); }
+.pt.ready:hover { filter: brightness(1.03); }
+.pt.ready:active { transform: translateY(1px); }
+.pt.target { box-shadow: 0 0 0 2px var(--accent-soft), inset 0 0 0 1px var(--accent); }
+.pt-top { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; }
 .pt-name { font-family: var(--font-display); font-weight: 700; font-size: 15px; }
 .pt-val { font-size: 12px; color: var(--ink-soft); }
+.pt-gauge { display: block; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.pt-gauge i { display: block; height: 100%; width: 0; border-radius: 3px; background: var(--ink-faint); transition: width 0.3s; }
+.pt.ready .pt-gauge i { background: var(--accent); }
+.pt-need { font-size: 11px; color: var(--ink-faint); white-space: nowrap; }
+.pt.ready .pt-need { color: var(--accent); font-weight: 700; }
 .auto-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--ink-soft); }
 .auto-row select { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 4px 8px; font-size: 13px; }
 .auto-buy { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }

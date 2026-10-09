@@ -29,7 +29,10 @@
 
   // 성장 포인트: 키우는 동안 쌓이고, 공주 화면에서 6개 능력치에 직접(또는 자동으로) 쓴다
   const POINT_STATS = ['int', 'con', 'cha', 'mor', 'sen', 'fai'];   // 지력·체력·매력·인성·감성·영성
-  const POINT_GAIN = 2;           // 성장 포인트 1개 = 능력치 +2
+  const POINT_GAIN = 3;           // 한 번 올릴 때마다 능력치 +3
+  // 한 번 올리는 데 필요한 포인트 = 기본 필요치 + 현재 능력치 100마다 1
+  const POINT_BASE_COST = { int: 3, con: 1, cha: 2, mor: 2, sen: 1, fai: 2 };
+  const POINT_COST_STEP = 100;
   const POINT_EVERY = 10;         // 10일(한 순)마다 1포인트
   const POINT_LEVELUP = 1;        // 숙련도가 오를 때
   const POINT_BIRTHDAY = 3;       // 생일
@@ -414,7 +417,7 @@
     DAY_MS, DAYS_PER_MONTH, SLOT_DAYS, MONTHS_PER_YEAR, DAYS_PER_YEAR,
     START_AGE, END_AGE, TOTAL_DAYS, START_YEAR, START_MONTH, SLOT_NAMES,
     START_GOLD, START_POINTS, POINT_VALUE, ALLOWANCE,
-    POINT_STATS, POINT_GAIN, POINT_EVERY, POINT_LEVELUP, POINT_BIRTHDAY,
+    POINT_STATS, POINT_GAIN, POINT_BASE_COST, POINT_COST_STEP, POINT_EVERY, POINT_LEVELUP, POINT_BIRTHDAY,
     START_GEMS, GEM_REWARDS, AUTO_OFFERS, AD_AUTO_SECONDS, AD_WATCH_SECONDS, STAT_MAX, SICK_DAYS, SICK_COST, EVENT_CHANCE,
     FESTIVAL_MONTH, FESTIVAL_DAY, BASE_OFFLINE_HOURS,
     birthdayGift, rivalScore,

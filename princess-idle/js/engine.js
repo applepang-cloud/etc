@@ -604,16 +604,25 @@
   }
 
   // ── 성장 포인트 ────────────────────────────────────────
-  function spendPoints(state, statId, n) {
+  // 한 번 올리는 데 필요한 포인트: 능력치마다 다르고, 높을수록 늘어난다
+  function pointCost(run, statId) {
+    return D.POINT_BASE_COST[statId] + Math.floor(run.stats[statId] / D.POINT_COST_STEP);
+  }
+
+  // 다음 성장 포인트까지 남은 날
+  function daysToNextPoint(run) { return D.POINT_EVERY - (run.totalDays % D.POINT_EVERY); }
+
+  // 성장 포인트로 능력치를 한 번 올린다
+  function spendPoints(state, statId) {
     const run = state.run;
-    const count = n === undefined ? 1 : n;
     if (!run || run.ended) return { ok: false, reason: 'ended' };
-    if (!D.POINT_STATS.includes(statId) || !Number.isInteger(count) || count < 1) return { ok: false, reason: 'invalid' };
-    if (run.points < count) return { ok: false, reason: 'points' };
+    if (!D.POINT_STATS.includes(statId)) return { ok: false, reason: 'invalid' };
     if (run.stats[statId] >= D.STAT_MAX) return { ok: false, reason: 'max' };
-    run.points -= count;
-    addStat(run, statId, count * D.POINT_GAIN);
-    return { ok: true, left: run.points };
+    const cost = pointCost(run, statId);
+    if (run.points < cost) return { ok: false, reason: 'points', cost };
+    run.points -= cost;
+    addStat(run, statId, D.POINT_GAIN);
+    return { ok: true, cost, left: run.points };
   }
 
   // 자동 선택이 고를 능력치: 정해 둔 능력치, 아니면(또는 그게 최대면) 가장 낮은 것
@@ -629,14 +638,14 @@
     return best;
   }
 
-  // 모아 둔 포인트를 자동으로 모두 쓴다. 반환: { 능력치 id: 쓴 개수 }
+  // 모아 둔 포인트로 올릴 수 있는 만큼 자동으로 올린다. 반환: { 능력치 id: 올린 횟수 }
+  // 고른 능력치에 포인트가 모자라면 다른 능력치로 새지 않고 더 모일 때까지 기다린다.
   function autoSpend(state) {
     const spent = {};
     const run = state.run;
-    while (run && !run.ended && run.points > 0) {
+    while (run && !run.ended) {
       const id = autoPick(state);
-      if (!id) break;
-      spendPoints(state, id, 1);
+      if (!id || !spendPoints(state, id).ok) break;
       spent[id] = (spent[id] || 0) + 1;
     }
     return spent;
@@ -810,7 +819,7 @@
     statMul, incomeMul, feeMul, restMul, stressMul, speedOf, offlineCapMs,
     unmetReqs, isUnlocked, preview,
     createState, newRun, renameRun, spendStartPoints, stepDay, simulate,
-    spendPoints, autoPick, autoSpend, setAutoTarget, buyAuto, grantAdReward, useAutoTime,
+    pointCost, daysToNextPoint, spendPoints, autoPick, autoSpend, setAutoTarget, buyAuto, grantAdReward, useAutoTime,
     evaluateEnding, starBreakdown, startNextGeneration,
     setSchedule, upgradeCost, buyUpgrade, buyLegacy, setAutoRest, isUpgradeRelevant, autoBuy,
     legacyLevel, upgradeLevel,

@@ -525,7 +525,7 @@
   // ── 화면 구성 ─────────────────────────────────────────
   function cacheRefs() {
     for (const id of ['hud-gold', 'hud-fame', 'hud-stars', 'hud-gems', 'pt-count', 'auto-badge', 'pt-grid', 'auto-target',
-      'auto-buy', 'points-hint', 'hud-speed', 'btn-pause', 'btn-settings', 'window', 'portrait', 'bubble',
+      'auto-buy', 'points-hint', 'pt-next-gauge', 'pt-next-bar', 'pt-next-text', 'hud-speed', 'btn-pause', 'btn-settings', 'window', 'portrait', 'bubble',
       'floaters', 'pr-gen', 'pr-name', 'pr-age', 'pr-date', 'month-track', 'doing-seal', 'doing-name', 'doing-sub',
       'stress-val', 'stress-bar', 'mood', 'countdown', 'toasts', 'scrim', 'modal']) {
       refs[id.replace(/-(\w)/g, (_, c) => c.toUpperCase())] = document.getElementById(id);
@@ -577,19 +577,25 @@
     refs.ptGrid.textContent = '';
     for (const s of POINT_DEFS) {
       const val = el('span', { class: 'pt-val num' });
+      const fill = el('i');
+      const need = el('span', { class: 'pt-need num' });
       const btn = el('button', {
-        type: 'button', class: 'pt', 'aria-label': s.name + ' 올리기',
+        type: 'button', class: 'pt',
         onclick: () => {
-          const res = E.spendPoints(state, s.id, 1);
+          const res = E.spendPoints(state, s.id);
           if (!res.ok) return;
           statFloors[s.id] = Math.floor(state.run.stats[s.id]);
           floater(s.name + ' +' + D.POINT_GAIN);
           forcePanel = true;
           render();
         },
-      }, [el('span', { class: 'pt-name', text: s.name }), val]);
+      }, [
+        el('span', { class: 'pt-top' }, [el('span', { class: 'pt-name', text: s.name }), val]),
+        el('span', { class: 'pt-gauge', 'aria-hidden': 'true' }, fill),
+        need,
+      ]);
       refs.ptGrid.append(btn);
-      refs.ptButtons[s.id] = { btn, val };
+      refs.ptButtons[s.id] = { btn, val, fill, need, name: s.name };
     }
 
     const sel = refs.autoTarget;
@@ -619,8 +625,8 @@
       refs.autoBuy.append(btn);
       return { btn, offer: o };
     });
-    setText(refs.pointsHint, D.POINT_EVERY + '일마다 1포인트 · 숙련도 레벨업 +' + D.POINT_LEVELUP + ' · 생일 +' + D.POINT_BIRTHDAY +
-      ' · 1포인트 = 능력치 +' + D.POINT_GAIN + '. 자동 시간은 게임이 흐르는 동안에만 줄어요.');
+    setText(refs.pointsHint, D.POINT_EVERY + '일마다 +1 · 숙련도 레벨업 +' + D.POINT_LEVELUP + ' · 생일 +' + D.POINT_BIRTHDAY +
+      '. 게이지가 차면 눌러서 +' + D.POINT_GAIN + '. 능력치가 ' + D.POINT_COST_STEP + ' 오를 때마다 필요 포인트도 1 늘어요.');
   }
   function autoLabel(minutes) { return minutes >= 60 ? minutes / 60 + '시간' : minutes + '분'; }
   function clock(ms) {
@@ -645,11 +651,22 @@
     const pick = autoOn ? E.autoPick(state) : null;
     for (const id in refs.ptButtons) {
       const r = refs.ptButtons[id];
+      const maxed = run.stats[id] >= D.STAT_MAX;
+      const cost = E.pointCost(run, id);
+      const ready = !run.ended && !maxed && pts >= cost;
       setText(r.val, int(run.stats[id]));
-      const off = pts <= 0 || !!run.ended || run.stats[id] >= D.STAT_MAX;
-      if (r.btn.disabled !== off) r.btn.disabled = off;
+      setWidth(r.fill, maxed ? 1 : pts / cost);
+      setText(r.need, maxed ? '최대' : ready ? '+' + D.POINT_GAIN + ' 올리기' : int(pts) + ' / ' + cost);
+      if (r.btn.disabled !== !ready) r.btn.disabled = !ready;
+      r.btn.classList.toggle('ready', ready);
       r.btn.classList.toggle('target', autoOn && pick === id);
+      r.btn.setAttribute('aria-label', r.name + ' ' + int(run.stats[id]) + ', 필요 포인트 ' + cost + (ready ? ', 올리기' : ', 포인트 부족'));
     }
+    const left = E.daysToNextPoint(run);
+    const frac = run.ended ? 0 : (D.POINT_EVERY - left + acc / D.DAY_MS) / D.POINT_EVERY;
+    setWidth(refs.ptNextBar, frac);
+    refs.ptNextGauge.setAttribute('aria-valuenow', String(Math.round(frac * 100)));
+    setText(refs.ptNextText, run.ended ? '성인식을 마쳤어요' : '다음 포인트까지 ' + left + '일');
     if (document.activeElement !== refs.autoTarget && refs.autoTarget.value !== state.meta.autoTarget) {
       refs.autoTarget.value = state.meta.autoTarget;
     }
