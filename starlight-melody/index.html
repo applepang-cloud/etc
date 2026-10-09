@@ -2719,7 +2719,7 @@ const TALK_GATE = [0, 5, 10, 16, 22, 28, 34, 40, 48, 58, 68, 78]; // affection e
 /* --- school events on fixed weeks (YEAR_EVENTS): narration, then whoever you are closest to shows up --- */
 const EVENTS = typeof YEAR_EVENTS !== 'undefined' ? YEAR_EVENTS : {};
 const EVENT_PREFER = { 34: 'sena', 47: 'sena' };
-const EVENT_JAM = { 12: '응원석이 들썩이는 틈에, 우리 곡 한 소절을 즉석에서 맞춰 보기로 했다.', 21: '모래사장에 건반 앱 하나. 우리 곡 한 소절을 즉석에서 맞춰 보기로 했다.', 40: '역 앞 광장 버스킹 자리가 비어 있었다. 우리 곡 한 소절로 길을 멈춰 세우기로 했다.' }; // 수능 and graduation are Sena's days if you know her
+const EVENT_JAM = { 3: '부스 앞에 사람을 모으려면 소리가 필요하다. 우리 곡 한 소절을 즉석에서 쳐 보기로 했다.', 7: '꽃잎이 건반 위로 떨어졌다. 그 박자에 맞춰 우리 곡 한 소절을 흥얼거려 보기로 했다.', 23: '불꽃이 오르기 전, 잔디밭에서 우리 곡 한 소절을 작게 맞춰 보기로 했다.', 26: '떡 찌는 김 사이로 라디오가 꺼졌다. 대신 우리 곡 한 소절을 즉석에서 불러 보기로 했다.', 28: '리허설 무대 위, 남은 시간은 딱 한 소절. 즉석에서 맞춰 보기로 했다.', 35: '눈 내리는 창가, 음악실 문이 열려 있었다. 우리 곡 한 소절을 맞춰 보기로 했다.', 46: '초콜릿 대신 노래를 주고받기로 했다. 우리 곡 한 소절을 즉석에서.', 12: '응원석이 들썩이는 틈에, 우리 곡 한 소절을 즉석에서 맞춰 보기로 했다.', 21: '모래사장에 건반 앱 하나. 우리 곡 한 소절을 즉석에서 맞춰 보기로 했다.', 40: '역 앞 광장 버스킹 자리가 비어 있었다. 우리 곡 한 소절로 길을 멈춰 세우기로 했다.' }; // 수능 and graduation are Sena's days if you know her
 function schoolEvent() {
   const ev = EVENTS[S.week]; S.seen[S.week] = true;
   const met = HEROINES.filter(k => S.met[k]).sort((a, b) => S.aff[b] - S.aff[a]);
