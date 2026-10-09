@@ -1871,6 +1871,16 @@ function replay(i) { // 회상: the picture stays up while the scene plays again
   UI.cg = key; UI.stageLabel = '회상 · ' + UI.stageLabel.split(' · ').slice(2).join(' · ');
   duoLines(replayLines(key, h), () => album(i), '앨범으로 ▸');
 }
+function endingList() { // which of the 13 endings you have reached (kept across new games)
+  const E = simStore.endings(), mark = k => E[k] ? '✓' : '?';
+  G.mode = 'album'; showHub(false); UI.strip = false; UI.cg = null; UI.bg = null; setScene('big'); setChar('me'); UI.stageLabel = '엔딩 목록';
+  say([`♥ 연애 엔딩 ${HEROINES.filter(h => E[h]).length}/6
+` + HEROINES.map(h => `${CAST[h].name} ${mark(h)}`).join('  '),
+    `♪ 우정 엔딩 ${HEROINES.filter(h => E['f-' + h]).length}/6
+` + HEROINES.map(h => `${CAST[h].name} ${mark('f-' + h)}`).join('  '),
+    `솔로 엔딩 ${mark('solo')}`, '',
+    '연애 엔딩: 종업식 날 호감도 80 이상(축제를 함께했다면 70) + 첫 곡 완성'].join('\n'), true, [['← 타이틀로', mainMenu, true]]);
+}
 function mainMenu() {
   UI.cg = null; UI.bg = null; bgm('title'); G.mode = 'title'; G.simLock = false; G.after = G.afterSong = null; stopLoop(); liveEnd(); setScene('big'); showHub(false); showPlayUI(false); UI.strip = false;
   UI.stageLabel = '별빛 멜로디'; expr.base = 'idle';
@@ -1883,6 +1893,7 @@ function mainMenu() {
     ['자유 연주\n곡 골라 풀기', () => { clearInterval(titleCycle); freePlay(); }, true],
     ['풀이 연습\n숫자 맞추는 요령', () => { clearInterval(titleCycle); selectSong('lesson'); openStage(0); }, true],
     [`앨범\nCG ${ALBUM.filter(a => cgStore.get()[a[0]]).length}/${ALBUM.length}`, () => { clearInterval(titleCycle); album(0); }, true],
+    [`엔딩 목록\n${Object.keys(simStore.endings()).length}/13`, () => { clearInterval(titleCycle); endingList(); }, true],
     ['설정\n소리·글자 속도', () => { clearInterval(titleCycle); settings(); }, true]]);
 }
 
