@@ -21,7 +21,7 @@ const PLAYHEAD_COLS = 1; // 재생선 왼쪽에 보이는 칸 수
 const SCHEDULE_AHEAD = 0.1; // 오디오 예약 선행 시간(초)
 const RULER_H = 18;
 const MAX_ROWS = 40;
-const MAX_CELL = 44;
+const MAX_CELL = 64; // 칸 폭 상한 (넓은 화면에서 블록이 너무 커지지 않게)
 const OFFSCREEN_COLS = 3; // 자동 이동 중 화면 오른쪽 밖으로 걸쳐 놓을 수 있는 칸 수
 const FREE_LIVE_STEPS = 256; // 자유 작곡 자동 이동의 최대 길이(칸)
 
@@ -121,39 +121,41 @@ export class Game {
     this.layout();
   }
 
+  // 칸 폭은 한 페이지가 재생선부터 화면 오른쪽 끝까지 차도록 정하고,
+  // 칸 높이는 악기마다 줄 수에 맞춰 따로 정한다 (피아노는 폭을 넘지 않게, 줄이 많으면 납작해진다).
   layout(refit = false) {
     if (!this.song || !this.W) return;
     const { W, H } = this;
     this.kbW = keyboardWidth(W);
     const gridW = W - this.kbW;
-    let cw = Math.min(MAX_CELL, gridW / (this.song.sceneSteps + PLAYHEAD_COLS));
+    this.cellW = Math.max(10, Math.floor(Math.min(MAX_CELL, gridW / (this.song.sceneSteps + PLAYHEAD_COLS))));
     this.rollTop = RULER_H;
-    this.rollBottom = H - trayHeight(Math.floor(cw));
+    this.rollBottom = H - trayHeight(Math.min(this.cellW, 32));
     const rollH = this.rollBottom - this.rollTop;
-    for (const p of this.parts) {
-      if (p.inst.id === 'piano') cw = Math.min(cw, rollH / (p.rows ? p.rows.length : pianoMinRows(p)));
-    }
-    this.cellW = Math.max(10, Math.floor(cw));
     this.phX = this.kbW + this.cellW * PLAYHEAD_COLS;
     this.aheadCols = (W - this.phX) / this.cellW;
     this.behindCols = PLAYHEAD_COLS;
 
-    if (refit) for (const p of this.parts) this.assignRows(p);
     for (const p of this.parts) {
-      const n = p.rows.length;
-      p.cellH = p.inst.id === 'piano' ? this.cellW : Math.floor(Math.min(rollH / n, this.cellW * p.inst.maxAspect));
-      p.top = Math.round(this.rollTop + (rollH - n * p.cellH) / 2);
+      if (p.inst.id === 'piano') {
+        const need = p.rows ? p.rows.length : pianoMinRows(p);
+        p.cellH = Math.max(8, Math.floor(Math.min(this.cellW, rollH / need)));
+        if (refit) this.assignRows(p, Math.floor(rollH / p.cellH));
+      } else {
+        if (refit) this.assignRows(p);
+        p.cellH = Math.floor(Math.min(rollH / p.rows.length, this.cellW * p.inst.maxAspect));
+      }
+      p.top = Math.round(this.rollTop + (rollH - p.rows.length * p.cellH) / 2);
     }
     this.trayTop = this.rollBottom;
     this.hooks.layout?.({ trayTop: this.trayTop, H });
   }
 
-  // 줄 배치를 정하고 노트를 줄에 매핑한다. 피아노는 남는 세로 공간을 건반 줄로 채운다.
-  assignRows(p) {
+  // 줄 배치를 정하고 노트를 줄에 매핑한다. 피아노는 남는 세로 공간(fit 줄)을 건반 줄로 채운다.
+  assignRows(p, fit = 0) {
     const id = p.inst.id;
     if (id === 'piano') {
-      const rollH = this.rollBottom - this.rollTop;
-      const count = Math.min(MAX_ROWS, Math.max(pianoMinRows(p), Math.floor(rollH / this.cellW)));
+      const count = Math.min(MAX_ROWS, Math.max(pianoMinRows(p), fit));
       const top = Math.ceil((p.src.lo + p.src.hi + count - 1) / 2);
       p.rows = pianoRows(top, count);
     } else if (id === 'vocal') {
