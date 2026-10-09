@@ -6,6 +6,7 @@ Claude Code 클라우드 세션용 저장소
 원곡 멜로디는 지키고 방해 음 블럭만 깨는 **스테이지형 피아노 벽돌깨기** 게임입니다.
 HTML5 파일 하나([`piano-bricks/index.html`](piano-bricks/index.html))에 화면·스타일·코드가 모두 들어 있어, 빌드나 서버 없이 이 파일만 브라우저로 열면 바로 실행됩니다.
 (파일 하나만 복사해 옮겨도 돼요. 인터넷이 없으면 제목 글꼴만 기본 글꼴로 바뀝니다.)
+**이 PC에서 웹 주소로 플레이:** [`piano-bricks/codex-bridge.cmd`](piano-bricks/codex-bridge.cmd)를 두 번 누르면 **http://localhost:8788** 에서 게임이 열리고 Codex 노래 찾기도 함께 켜집니다 (Node.js 필요, 창을 닫으면 꺼짐).
 (GitHub Pages를 켜면 `/piano-bricks/` 주소로 휴대폰에서도 플레이할 수 있어요.)
 
 ### 화면

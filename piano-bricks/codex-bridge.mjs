@@ -1,7 +1,7 @@
-// Piano Bricks — Codex bridge.
-// Lets the game (index.html) find songs and transcribe their melody with Codex, using this PC's
-// Codex login (ChatGPT / Codex subscription). Run it with codex-bridge.cmd or `node codex-bridge.mjs`,
-// then open the game on this PC and use 새 곡 만들기 → 노래 찾기.
+// Piano Bricks — local game server + Codex bridge.
+// Serves the game at http://localhost:8788 and lets it find songs and transcribe their melody with
+// Codex, using this PC's Codex login (ChatGPT / Codex subscription). Run it with codex-bridge.cmd or
+// `node codex-bridge.mjs`, then open http://localhost:8788 and use 새 곡 만들기 → 노래 찾기.
 //
 // It only does two fixed jobs (song search, melody transcription); the prompts are written here,
 // the game only sends the song text. Codex runs read-only with web search, in an empty temp folder.
@@ -11,7 +11,10 @@ import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const GAME = join(dirname(fileURLToPath(import.meta.url)), 'index.html');
 
 const PORT = Number(process.env.PB_BRIDGE_PORT) || 8788;
 const TIMEOUT_MS = 6 * 60 * 1000;
@@ -178,6 +181,19 @@ const server = createServer(async (req, res) => {
     return res.end();
   }
   const url = new URL(req.url, 'http://localhost');
+  // The game itself (a single page); read fresh each time so edits show on reload.
+  if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
+    try {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+      return res.end(readFileSync(GAME));
+    } catch (e) {
+      return send(res, 500, { error: 'index.html을 읽지 못했어요.' });
+    }
+  }
+  if (req.method === 'GET' && url.pathname === '/favicon.ico') {
+    res.writeHead(204);
+    return res.end();
+  }
   try {
     if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { ok: true, app: 'piano-bricks-codex-bridge' }, cors);
     if (req.method === 'POST' && url.pathname === '/search') {
@@ -198,9 +214,9 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log('피아노 브릭스 Codex 연결 켜짐: http://127.0.0.1:' + PORT);
-  console.log('Codex: ' + CODEX);
-  console.log('이 창을 켜 둔 채로 게임의 새 곡 만들기 → 노래 찾기를 쓰세요. 끄려면 이 창을 닫으세요.');
+  console.log('피아노 브릭스 게임 주소: http://localhost:' + PORT + '  (브라우저 주소창에 넣으세요)');
+  console.log('Codex 노래 찾기도 켜짐 · Codex: ' + CODEX);
+  console.log('이 창을 켜 둔 동안 게임과 노래 찾기를 쓸 수 있어요. 끄려면 이 창을 닫으세요.');
 });
 server.on('error', (e) => {
   console.error(e.code === 'EADDRINUSE' ? '이미 켜져 있어요 (포트 ' + PORT + ').' : e.message);
