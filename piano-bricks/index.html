@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1011">
+  <title>피아노 브릭스</title>
+  <meta name="description" content="원곡 멜로디는 지키고 방해 음 블럭만 깨는 스테이지형 피아노 벽돌깨기 게임">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="frame">
+    <canvas id="game" aria-label="피아노 브릭스 게임 화면"></canvas>
+
+    <div id="hud" class="hud hidden">
+      <button id="btn-close" class="round" type="button" aria-label="목록으로">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <div class="hud-right">
+        <button id="btn-sound" class="round" type="button" aria-label="소리 끄기">
+          <svg class="on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12"/></svg>
+          <svg class="off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>
+        </button>
+        <button id="btn-restart" class="round" type="button" aria-label="다시 하기">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v5h5"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <section id="screen-title" class="screen">
+      <div class="title-inner">
+        <div class="logo-tiles" aria-hidden="true">
+          <span class="t white"></span><span class="t black"></span><span class="t blue"></span>
+          <span class="t white"></span><span class="t green"></span><span class="t black"></span>
+          <span class="t red"></span><span class="t white"></span>
+        </div>
+        <h1 class="logo">PIANO<br>BRICKS</h1>
+        <p class="logo-ko">피아노 브릭스</p>
+        <button id="btn-start" class="btn primary big" type="button">게임 시작</button>
+        <details class="howto">
+          <summary>게임 방법</summary>
+          <ul>
+            <li>화면 위쪽을 눌러 <b>조준</b>하고, 손을 떼면 공이 <b>발사</b>돼요.</li>
+            <li><b>흰·검은 블럭</b>은 원곡 멜로디예요. 공에 맞아도 깨지지 않아요.</li>
+            <li><b>컬러 블럭</b>은 방해 음이에요. 숫자만큼 맞히면 깨져요.</li>
+            <li>한 번 쏠 때마다 보드가 가운데 <b>재생 라인</b> 쪽으로 흘러가요.</li>
+            <li><b>30번</b> 발사가 끝나면 남은 방해 블럭이 재생 라인에 닿아 <b>틀린 음</b>으로 연주돼요.</li>
+            <li>남은 방해 블럭 0개 ★★★ · 1~5개 ★★ · 6~10개 ★ · <b>11개 이상 GAME OVER</b></li>
+            <li>한 곡의 모든 스테이지를 깨면 <b>전곡 듣기</b>가 이어져요.</li>
+          </ul>
+        </details>
+      </div>
+    </section>
+
+    <section id="screen-menu" class="screen hidden">
+      <header class="menu-head">
+        <button id="menu-back" class="round small" type="button" aria-label="처음으로">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <h2>곡 선택</h2>
+        <div id="menu-total" class="menu-total">★ 0 / 0</div>
+      </header>
+      <div id="song-list" class="song-list"></div>
+    </section>
+
+    <section id="screen-result" class="screen overlay hidden" aria-live="polite">
+      <div class="card">
+        <p id="res-sub" class="res-sub"></p>
+        <h2 id="res-title" class="res-title"></h2>
+        <div id="res-stars" class="res-stars" aria-hidden="true">
+          <span class="star">★</span><span class="star">★</span><span class="star">★</span>
+        </div>
+        <dl id="res-stats" class="res-stats"></dl>
+        <p id="res-msg" class="res-msg"></p>
+        <div id="res-actions" class="res-actions"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/songs.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
