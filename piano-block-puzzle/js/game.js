@@ -76,8 +76,8 @@ const JUDGE_STYLE = {
 };
 
 const keyboardWidth = (W) => Math.round(Math.min(64, Math.max(46, W * 0.13)));
-// 블록 3줄(트레이 칸은 보드 칸의 80%)과 위아래 여백만큼
-const trayHeight = (cell) => Math.max(84, Math.round(cell * 0.8) * 3 + 24);
+// 하단 블록 트레이 높이: 화면 높이의 17% (120~170px)
+const trayHeight = (H) => Math.round(Math.min(170, Math.max(120, H * 0.17)));
 const pianoMinRows = (p) => Math.max(12, p.src.hi - p.src.lo + 3);
 
 export class Game {
@@ -134,7 +134,7 @@ export class Game {
     const gridW = W - this.kbW;
     this.cellW = Math.max(10, Math.floor(Math.min(MAX_CELL, gridW / (this.song.sceneSteps + PLAYHEAD_COLS))));
     this.rollTop = RULER_H;
-    this.rollBottom = H - trayHeight(Math.min(this.cellW, 32));
+    this.rollBottom = H - trayHeight(H);
     const rollH = this.rollBottom - this.rollTop;
     this.phX = this.kbW + this.cellW * PLAYHEAD_COLS;
     this.aheadCols = (W - this.phX) / this.cellW;
@@ -1636,13 +1636,13 @@ export class Game {
       return;
     }
 
-    const aspect = this.part.cellH / this.cellW;
+    const aspect = Math.min(1.4, Math.max(0.85, this.part.cellH / this.cellW)); // 하단에서는 너무 납작하거나 길쭉하지 않게
     // 지금 트레이에서 가장 넓은 블록이 칸에 들어가는 만큼 (모두 같은 비율)
     const widest = Math.max(3, ...this.tray.map((p) => (p ? p.w : 0)));
-    let sw = Math.min(this.cellW * 0.85, (this.slotW - 14) / widest);
+    let sw = Math.min(this.cellW * 1.15, 40, (this.slotW - 12) / widest);
     let sh = sw * aspect;
-    if (sh * 3 > trayH - 16) {
-      sh = (trayH - 16) / 3;
+    if (sh * 3 > trayH - 20) {
+      sh = (trayH - 20) / 3;
       sw = sh / aspect;
     }
     const slotW = this.slotW;
@@ -1706,8 +1706,8 @@ export class Game {
       g.fillText('보관', cx, cy + 8);
       return;
     }
-    const aspect = this.part.cellH / this.cellW;
-    let sw = Math.min(this.cellW * 0.7, (bw - 18) / Math.max(3, shown.w));
+    const aspect = Math.min(1.4, Math.max(0.85, this.part.cellH / this.cellW)); // 하단에서는 너무 납작하거나 길쭉하지 않게
+    let sw = Math.min(this.cellW * 0.9, 32, (bw - 16) / Math.max(3, shown.w));
     let sh = sw * aspect;
     const availH = bh - 34;
     if (sh * Math.max(2, shown.h) > availH) {
