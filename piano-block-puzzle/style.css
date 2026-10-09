@@ -1053,3 +1053,9 @@ h1 {
 /* 결과 화면의 서윤 한마디 */
 .result-talk { position: static; margin: 4px 0 2px; justify-content: center; }
 .result-talk .banter-bubble { text-align: left; }
+
+/* 레벨 만들기: 코덱스 연결 상태 */
+.maker-ai { margin: 6px 0 0; font-size: 12px; color: var(--muted, #8a948f); display: flex; align-items: center; gap: 6px; }
+.maker-ai::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #6b736f; flex: none; }
+.maker-ai.on { color: #7fd6a0; }
+.maker-ai.on::before { background: #3ecf7a; box-shadow: 0 0 6px #3ecf7a; }

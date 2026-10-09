@@ -1065,6 +1065,12 @@ h1 {
 .result-talk { position: static; margin: 4px 0 2px; justify-content: center; }
 .result-talk .banter-bubble { text-align: left; }
 
+/* 레벨 만들기: 코덱스 연결 상태 */
+.maker-ai { margin: 6px 0 0; font-size: 12px; color: var(--muted, #8a948f); display: flex; align-items: center; gap: 6px; }
+.maker-ai::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #6b736f; flex: none; }
+.maker-ai.on { color: #7fd6a0; }
+.maker-ai.on::before { background: #3ecf7a; box-shadow: 0 0 6px #3ecf7a; }
+
 </style>
 </head>
 <body>
@@ -1151,7 +1157,8 @@ h1 {
 
       <section class="mode-block" aria-labelledby="h-maker">
         <div class="mode-head"><h2 id="h-maker">노래 제목으로 레벨 만들기</h2></div>
-        <p class="mode-desc">노래 제목을 넣으면 그 곡으로 새 레벨을 만들어요. 저작권이 끝난 민요·동요·클래식은 원곡 멜로디로, 그 밖의 곡은 제목 분위기에 맞춘 새 멜로디로 만들어요.</p>
+        <p class="mode-desc">노래 제목을 넣으면 코덱스가 그 곡으로 새 레벨을 만들어요. 저작권이 끝난 민요·동요·클래식은 원곡 멜로디로, 그 밖의 곡은 제목 분위기에 맞춘 새 멜로디로 만들어요.</p>
+        <p class="maker-ai" id="maker-ai">코덱스 확인 중…</p>
         <form class="maker-form" id="maker-form" autocomplete="off">
           <input class="maker-input" id="maker-title" type="text" maxlength="40" enterkeyhint="go" placeholder="예: 아리랑, 캐논, 비 오는 날의 산책" aria-label="노래 제목">
           <button type="submit" class="btn primary maker-go" id="maker-go">만들기</button>
@@ -1813,29 +1820,10 @@ const FREE_SONG = {
 return { noteToMidi, buildSong, MINUET_A, MINUET_B1, MINUET_B2, SONGS, BAND_SONGS, FREE_SONG };
 })();
 
-// ── js/maker.js ──
-__mod['maker'] = (() => {
-// 노래 제목으로 새 레벨 만들기.
-// claude.ai 안에서 열리면 Claude에게 멜로디를 부탁하고(sample 기능), 그럴 수 없으면
-// 제목을 씨앗으로 한 자동 작곡으로 만든다. 결과는 songs.js 의 곡 정의와 같은 모양이다.
-//
-// 저작권: 저작권이 끝난 곡(민요·동요·옛 찬송가·작곡가 사후 70년이 지난 클래식)만 원곡 멜로디로 쓰고,
-// 그 밖의 곡은 제목 분위기에 맞춘 새 멜로디로 만들도록 Claude에게 요청한다.
-
-const { noteToMidi } = __mod['songs'];
-const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const midiName = (p) => `${NAMES[p % 12]}${Math.floor(p / 12) - 1}`;
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const cleanText = (s, n) => String(s ?? '').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
-
-const MAX_STEPS = 128; // 8분음표 칸 기준 최대 길이 (4/4박자 16마디)
-const MIN_NOTES = 8;
-
-function normalizeTitle(s) {
-  return cleanText(s, 40);
-}
-
-// ---------- Claude에게 부탁하기 ----------
+// ── js/maker-prompt.js ──
+__mod['maker-prompt'] = (() => {
+// 노래 제목 → 멜로디를 AI에게 부탁하는 지시문. 게임(maker.js)과 코덱스 브리지(tools/codex-bridge.mjs)가 같이 쓴다.
+// 저작권: 저작권이 끝난 곡만 원곡 멜로디로, 그 밖의 곡은 제목 분위기에 맞춘 새 멜로디로 만들게 한다.
 
 const DIFFICULTY = {
   1: 'EASY: quarter notes or longer only (every note and rest lasts an even number of steps), mostly stepwise motion, range within 9 semitones, 8 bars.',
@@ -1866,6 +1854,36 @@ function promptFor(title, level) {
   ].join('\n');
 }
 
+return { promptFor };
+})();
+
+// ── js/maker.js ──
+__mod['maker'] = (() => {
+// 노래 제목으로 새 레벨 만들기.
+// 코덱스 브리지(tools/codex-bridge.mjs)가 켜져 있으면 코덱스에게, claude.ai 안에서 열리면 Claude에게
+// 멜로디를 부탁하고(sample 기능), 둘 다 안 되면 제목을 씨앗으로 한 자동 작곡으로 만든다.
+// 결과는 songs.js 의 곡 정의와 같은 모양이다.
+//
+// 저작권: 저작권이 끝난 곡(민요·동요·옛 찬송가·작곡가 사후 70년이 지난 클래식)만 원곡 멜로디로 쓰고,
+// 그 밖의 곡은 제목 분위기에 맞춘 새 멜로디로 만들도록 Claude에게 요청한다.
+
+const { noteToMidi } = __mod['songs'];
+const { promptFor } = __mod['maker-prompt'];
+const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const midiName = (p) => `${NAMES[p % 12]}${Math.floor(p / 12) - 1}`;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const cleanText = (s, n) => String(s ?? '').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
+
+const MAX_STEPS = 128; // 8분음표 칸 기준 최대 길이 (4/4박자 16마디)
+const MIN_NOTES = 8;
+
+function normalizeTitle(s) {
+  return cleanText(s, 40);
+}
+
+// ---------- AI(코덱스·Claude)에게 부탁하기 ----------
+// 지시문은 maker-prompt.js (코덱스 브리지 서버와 같이 쓴다)
+
 // Claude를 쓸 수 없을 때의 안내. off = 이 화면에서는 다시 묻지 않는다.
 function explain(e) {
   switch (e?.code) {
@@ -1886,11 +1904,53 @@ function explain(e) {
   }
 }
 
-// sample: claude.use('sample')의 결과(없으면 null). offline: 이 화면에서 Claude가 이미 거절됨.
+// 코덱스 브리지(tools/codex-bridge.mjs)가 켜져 있으면 그 주소. 꺼져 있으면 null.
+const CODEX_URL = 'http://127.0.0.1:8770';
+async function codexReady() {
+  try {
+    const res = await fetch(`${CODEX_URL}/health`, { signal: AbortSignal.timeout(1500) });
+    const j = await res.json();
+    return !!(j.ok && j.codex);
+  } catch {
+    return false;
+  }
+}
+
+const CODEX_NOTE = {
+  busy: '코덱스가 다른 곡을 만드는 중이라 이번엔 자동 작곡으로 만들었어요.',
+  timeout: '코덱스 응답이 너무 늦어 자동 작곡으로 만들었어요.',
+  login: '코덱스 로그인이 필요해요(코덱스 앱에서 로그인). 이번엔 자동 작곡으로 만들었어요.',
+};
+
+// codex: 코덱스 브리지를 쓸지. sample: claude.use('sample')의 결과(없으면 null).
+// offline: 이 화면에서 Claude가 이미 거절됨. 순서: 코덱스 → Claude → 자동 작곡.
 // 취소되면 {code:'cancelled'}로 거절한다.
-async function makeLevel(title, level, { sample = null, signal, onProgress, offline = false } = {}) {
-  let note = offline ? 'Claude를 쓸 수 없어서 제목으로 자동 작곡했어요.' : 'claude.ai 밖이라 제목으로 자동 작곡했어요.';
+async function makeLevel(title, level, { codex = false, sample = null, signal, onProgress, offline = false } = {}) {
+  let note = offline ? 'Claude를 쓸 수 없어서 제목으로 자동 작곡했어요.' : '코덱스 서버가 꺼져 있어서 제목으로 자동 작곡했어요.';
   let off = false;
+  if (codex) {
+    try {
+      onProgress?.('코덱스가 악보를 쓰는 중… (보통 20~60초)');
+      const res = await fetch(`${CODEX_URL}/melody`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, level }),
+        signal,
+      });
+      const raw = await res.json();
+      if (!res.ok) throw { code: raw?.error };
+      const source = raw?.source === 'melody' ? 'melody' : 'original';
+      const def = toSongDef(raw, { title, source });
+      return {
+        def,
+        via: 'codex',
+        note: source === 'melody' ? '코덱스가 원곡 멜로디로 만들었어요.' : '코덱스가 제목에 어울리는 새 멜로디로 만들었어요.',
+      };
+    } catch (e) {
+      if (e?.name === 'AbortError' || signal?.aborted) throw { code: 'cancelled' };
+      note = CODEX_NOTE[e?.code] || '코덱스의 악보를 읽지 못해 자동 작곡으로 만들었어요. 다시 누르면 코덱스에게 다시 부탁해요.';
+    }
+  }
   if (sample) {
     try {
       onProgress?.('Claude가 악보를 쓰는 중… (보통 10~40초)');
@@ -2183,7 +2243,7 @@ function composeFromTitle(title, level) {
   return { source: 'auto', title, composer: '자동 작곡', mood, bpm, meter, melody };
 }
 
-return { normalizeTitle, makeLevel, toSongDef, composeFromTitle };
+return { normalizeTitle, CODEX_URL, codexReady, makeLevel, toSongDef, composeFromTitle };
 })();
 
 // ── js/samples.js ──
@@ -7234,7 +7294,7 @@ return { Banter };
 // ── js/main.js ──
 __mod['main'] = (() => {
 const { SONGS, BAND_SONGS, FREE_SONG, buildSong } = __mod['songs'];
-const { makeLevel, normalizeTitle } = __mod['maker'];
+const { makeLevel, normalizeTitle, codexReady } = __mod['maker'];
 const { PianoAudio } = __mod['audio'];
 const { Game } = __mod['game'];
 const { Story } = __mod['story'];
@@ -7530,6 +7590,20 @@ const samplePromise =
   typeof window.claude?.use === 'function' ? Promise.resolve(window.claude.use('sample')).catch(() => null) : Promise.resolve(null);
 let sampleOff = false;
 
+// 코덱스 브리지가 켜져 있는지 보여 준다 (메뉴를 열 때·창으로 돌아올 때 다시 확인)
+let codexOn = false;
+async function checkCodex() {
+  codexOn = await codexReady();
+  const n = $('#maker-ai');
+  n.textContent = codexOn ? '코덱스 연결됨 · 코덱스가 악보를 써요' : '코덱스 서버 꺼짐 · 자동 작곡으로 만들어요';
+  n.classList.toggle('on', codexOn);
+  return codexOn;
+}
+checkCodex();
+window.addEventListener('focus', () => {
+  if (!el.menu.hidden && !makerCtl) checkCodex();
+});
+
 function setMaker(state, text = '', song = null) {
   maker.status.hidden = state === 'idle';
   maker.status.className = `maker-status ${state}`;
@@ -7570,9 +7644,11 @@ maker.form.addEventListener('submit', async (e) => {
   makerCtl = ctl;
   setMaker('busy', '준비 중…');
   try {
+    const codex = await checkCodex();
     const sample = sampleOff ? null : await samplePromise;
     if (ctl.signal.aborted) return;
     const res = await makeLevel(title, makerLevel, {
+      codex,
       sample,
       offline: sampleOff,
       signal: ctl.signal,

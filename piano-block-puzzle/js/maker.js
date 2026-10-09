@@ -1,11 +1,13 @@
 // 노래 제목으로 새 레벨 만들기.
-// claude.ai 안에서 열리면 Claude에게 멜로디를 부탁하고(sample 기능), 그럴 수 없으면
-// 제목을 씨앗으로 한 자동 작곡으로 만든다. 결과는 songs.js 의 곡 정의와 같은 모양이다.
+// 코덱스 브리지(tools/codex-bridge.mjs)가 켜져 있으면 코덱스에게, claude.ai 안에서 열리면 Claude에게
+// 멜로디를 부탁하고(sample 기능), 둘 다 안 되면 제목을 씨앗으로 한 자동 작곡으로 만든다.
+// 결과는 songs.js 의 곡 정의와 같은 모양이다.
 //
 // 저작권: 저작권이 끝난 곡(민요·동요·옛 찬송가·작곡가 사후 70년이 지난 클래식)만 원곡 멜로디로 쓰고,
 // 그 밖의 곡은 제목 분위기에 맞춘 새 멜로디로 만들도록 Claude에게 요청한다.
 
 import { noteToMidi } from './songs.js';
+import { promptFor } from './maker-prompt.js';
 
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const midiName = (p) => `${NAMES[p % 12]}${Math.floor(p / 12) - 1}`;
@@ -19,36 +21,8 @@ export function normalizeTitle(s) {
   return cleanText(s, 40);
 }
 
-// ---------- Claude에게 부탁하기 ----------
-
-const DIFFICULTY = {
-  1: 'EASY: quarter notes or longer only (every note and rest lasts an even number of steps), mostly stepwise motion, range within 9 semitones, 8 bars.',
-  2: 'NORMAL: mostly quarter notes with some eighth notes, small leaps allowed, range within 12 semitones, 12 bars.',
-  3: 'HARD: many eighth notes, some syncopation and leaps, range within 14 semitones, 16 bars.',
-};
-
-function promptFor(title, level) {
-  return [
-    'You write levels for "피아노 블록", a piano-roll puzzle game where the player covers the notes of a melody with blocks. The player typed a song title and wants a playable melody for it.',
-    '',
-    `Song title typed by the player: ${JSON.stringify(title)}`,
-    '',
-    'First decide which case applies:',
-    '- "melody": the title clearly names a song whose melody is in the public domain: a traditional or folk song, nursery rhyme, old hymn or carol, or a classical piece whose composer died more than 70 years ago. Write its well-known main melody as faithfully as you can, transposed to C major or A minor when possible.',
-    '- "original": anything else, including modern or possibly copyrighted songs and titles you do not recognize. Compose a NEW original melody that fits the mood and imagery of the title. Do not reproduce, quote or closely imitate any copyrighted melody.',
-    '',
-    `Difficulty: ${DIFFICULTY[level]} For a "melody" song keep the real tune (at most 16 bars of its main theme) and simplify its rhythm toward this difficulty.`,
-    '',
-    'Melody format, a single line of notes (no chords):',
-    '- One step = one eighth note. A token is NOTE or NOTE:steps, for example C4 (eighth), E4:2 (quarter), G4:3 (dotted quarter), A4:4 (half), C5:8 (whole). R is a rest, for example R:2.',
-    '- Note names use sharps (C#4, F#4) and octave numbers. Stay between G3 and E5.',
-    '- Put " | " between bars. Each bar adds up to exactly 8 steps in 4/4, or 6 steps in 3/4 or 6/8.',
-    '- End on the tonic with a long note.',
-    '',
-    'Reply with only this JSON object:',
-    '{"source": "melody" or "original", "title": the usual Korean title of the song if it has one, otherwise the title as typed, "composer": composer or origin in Korean such as 독일 민요 or 모차르트 (창작 for original), "mood": a short Korean phrase about the melody under 20 characters, "bpm": quarter-note tempo from 60 to 150, "meter": 4 or 3 (3 for 3/4 and 6/8), "melody": "E4:2 D4:2 C4:2 D4:2 | E4:2 E4:2 E4:4 | ..."}',
-  ].join('\n');
-}
+// ---------- AI(코덱스·Claude)에게 부탁하기 ----------
+// 지시문은 maker-prompt.js (코덱스 브리지 서버와 같이 쓴다)
 
 // Claude를 쓸 수 없을 때의 안내. off = 이 화면에서는 다시 묻지 않는다.
 function explain(e) {
@@ -70,11 +44,53 @@ function explain(e) {
   }
 }
 
-// sample: claude.use('sample')의 결과(없으면 null). offline: 이 화면에서 Claude가 이미 거절됨.
+// 코덱스 브리지(tools/codex-bridge.mjs)가 켜져 있으면 그 주소. 꺼져 있으면 null.
+export const CODEX_URL = 'http://127.0.0.1:8770';
+export async function codexReady() {
+  try {
+    const res = await fetch(`${CODEX_URL}/health`, { signal: AbortSignal.timeout(1500) });
+    const j = await res.json();
+    return !!(j.ok && j.codex);
+  } catch {
+    return false;
+  }
+}
+
+const CODEX_NOTE = {
+  busy: '코덱스가 다른 곡을 만드는 중이라 이번엔 자동 작곡으로 만들었어요.',
+  timeout: '코덱스 응답이 너무 늦어 자동 작곡으로 만들었어요.',
+  login: '코덱스 로그인이 필요해요(코덱스 앱에서 로그인). 이번엔 자동 작곡으로 만들었어요.',
+};
+
+// codex: 코덱스 브리지를 쓸지. sample: claude.use('sample')의 결과(없으면 null).
+// offline: 이 화면에서 Claude가 이미 거절됨. 순서: 코덱스 → Claude → 자동 작곡.
 // 취소되면 {code:'cancelled'}로 거절한다.
-export async function makeLevel(title, level, { sample = null, signal, onProgress, offline = false } = {}) {
-  let note = offline ? 'Claude를 쓸 수 없어서 제목으로 자동 작곡했어요.' : 'claude.ai 밖이라 제목으로 자동 작곡했어요.';
+export async function makeLevel(title, level, { codex = false, sample = null, signal, onProgress, offline = false } = {}) {
+  let note = offline ? 'Claude를 쓸 수 없어서 제목으로 자동 작곡했어요.' : '코덱스 서버가 꺼져 있어서 제목으로 자동 작곡했어요.';
   let off = false;
+  if (codex) {
+    try {
+      onProgress?.('코덱스가 악보를 쓰는 중… (보통 20~60초)');
+      const res = await fetch(`${CODEX_URL}/melody`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, level }),
+        signal,
+      });
+      const raw = await res.json();
+      if (!res.ok) throw { code: raw?.error };
+      const source = raw?.source === 'melody' ? 'melody' : 'original';
+      const def = toSongDef(raw, { title, source });
+      return {
+        def,
+        via: 'codex',
+        note: source === 'melody' ? '코덱스가 원곡 멜로디로 만들었어요.' : '코덱스가 제목에 어울리는 새 멜로디로 만들었어요.',
+      };
+    } catch (e) {
+      if (e?.name === 'AbortError' || signal?.aborted) throw { code: 'cancelled' };
+      note = CODEX_NOTE[e?.code] || '코덱스의 악보를 읽지 못해 자동 작곡으로 만들었어요. 다시 누르면 코덱스에게 다시 부탁해요.';
+    }
+  }
   if (sample) {
     try {
       onProgress?.('Claude가 악보를 쓰는 중… (보통 10~40초)');

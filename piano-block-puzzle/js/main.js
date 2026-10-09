@@ -1,5 +1,5 @@
 import { SONGS, BAND_SONGS, FREE_SONG, buildSong } from './songs.js';
-import { makeLevel, normalizeTitle } from './maker.js';
+import { makeLevel, normalizeTitle, codexReady } from './maker.js';
 import { PianoAudio } from './audio.js';
 import { Game } from './game.js';
 import { Story } from './story.js';
@@ -296,6 +296,20 @@ const samplePromise =
   typeof window.claude?.use === 'function' ? Promise.resolve(window.claude.use('sample')).catch(() => null) : Promise.resolve(null);
 let sampleOff = false;
 
+// 코덱스 브리지가 켜져 있는지 보여 준다 (메뉴를 열 때·창으로 돌아올 때 다시 확인)
+let codexOn = false;
+async function checkCodex() {
+  codexOn = await codexReady();
+  const n = $('#maker-ai');
+  n.textContent = codexOn ? '코덱스 연결됨 · 코덱스가 악보를 써요' : '코덱스 서버 꺼짐 · 자동 작곡으로 만들어요';
+  n.classList.toggle('on', codexOn);
+  return codexOn;
+}
+checkCodex();
+window.addEventListener('focus', () => {
+  if (!el.menu.hidden && !makerCtl) checkCodex();
+});
+
 function setMaker(state, text = '', song = null) {
   maker.status.hidden = state === 'idle';
   maker.status.className = `maker-status ${state}`;
@@ -336,9 +350,11 @@ maker.form.addEventListener('submit', async (e) => {
   makerCtl = ctl;
   setMaker('busy', '준비 중…');
   try {
+    const codex = await checkCodex();
     const sample = sampleOff ? null : await samplePromise;
     if (ctl.signal.aborted) return;
     const res = await makeLevel(title, makerLevel, {
+      codex,
       sample,
       offline: sampleOff,
       signal: ctl.signal,
