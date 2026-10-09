@@ -1856,7 +1856,7 @@ function album(i) {
   UI.cg = seen ? key : null; setChar(seen ? h : 'me');
   if (seen && key.startsWith('duo_')) { const ev = DUOS.find(e => 'duo_' + e.id === key), o = ev.opts.find(x => x.side === 'both'); setChar(o.reply[o.reply.length - 1][0]); } // the caption is her line
   say(seen ? fmt(cgCaption(key, h)) : (h2 ? `${who}${jong(CAST[h2].name) ? '이' : '가'} 함께한 장면은 아직 보지 못했다.` : `${CAST[h].name}의 ${kind} 장면은 아직 보지 못했다.`), true, [
-    ['◀ 이전', () => album((i + n - 1) % n)], ['다음 ▶', () => album((i + 1) % n)]].concat(seen && replayLines(key, h).length ? [['장면 다시 보기 ▸', () => replay(i)]] : []).concat([['← 타이틀로', mainMenu, true]]));
+    ['◀ 이전', () => album((i + n - 1) % n)], ['다음 ▶', () => album((i + 1) % n)]].concat(seen && replayLines(key, h).length ? [['장면 다시 보기 ▸', () => replay(i)]] : []).concat([['엔딩 목록', endingList, true], ['← 타이틀로', mainMenu, true]]));
 }
 function replayLines(key, h) { // [who, line] pairs for the scene behind a picture
   const mine = ls => (ls || []).map(t => [h, t]);
@@ -1881,7 +1881,7 @@ function endingList() { // which of the 13 endings you have reached (kept across
     `♪ 우정 엔딩 ${HEROINES.filter(h => E['f-' + h]).length}/6
 ` + HEROINES.map(h => `${CAST[h].name} ${mark('f-' + h)}`).join('  '),
     `솔로 엔딩 ${mark('solo')}`, '',
-    '연애 엔딩: 종업식 날 호감도 80 이상(축제를 함께했다면 70) + 첫 곡 완성'].join('\n'), true, [['← 타이틀로', mainMenu, true]]);
+    '연애 엔딩: 종업식 날 호감도 80 이상(축제를 함께했다면 70) + 첫 곡 완성'].join('\n'), true, [['← 앨범', () => album(0), true], ['← 타이틀로', mainMenu, true]]);
 }
 function mainMenu() {
   UI.cg = null; UI.bg = null; bgm('title'); G.mode = 'title'; G.simLock = false; G.after = G.afterSong = null; stopLoop(); liveEnd(); setScene('big'); showHub(false); showPlayUI(false); UI.strip = false;
@@ -1894,8 +1894,7 @@ function mainMenu() {
     save ? [`이어 하기\n저장 ${saves.filter(Boolean).length}개`, () => { clearInterval(titleCycle); slotMenu('load'); }] : ['이어 하기\n저장 없음', () => toast('저장된 이야기가 없어요.'), true],
     ['자유 연주\n곡 골라 풀기', () => { clearInterval(titleCycle); freePlay(); }, true],
     ['풀이 연습\n숫자 맞추는 요령', () => { clearInterval(titleCycle); selectSong('lesson'); openStage(0); }, true],
-    [`앨범\nCG ${ALBUM.filter(a => cgStore.get()[a[0]]).length}/${ALBUM.length}`, () => { clearInterval(titleCycle); album(0); }, true],
-    [`엔딩 목록\n${Object.keys(simStore.endings()).length}/13`, () => { clearInterval(titleCycle); endingList(); }, true],
+    [`앨범 · 엔딩\nCG ${ALBUM.filter(a => cgStore.get()[a[0]]).length}/${ALBUM.length} · 엔딩 ${Object.keys(simStore.endings()).length}/13`, () => { clearInterval(titleCycle); album(0); }, true],
     ['설정\n소리·글자 속도', () => { clearInterval(titleCycle); settings(); }, true]]);
 }
 
