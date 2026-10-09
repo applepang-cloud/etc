@@ -658,9 +658,9 @@ h1 {
 .vn-char[data-pos="left"] { left: -8%; }
 .vn-char[data-pos="center"] { left: 50%; transform: translateX(-50%); }
 .vn-char[data-pos="right"] { right: -8%; }
-.vn-char svg { display: block; width: 100%; height: auto; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.35)); }
+.vn-char svg, .vn-char img { display: block; width: 100%; height: auto; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.35)); }
 .vn-char.dim { filter: brightness(0.55) saturate(0.85); }
-.vn-char.enter svg { animation: vn-in 0.35s ease-out; }
+.vn-char.enter svg, .vn-char.enter img { animation: vn-in 0.35s ease-out; }
 @keyframes vn-in { from { opacity: 0; transform: translateY(16px); } }
 
 .vn-top {
@@ -906,7 +906,7 @@ h1 {
 .mini-door[data-phase="look"] { border-color: #f2463a; box-shadow: 0 0 18px rgba(242, 70, 58, 0.7); }
 @keyframes vn-blink { 50% { border-color: #fff3a6; } }
 .mini-prof { position: absolute; left: 0; right: 0; bottom: -8%; }
-.mini-prof svg { display: block; width: 100%; height: auto; }
+.mini-prof svg, .mini-prof img { display: block; width: 100%; height: auto; }
 .mini-state {
   position: absolute;
   left: 50%;
@@ -922,7 +922,7 @@ h1 {
 .mini-door[data-phase="warn"] .mini-state { background: #f6c344; color: #2a2008; font-size: 16px; }
 .mini-door[data-phase="look"] .mini-state { background: #f2463a; }
 .mini-her { position: absolute; left: 50%; bottom: 0; width: 72%; max-width: 300px; transform: translateX(-62%); }
-.mini-her svg { display: block; width: 100%; height: auto; }
+.mini-her svg, .mini-her img { display: block; width: 100%; height: auto; }
 .mini-fx { position: absolute; inset: 0; pointer-events: none; }
 .mini-msg {
   position: absolute;
@@ -982,10 +982,10 @@ h1 {
     linear-gradient(#4a3430, #1f1518);
 }
 .duet-her { position: absolute; left: 4%; top: 10%; width: 46%; max-width: 210px; }
-.duet-her svg { display: block; width: 100%; height: auto; }
+.duet-her svg, .duet-her img { display: block; width: 100%; height: auto; }
 .mini-door.table { top: 8px; right: 8px; width: auto; height: calc(100% - 16px); background: linear-gradient(#6b4f36, #2e2219); border-color: #c9a46a; }
 .mini-watch { position: absolute; left: 0; right: 0; bottom: -8%; }
-.mini-watch svg { display: block; width: 100%; height: auto; }
+.mini-watch svg, .mini-watch img { display: block; width: 100%; height: auto; }
 .duet-lanes { position: relative; flex: 1; min-height: 150px; overflow: hidden; border-radius: 12px; background: #120e14; }
 .duet-lanes canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
 .mini-msg small { font-family: var(--font-body); font-size: 15px; font-weight: 600; color: #f0e6ee; }
@@ -1041,6 +1041,8 @@ h1 {
   background: #1d2420; border: 2px solid var(--c);
 }
 .banter-face svg { width: 100%; height: auto; transform: translateY(-14%) scale(1.75); transform-origin: 50% 20%; }
+/* 일러스트(세로 2:3, 위에 얼굴)는 위쪽을 크게 잘라 얼굴만 */
+.banter-face img { width: 100%; height: auto; transform: scale(2.3); transform-origin: 50% 9%; }
 .banter-bubble {
   max-width: min(420px, 100%); padding: 8px 12px; border-radius: 14px 14px 14px 4px;
   background: rgba(16, 19, 17, 0.92); border: 1px solid var(--c); color: #f1f4f2;
@@ -1059,3 +1061,7 @@ h1 {
 .maker-ai::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #6b736f; flex: none; }
 .maker-ai.on { color: #7fd6a0; }
 .maker-ai.on::before { background: #3ecf7a; box-shadow: 0 0 6px #3ecf7a; }
+
+/* 코덱스 일러스트 공통 */
+img.art { -webkit-user-drag: none; user-select: none; pointer-events: none; }
+.story-art img.art { display: block; width: 100%; height: auto; }

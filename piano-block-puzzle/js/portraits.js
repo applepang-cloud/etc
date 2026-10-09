@@ -1,5 +1,7 @@
 // 스토리 모드 캐릭터 일러스트 (SVG). 외부 이미지 없이 도형으로 그린다.
 // portrait(id, expr): expr = normal | smile | blush | surprise | sad | serious | back(교수·태준 뒷모습)
+import { PORTRAIT_ART } from './portrait-art.js';
+
 
 const SKIN = '#fde4d4';
 const SKIN_SH = '#efc2ad';
@@ -176,7 +178,12 @@ function taejun(expr) {
 
 const DRAW = { seoyun, dohyun, chaea, prof, taejun };
 
+// 코덱스로 그린 일러스트가 있으면 그것을, 없으면 위의 SVG 그림을 쓴다.
+// 일러스트에 없는 표정은 기본 표정으로 (뒷모습은 SVG 로).
 export function portrait(id, expr = 'normal') {
+  const art = PORTRAIT_ART[id];
+  const data = art && (art[expr] || (expr !== 'back' && art.normal));
+  if (data) return `<img class="art" src="data:image/webp;base64,${data}" alt="" draggable="false">`;
   const draw = DRAW[id];
   if (!draw) return '';
   return `<svg viewBox="0 0 300 420" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${draw(expr)}</svg>`;
