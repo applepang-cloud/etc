@@ -1,0 +1,24 @@
+// Pull every heroine line out of the game file -> lines.json [{who, text, id}]
+const fs = require('fs'), crypto = require('crypto');
+const h = fs.readFileSync(process.argv[2], 'utf8');
+const cut = (a, b) => { const i = h.indexOf(a), j = h.indexOf(b, i); if (i < 0 || j < 0) throw new Error('marker ' + a); return h.slice(i, j); };
+const code = [cut('const YEAR_EVENTS = ', 'const FINGER_DATA'), cut('const SONGS = [', 'let SONG = '), cut('const CAST = {', 'const OOPS ='), 'const HEROINES = ["ria","yuna","hana","sora","arin","sena"]; const STATS = {};', cut('const SIM = {', 'const PRACTICE ='), 'module.exports = { SONGS, CAST, SIM, EVENTS, HEART_DATA, EXTRA_DATA };'].join('\n');
+const m = { exports: {} }; new Function('module', 'performance', code)(m, { now: () => 0 });
+const { SONGS, CAST, SIM, EVENTS, HEART_DATA, EXTRA_DATA } = m.exports, out = new Map();
+const add = (who, t) => { if (!t || t.startsWith('#') || t.includes('{N')) return; const id = who + '_' + crypto.createHash('md5').update(who + '|' + t).digest('hex').slice(0, 10); out.set(id, { who, text: t, id }); };
+const HER = ['ria', 'yuna', 'hana', 'sora', 'arin', 'sena'];
+HER.forEach(w => { const c = CAST[w]; c.oops.forEach(t => add(w, t)); ['hint', 'glow', 'start', 'song', 'again'].forEach(k => add(w, c[k])); });
+SONGS.forEach(sg => { const w = sg.singer || 'ria'; sg.stages.concat(sg.encore || []).forEach(st => { st.intro.forEach(t => add(w, t)); add(w, st.clear); (st.guide || []).forEach(g => add(w, g.say)); }); sg.ending.forEach(t => add(w, t)); });
+HER.forEach(w => { const s = SIM[w];
+  s.meet.lines.forEach(t => add(w, t)); s.meet.opts.forEach(o => add(w, o[2])); s.meet.after.forEach(t => add(w, t));
+  s.talks.forEach(tk => { tk.lines.forEach(t => add(w, t)); tk.opts.forEach(o => add(w, o[2])); });
+  s.small.forEach(t => add(w, t)); s.love.forEach(t => add(w, t)); add(w, s.friend); s.stage.forEach(t => add(w, t)); s.live.forEach(t => add(w, t));
+  Object.values(EVENTS).forEach(ev => add(w, ev.who[w]));
+  (s.final || []).forEach(t => add(w, t)); (s.finalFriend || []).forEach(t => add(w, t));
+  if (s.date) Object.values(s.date).forEach(ls => ls.forEach(t => add(w, t)));
+  if (s.seasonal) Object.values(s.seasonal).forEach(t => add(w, t));
+  const b = EXTRA_DATA.birthdays[w]; if (b) ['good', 'ok', 'bad', 'thanks'].forEach(k => add(w, b[k]));
+  Object.values(HEART_DATA[w] || {}).forEach(ev => { ev.lines.forEach(t => add(w, t)); ev.opts.forEach(o => add(w, o[2])); }); });
+const arr = [...out.values()]; fs.writeFileSync(process.argv[3], JSON.stringify(arr, null, 1));
+const by = {}; arr.forEach(x => { by[x.who] = by[x.who] || [0, 0]; by[x.who][0]++; by[x.who][1] += x.text.length; });
+console.log('lines', arr.length, 'chars', arr.reduce((s, x) => s + x.text.length, 0), JSON.stringify(by));

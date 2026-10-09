@@ -1,0 +1,23 @@
+// Protagonist lines: every '#' narration string in the game plus the narrator's own prompts -> lines_me.json
+const fs = require('fs');
+const h = fs.readFileSync(process.argv[2], 'utf8');
+const cut = (a, b) => { const i = h.indexOf(a), j = h.indexOf(b, i); return h.slice(i, j); };
+const m = { exports: {} };
+new Function('module', 'performance', [cut('const YEAR_EVENTS = ', 'const FINGER_DATA'), cut('const CAST = {', 'const OOPS ='), cut('const STATS = {', 'const PRACTICE ='), cut('const PRACTICE =', 'let S = null'), 'module.exports = { CAST, SIM, EVENTS, PRACTICE, STATS, HEROINES, ga, wa, jong, WEEKS, weekLabel, DATE_DATA };'].join('\n'))(m, { now: () => 0 });
+const { CAST, SIM, EVENTS, PRACTICE, STATS, HEROINES, ga, wa, jong, WEEKS, weekLabel, DATE_DATA } = m.exports;
+const out = new Set();
+const main = h.slice(h.indexOf('const YEAR_EVENTS = '));
+for (const mm of main.matchAll(/(['`"])#((?:(?!\1)[^\\n]|\.)*)\1/g)) if (!mm[2].includes('${')) out.add(mm[2]);
+Object.values(PRACTICE).forEach(t => out.add(t));
+HEROINES.forEach(k => { const n = CAST[k].name, p = SIM[k].place;
+  out.add(`연습하는 모습을 ${ga(n)} 몰래 보고 갔다는 소문이 들렸다. (♥ +3)`); out.add(p + '에서 ' + ga(n) + ' 반겨 주었다.');
+  out.add(p + '에서 ' + n + (jong(n) ? '을' : '를') + ' 만났다.'); out.add(`${wa(n)} 눈을 맞췄다. 이번엔 처음부터 끝까지, 우리 곡을.`); });
+Object.values(EVENTS).forEach(ev => { ev.lines.forEach(t => out.add(t.slice(1))); out.add(ev.after.slice(1) + (ev.stat ? ` (${STATS[ev.stat]} +1)` : '')); });
+for (let w = 1; w <= WEEKS; w++) out.add(`${weekLabel(w)}. 이번 주엔 뭘 할까?`);
+[1, 2].forEach(n => out.add(`이번 주에 할 수 있는 일이 ${n}번 남았다.`));
+HEROINES.forEach(k => { const n = CAST[k].name; out.add(`옥상 문을 열자, ${ga(n)} 기다리고 있었다.`); out.add(`${n}${jong(n) ? '이랑' : '랑'} 어디 갈까?`); out.add(`${wa(n)} 무대에 올랐다. 이번엔 우리 두 번째 곡.`); });
+[CAST.me.start, CAST.me.song, CAST.me.again, '내 이름은…', '몸이 무겁다. 오늘은 좀 쉬는 게 좋겠다.', '주말에 누구랑 만날까?', '무엇을 연습할까?', '어디로 가 볼까?', '누구를 만나러 갈까?', '누구와 합주할까?', '마지막 곡을 함께 부를 사람은…'].forEach(t => out.add(t));
+const JAM = cut('const EVENT_JAM = ', String.fromCharCode(10)); Object.values(eval('(' + JAM.slice(JAM.indexOf('{'), JAM.lastIndexOf('}') + 1) + ')')).forEach(t => out.add(t));
+const arr = [...out].filter(t => /[가-힣]/.test(t)).map(text => ({ who: 'me', text, say: text.replace(/\s*\([^)]*\)\s*$/, '') }));
+fs.writeFileSync(process.argv[3], JSON.stringify(arr, null, 1));
+console.log('lines', arr.length, 'chars', arr.reduce((s, x) => s + x.say.length, 0));
