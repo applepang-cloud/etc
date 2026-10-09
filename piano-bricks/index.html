@@ -3111,6 +3111,17 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     return [Math.max(top, cBottom - (k + 1) * kh), Math.min(C.ROLL_BOTTOM, cBottom - k * kh)];
   }
 
+  // Black keys sit where they do on a real piano: at the back of the keys, C–E splits three
+  // white keys into five equal slots and F–B splits four into seven. Spans in white-key units.
+  const BLACK_SLOT = { 1: [0.6, 1.2], 3: [1.8, 2.4], 6: [3 + 4 / 7, 3 + 8 / 7], 8: [3 + 12 / 7, 3 + 16 / 7], 10: [3 + 20 / 7, 3 + 24 / 7] };
+  function blackSpan(midi, rows) {
+    const top = C.ROLL_TOP, h = rows.h;
+    const c = midi - (midi % 12);
+    const cBottom = top + (rows.hi - c) * h + h;
+    const [a, b] = BLACK_SLOT[midi % 12], kh = (12 / 7) * h;
+    return [Math.max(top, cBottom - b * kh), Math.min(C.ROLL_BOTTOM, cBottom - a * kh)];
+  }
+
   function drawKeysArt(rows) {
     const w = C.KEY_W, h = rows.h, top = C.ROLL_TOP;
     ctx.fillStyle = '#0d0d0e'; // gaps between keys
@@ -3129,21 +3140,22 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
         ctx.fillRect(0, y0 + 0.5, w, y1 - y0 - 1);
       }
     }
-    const bw = w * 0.62;
-    for (let r = 0; r < rows.n; r++) {
-      const midi = rows.hi - r, y = top + r * h;
+    const bw = w * 0.63; // black keys are about 63% as long as white keys
+    for (let midi = rows.hi + 1; midi >= rows.hi - rows.n; midi--) {
       if (!core.isBlack(midi)) continue;
+      const [y0, y1] = blackSpan(midi, rows);
+      if (y1 - y0 < 2) continue;
       const f = pressed(midi);
       ctx.save();
       ctx.shadowColor = 'rgba(0,0,0,0.55)';
       ctx.shadowBlur = f ? 2 : 5;
       ctx.shadowOffsetX = f ? 1 : 3;
-      ctx.drawImage(f ? KEY_IMG.blackDown : KEY_IMG.blackUp, 0, y + 1, bw - (f ? 2 : 0), h - 2);
+      ctx.drawImage(f ? KEY_IMG.blackDown : KEY_IMG.blackUp, 0, y0, bw - (f ? 2 : 0), y1 - y0);
       ctx.restore();
       const g = G.keyFlash[midi];
       if (g) {
         ctx.fillStyle = (g.wrong ? 'rgba(239,91,75,' : 'rgba(245,197,24,') + g.v * 0.45 + ')';
-        ctx.fillRect(0, y + 1, bw, h - 2);
+        ctx.fillRect(0, y0, bw, y1 - y0);
       }
     }
     ctx.font = '700 10px ' + FONT_U;
