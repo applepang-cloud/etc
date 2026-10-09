@@ -24,6 +24,31 @@ VOICES = {  # who: (voice id, stability, style)
     "garon": ("UmYoqGlufKxhJ6NCx5Mv", 0.6, 0.3),    # KO Jang Ho
     "ella": ("uyVNoMrnUku1dZyVEXwD", 0.55, 0.3),    # Anna Kim
 }
+# How each line is said (eleven_v3 audio tags): makes the delivery natural and fit the scene.
+TONE = {
+    "ch1_01": "calm, cinematic narration", "ch1_02": "softly, a little lonely", "ch1_03": "urgent", "ch1_04": "serious",
+    "ch1_05": "nervous, urgent", "ch1_06": "firm, commanding", "ch1_07": "excited, confident", "ch1_08": "ominous",
+    "ch1_09": "somber", "ch1_10": "gently, reassuring", "ch1_11": "warm, smiling", "ch1_12": "over the radio, excited",
+    "ch1_13": "surprised, embarrassed", "ch1_14": "curious, impressed",
+    "ch2_01": "calm narration", "ch2_02": "warm but formal", "ch2_03": "friendly, curious", "ch2_04": "awed, quietly",
+    "ch2_05": "puzzled", "ch2_06": "thoughtful, slowly", "ch2_07": "surprised", "ch2_08": "excited realization",
+    "ch2_09": "intrigued", "ch2_10": "determined, a bit nervous", "ch2_11": "full of wonder", "ch2_12": "amazed",
+    "ch2_13": "shocked, urgent", "ch2_14": "quiet astonishment",
+    "ch3_01": "quiet, gentle", "ch3_02": "cheerful, playful", "ch3_03": "shy, curious", "ch3_04": "softly, honest",
+    "ch3_05": "shy, teasing", "ch3_06": "tender", "ch3_07": "urgent shouting", "ch3_08": "shouting, fierce",
+    "ch3_09": "strained, panicked", "ch3_10": "tense, urgent", "ch3_11": "desperate", "ch3_12": "determined, urgent",
+    "ch3_13": "resolute", "ch3_14": "awed", "ch3_15": "confused, low", "ch3_16": "breathless, moved",
+    "ch4_01": "calm narration", "ch4_02": "cold and proud, then softer", "ch4_03": "cautious", "ch4_04": "troubled, quiet",
+    "ch4_05": "serious", "ch4_06": "solemn, reading an ancient text", "ch4_07": "hopeful, solemn", "ch4_08": "shocked, whispering",
+    "ch4_09": "kind, gentle", "ch4_10": "moved, softly", "ch4_11": "worried, caring", "ch4_12": "warm, smiling",
+    "ch4_13": "flustered, embarrassed", "ch4_14": "alarmed",
+    "ch5_01": "cold, furious", "ch5_02": "grim", "ch5_03": "determined, calm", "ch5_04": "worried, serious",
+    "ch5_05": "confident, fierce", "ch5_06": "hushed, cinematic", "ch5_07": "tender, sincere", "ch5_08": "softly, moved",
+    "ch5_09": "shouting, fierce", "ch5_10": "trembling, remembering", "ch5_11": "gentle, emotional",
+    "ch5_12": "crying, voice breaking", "ch5_13": "moved, cinematic", "ch5_14": "relieved, proud", "ch5_15": "joyful, laughing",
+    "ch5_16": "warm, a little shy", "ch5_17": "tender, happy", "ch5_18": "warm, closing",
+}
+
 # ffmpeg filters: aliens get a low metallic echo, the PA a radio band.
 FX = {
     "garon": "asetrate=44100*0.93,aresample=44100,aecho=0.8:0.6:35|70:0.35|0.2",
@@ -69,10 +94,11 @@ def voice(node):
     out = "voice/%s.mp3" % node["id"]
     if os.path.exists(out):
         return out + " cached"
-    vid, stab, style = VOICES[node["say"]]
+    vid = VOICES[node["say"]][0]
+    # eleven_v3 speaks far more naturally than multilingual_v2; the tag sets the delivery.
+    text = ("[%s] " % TONE[node["id"]] if node["id"] in TONE else "") + node["text"]
     raw = post("%s/text-to-speech/%s?output_format=mp3_44100_128" % (API, vid), {
-        "text": node["text"], "model_id": "eleven_multilingual_v2",
-        "voice_settings": {"stability": stab, "similarity_boost": 0.8, "style": style, "use_speaker_boost": True}})
+        "text": text, "model_id": "eleven_v3", "voice_settings": {"stability": 0.5}})
     tmp = out + ".raw.mp3"
     open(tmp, "wb").write(raw)
     # trim leading silence; add the speaker's effect
@@ -113,7 +139,7 @@ def main():
         os.makedirs(d, exist_ok=True)
     script = json.load(open("script.json", encoding="utf-8"))
     lines = [n for c in script["chapters"] for n in c["nodes"] if "say" in n]
-    with ThreadPoolExecutor(4) as ex:
+    with ThreadPoolExecutor(3) as ex:
         for r in ex.map(voice, lines):
             print(r, flush=True)
         for r in ex.map(sfx, SFX):

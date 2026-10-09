@@ -55,6 +55,9 @@ ROLES = {
     "pa": ("함내 방송", "전함 안내 방송 (무전 효과)", "전 함에 알린다! 정체불명의 함대가 접근 중! 전투 배치!",
            ["gJSDQIpSQ56NBGhorBfg", "pb3lVZVjdFWbkhPKlelB", "ZJCNdZEjYwkOElxugmW2", "v1jVu1Ky28piIPEJqRrm"]),
 }
+# delivery tag for each sample line (eleven_v3, same as the game)
+SAMPLE_TONE = {"haru": "excited realization", "mira": "excited, confident", "captain": "relieved, proud", "noa": "awed, quietly",
+               "garon": "cold, furious", "ella": "cold and proud, then softer", "narr": "calm, cinematic narration", "pa": "urgent"}
 SETTINGS = {"narr": (0.55, 0.25), "pa": (0.6, 0.2), "haru": (0.45, 0.4), "mira": (0.35, 0.6), "captain": (0.55, 0.3),
             "noa": (0.5, 0.35), "garon": (0.6, 0.3), "ella": (0.55, 0.3)}
 FX = {
@@ -69,9 +72,7 @@ def sample(job):
     out = os.path.join(OUT, "%s_%s.mp3" % (role, vid))
     if os.path.exists(out):
         return out
-    stab, style = SETTINGS[role]
-    body = {"text": ROLES[role][2], "model_id": "eleven_multilingual_v2",
-            "voice_settings": {"stability": stab, "similarity_boost": 0.8, "style": style, "use_speaker_boost": True}}
+    body = {"text": "[%s] %s" % (SAMPLE_TONE[role], ROLES[role][2]), "model_id": "eleven_v3", "voice_settings": {"stability": 0.5}}
     req = urllib.request.Request("https://api.elevenlabs.io/v1/text-to-speech/%s?output_format=mp3_44100_128" % vid,
                                  data=json.dumps(body).encode(), method="POST",
                                  headers={"xi-api-key": KEY, "Content-Type": "application/json"})
