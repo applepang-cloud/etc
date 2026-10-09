@@ -4,7 +4,8 @@ Claude Code 클라우드 세션용 저장소
 ## 🎹 피아노 브릭스 (Piano Bricks)
 
 원곡 멜로디는 지키고 방해 음 블럭만 깨는 **스테이지형 피아노 벽돌깨기** 게임입니다.
-[`piano-bricks/`](piano-bricks/) 폴더에 있으며, 빌드 없이 `piano-bricks/index.html`을 브라우저로 열면 바로 실행됩니다.
+HTML5 파일 하나([`piano-bricks/index.html`](piano-bricks/index.html))에 화면·스타일·코드가 모두 들어 있어, 빌드나 서버 없이 이 파일만 브라우저로 열면 바로 실행됩니다.
+(파일 하나만 복사해 옮겨도 돼요. 인터넷이 없으면 제목 글꼴만 기본 글꼴로 바뀝니다.)
 (GitHub Pages를 켜면 `/piano-bricks/` 주소로 휴대폰에서도 플레이할 수 있어요.)
 
 ### 화면
@@ -51,17 +52,19 @@ Claude Code 클라우드 세션용 저장소
 - 키보드: ← → 조준 / 발판 이동, Space/Enter 발사
 
 ### 밸런스
-방해 블럭 체력(숫자)은 `js/core.js`의 `tuning` 값으로 정해지며, 발판으로 공을 받는 확률을 65%·80%·90%로 둔 가상 플레이어 시뮬레이션으로 맞췄습니다.
+방해 블럭 체력(숫자)은 `index.html` 안 core 부분의 `tuning` 값으로 정해지며, 발판으로 공을 받는 확률을 65%·80%·90%로 둔 가상 플레이어 시뮬레이션으로 맞췄습니다.
 첫 곡은 누구나 ★★★, 뒤로 갈수록 어려워져 마지막 스테이지는 서툴면 GAME OVER가 나옵니다. 한 스테이지는 약 1~4분입니다.
 
 ### 코드 구조
-레벨을 데이터 파일로 분리한 [jakesgordon/javascript-breakout](https://github.com/jakesgordon/javascript-breakout)의 구조를 참고했습니다.
+레벨 데이터를 게임 로직과 분리한 [jakesgordon/javascript-breakout](https://github.com/jakesgordon/javascript-breakout)의 구조를 참고했습니다.
+`index.html` 하나에 `<style>` 하나와 `<script>` 하나가 들어 있고, 스크립트는 아래 순서의 부분으로 나뉩니다.
+(각 부분은 `/* ===== js/이름.js ===== */` 주석으로 시작해요.)
 
-| 파일 | 내용 |
+| 부분 | 내용 |
 |---|---|
-| `js/songs.js` | 곡·스테이지 데이터 (멜로디, 코드, 전곡 순서) — 새 곡은 여기에 추가 |
-| `js/core.js` | 화면 배치 상수, 스테이지 생성(방해 블럭 배치·난이도), 공 물리 |
-| `js/maker.js` | 맵 만들기: 멜로디 → 스테이지, Claude 답 해석, MIDI 파서, 음악 분석(FFT·템포·음높이·조성·코드) |
-| `js/create.js` | 새 곡 만들기 화면 (제목 → Claude, 파일 → MIDI/음악 분석) |
-| `js/audio.js` | WebAudio 신스 (피아노 음, 틀린 음, 반주, 효과음, 배경 반주·바람 소리) |
-| `js/game.js` | 게임 진행, 그리기, 입력, 결과/메뉴 화면, 진행도 저장(localStorage) |
+| `songs` | 곡·스테이지 데이터 (멜로디, 코드, 전곡 순서) — 새 곡은 여기에 추가 |
+| `core` | 화면 배치 상수, 스테이지 생성(방해 블럭 배치·난이도), 공 물리 |
+| `maker` | 맵 만들기: 멜로디 → 스테이지, Claude 답 해석, MIDI 파서, 음악 분석(FFT·템포·음높이·조성·코드) |
+| `audio` | WebAudio 신스 (피아노 음, 틀린 음, 반주, 효과음, 배경 반주·바람 소리) |
+| `game` | 게임 진행, 그리기, 입력, 결과/메뉴 화면, 진행도 저장(localStorage) |
+| `create` | 새 곡 만들기 화면 (제목 → Claude, 파일 → MIDI/음악 분석) |
