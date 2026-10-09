@@ -60,7 +60,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
 /* Song strip */
 .song { display: flex; align-items: center; gap: 8px; }
 .song .label { font-family: var(--pixel); font-size: 11px; letter-spacing: .1em; color: var(--ink-dim); white-space: nowrap; }
-.bars { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; flex: 1; min-width: 0; }
+.bars { display: grid; grid-template-columns: repeat(var(--n, 5), minmax(0, 1fr)); gap: 5px; flex: 1; min-width: 0; }
 .bar { position: relative; background: var(--night-2); border: 1px solid var(--slot-line); border-radius: 4px; padding: 3px; cursor: pointer; display: grid; gap: 2px; }
 .bar canvas { width: 100%; aspect-ratio: 8 / 6; image-rendering: pixelated; display: block; }
 .bar .n { font-family: var(--pixel); font-size: 10px; color: var(--ink-dim); display: flex; justify-content: space-between; }
@@ -68,6 +68,8 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
 .bar[aria-current="true"] { border-color: var(--pink); }
 .bar.playing { box-shadow: 0 0 0 2px var(--gold); }
 .bar:disabled { cursor: default; opacity: .45; }
+.bar.enc { border-color: var(--gold); }
+.bar.enc .n span { color: var(--gold); letter-spacing: .04em; }
 
 /* Board */
 .board-wrap { background: var(--night-2); border: 1px solid var(--slot-line); border-radius: 10px; padding: 8px 8px 12px; overflow-x: auto; }
@@ -142,9 +144,25 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
 .act button.locked { opacity: .45; cursor: not-allowed; }
 .talk .act.choices { display: flex; flex-direction: column; align-items: stretch; }
 #nameInput { font: inherit; font-size: 16px; padding: 7px 10px; border-radius: 4px; border: 1px solid var(--slot-line); background: var(--night); color: var(--ink); width: 9em; }
+/* Festival live: crowd strip under the stage, heat meter over the board, result card */
+.scene.live .spot { background: radial-gradient(closest-side, color-mix(in srgb, var(--tag) 34%, transparent), transparent); }
+.crowd { grid-column: 1 / -1; justify-self: stretch; position: relative; height: 36px; width: calc(100% + 24px); margin: -6px -12px -12px; image-rendering: pixelated; pointer-events: none; }
+.scene[data-size="small"] .crowd { width: calc(100% + 20px); margin: -4px -10px -10px; }
+.live-meter { display: grid; grid-template-columns: auto 1fr 4ch 1.4em; align-items: center; gap: 8px; padding: 2px 4px 8px; font-size: 13px; color: var(--ink-dim); }
+.live-meter .meter { height: 10px; }
+.live-meter .meter b { background: var(--c, var(--pink)); transition: width .25s ease; }
+.live-meter .num { font-family: var(--pixel); text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
+.live-meter .grade { font-family: var(--pixel); font-size: 17px; text-align: center; color: var(--gold); }
+.live-result { align-items: center; text-align: center; gap: 6px; border-color: var(--c); }
+.live-result .k { font-family: var(--pixel); font-size: 12px; letter-spacing: .2em; color: var(--ink-dim); }
+.live-result .grade { font-family: var(--pixel); font-weight: 400; font-size: 56px; line-height: 1; color: var(--c); text-shadow: 3px 3px 0 #0b0920; }
+.live-result dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 4px 0 0; width: 100%; }
+.live-result dl div { background: var(--slot); border-radius: 6px; padding: 6px 2px; }
+.live-result dt { font-size: 11px; color: var(--ink-dim); }
+.live-result dd { margin: 2px 0 0; font-family: var(--pixel); font-size: 16px; font-variant-numeric: tabular-nums; }
 [hidden] { display: none !important; }
 @media (max-width: 380px) { .board .rc, .board .cc { font-size: 12px; } .brand { letter-spacing: .06em; } }
-@media (prefers-reduced-motion: reduce) { #heroine, .scene, .toast { transition: none; } #heroine.bob { transform: none; } .cell.pop, .cell.glow { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #heroine, .scene, .toast, .live-meter .meter b { transition: none; } #heroine.bob { transform: none; } .cell.pop, .cell.glow { animation: none; } }
 </style>
 
 <div id="app">
@@ -165,6 +183,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
       <p id="line" aria-live="polite"></p>
       <div class="act" id="act"></div>
     </div>
+    <canvas class="crowd" id="crowd" hidden aria-hidden="true"></canvas>
   </section>
 
   <section class="sim" id="simPanel" hidden aria-label="이번 주 상태">
@@ -174,6 +193,8 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
     <div class="girls" id="girls"></div>
   </section>
 
+  <section class="sim live-result" id="liveResult" hidden aria-label="라이브 결과"></section>
+
   <section class="song" id="songStrip" aria-label="곡 진행">
     <span class="label" id="songLabel">별빛 멜로디</span>
     <div class="bars" id="bars"></div>
@@ -181,6 +202,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
 
   <section class="board-wrap" id="boardWrap" hidden>
     <div class="board-head"><span id="boardTitle"></span><span class="miss" id="miss"></span></div>
+    <div class="live-meter" id="liveMeter" hidden role="meter" aria-label="관객 열기" aria-valuemin="0" aria-valuemax="100"><span>관객 열기</span><span class="meter"><b id="heatBar"></b></span><span class="num" id="heatNum"></span><span class="grade" id="heatGrade"></span></div>
     <div class="board" id="board" aria-label="음표 퍼즐판"></div>
   </section>
 
@@ -787,7 +809,47 @@ const SONGS = [
    }
   ],
   "lead": "chip",
-  "singer": "ria"
+  "singer": "ria",
+  "encore": {
+   "id": "live",
+   "title": "약속의 별빛",
+   "encore": true,
+   "root": 48,
+   "pad": [
+    60,
+    64,
+    67
+   ],
+   "lanes": [
+    "A",
+    "G",
+    "E",
+    "C",
+    "B",
+    "H",
+    "S",
+    "K"
+   ],
+   "pattern": {
+    "A": "....xx..",
+    "G": "...x..x.",
+    "E": ".xx.....",
+    "C": "x......x",
+    "B": "x.x.x.x.",
+    "H": "xxxxxxxx",
+    "S": "..x...xx",
+    "K": "x..xx..."
+   },
+   "givens": [
+    "E1",
+    "A4"
+   ],
+   "intro": [
+    "여러분, 마지막 곡이에요! 마지막 소절은 지금 여기서 같이 만들어요!",
+    "관객 열기가 식기 전에! 큰 숫자부터 가자!"
+   ],
+   "clear": "들려? 다들 따라 부르고 있어…!"
+  }
  },
  {
   "id": "rain",
@@ -982,7 +1044,49 @@ const SONGS = [
    }
   ],
   "lead": "piano",
-  "singer": "yuna"
+  "singer": "yuna",
+  "encore": {
+   "id": "live",
+   "title": "무지개",
+   "encore": true,
+   "root": 48,
+   "pad": [
+    60,
+    64,
+    67
+   ],
+   "lanes": [
+    "A",
+    "G",
+    "E",
+    "D",
+    "C",
+    "B",
+    "H",
+    "K"
+   ],
+   "pattern": {
+    "A": "...xx...",
+    "G": "..x..x..",
+    "E": ".x......",
+    "D": "......x.",
+    "C": "x......x",
+    "B": "x...x.x.",
+    "H": "x.x.x.x.",
+    "K": "x..x..x."
+   },
+   "givens": [
+    "C7",
+    "E1",
+    "G5",
+    "B4"
+   ],
+   "intro": [
+    "…마지막 곡. 비 갠 오후.",
+    "마지막 소절은 지금 만들어. …따라와."
+   ],
+   "clear": "…무지개, 떴네."
+  }
  },
  {
   "id": "jump",
@@ -1172,7 +1276,48 @@ const SONGS = [
    }
   ],
   "lead": "synth",
-  "singer": "hana"
+  "singer": "hana",
+  "encore": {
+   "id": "live",
+   "title": "다 같이 점프",
+   "encore": true,
+   "root": 48,
+   "pad": [
+    60,
+    64,
+    67
+   ],
+   "lanes": [
+    "A",
+    "G",
+    "E",
+    "C",
+    "B",
+    "H",
+    "S",
+    "K"
+   ],
+   "pattern": {
+    "A": "..x....x",
+    "G": "xx..x.x.",
+    "E": ".....x..",
+    "C": "...x....",
+    "B": "x.xx.xx.",
+    "H": "x.xxx.xx",
+    "S": "..x..xx.",
+    "K": "xx..x.x."
+   },
+   "givens": [
+    "A7",
+    "A2",
+    "C3"
+   ],
+   "intro": [
+    "다들 준비됐어?! 마지막 곡 간다!",
+    "마지막 소절은 지금 여기서! 다 같이 점프!"
+   ],
+   "clear": "바닥이 울려! 다들 뛰고 있어!"
+  }
  },
  {
   "id": "lullaby",
@@ -1346,7 +1491,45 @@ const SONGS = [
     "clear": "잘 자요. 좋은 꿈 꿔요."
    }
   ],
-  "singer": "sora"
+  "singer": "sora",
+  "encore": {
+   "id": "live",
+   "title": "첫 목소리",
+   "encore": true,
+   "root": 48,
+   "pad": [
+    60,
+    64,
+    67
+   ],
+   "lanes": [
+    "A",
+    "G",
+    "E",
+    "C",
+    "Q",
+    "B",
+    "K"
+   ],
+   "pattern": {
+    "A": "...xx...",
+    "G": "..x..x..",
+    "E": "xx.xx.x.",
+    "C": "x......x",
+    "Q": "x.x.x.x.",
+    "B": "x...x.x.",
+    "K": "x...x..."
+   },
+   "givens": [
+    "C7",
+    "G2"
+   ],
+   "intro": [
+    "저, 저기… 마지막 곡은 오르골 자장가예요.",
+    "마지막 소절은… 지금, 여기서 처음 불러요."
+   ],
+   "clear": "…제 목소리가, 저 끝까지 닿았어요."
+  }
  },
  {
   "id": "festival",
@@ -1537,7 +1720,45 @@ const SONGS = [
     "clear": "최고의 축제였어!"
    }
   ],
-  "singer": "arin"
+  "singer": "arin",
+  "encore": {
+   "id": "live",
+   "title": "마지막 불꽃",
+   "encore": true,
+   "root": 45,
+   "pad": [
+    57,
+    60,
+    64
+   ],
+   "lanes": [
+    "A",
+    "G",
+    "E",
+    "P",
+    "T",
+    "B",
+    "K"
+   ],
+   "pattern": {
+    "A": "xx....x.",
+    "G": "..x..x..",
+    "E": "...xx...",
+    "P": "..x...x.",
+    "T": ".xxx.xxx",
+    "B": "x.x.x.x.",
+    "K": "x..x..x."
+   },
+   "givens": [
+    "A0",
+    "A6"
+   ],
+   "intro": [
+    "상점가 여러분, 학교 여러분! 마지막 곡이에요~!",
+    "마지막 소절은 지금 바로 빚어 드릴게요!"
+   ],
+   "clear": "팡! 진짜 불꽃이 터진 것 같아!"
+  }
  },
  {
   "id": "neon",
@@ -1734,7 +1955,50 @@ const SONGS = [
     "clear": "도착. 밤이 이렇게 예쁜 줄 몰랐네."
    }
   ],
-  "singer": "sena"
+  "singer": "sena",
+  "encore": {
+   "id": "live",
+   "title": "엔딩 크레딧",
+   "encore": true,
+   "root": 41,
+   "pad": [
+    53,
+    57,
+    60,
+    64
+   ],
+   "lanes": [
+    "A",
+    "G",
+    "E",
+    "C",
+    "Q",
+    "B",
+    "P",
+    "K"
+   ],
+   "pattern": {
+    "A": "...xx...",
+    "G": "..x..x..",
+    "E": "x.....x.",
+    "C": ".......x",
+    "Q": ".xx..xx.",
+    "B": "x..x.xx.",
+    "P": "..x...x.",
+    "K": "x..xx..."
+   },
+   "givens": [
+    "C7",
+    "P2",
+    "G5",
+    "G2"
+   ],
+   "intro": [
+    "좋은 밤이야, 여러분. 마지막 곡은 네온 드라이브.",
+    "마지막 소절은 지금, 여기서. 후배님, 볼륨 올려."
+   ],
+   "clear": "…지금 이 순간, 녹음해 두고 싶다."
+  }
  }
 ];
 let SONG = SONGS[1], STAGES = SONG.stages;
@@ -1793,7 +2057,7 @@ window.claude?.hot?.snapshot?.(() => ({ progress: P }));
 
 /* ---------- game state ---------- */
 const G = { char: 'ria', mode: 'title', stage: 0, cells: null, sol: null, misses: 0, tool: 'fill', playing: false, muted: false, songBar: 0 };
-SONGS.forEach(sg => sg.stages.forEach(s => { s.sol = s.lanes.map(l => [...s.pattern[l]].map(c => c === 'x')); }));
+SONGS.forEach(sg => sg.stages.concat(sg.encore || []).forEach(s => { s.sol = s.lanes.map(l => [...s.pattern[l]].map(c => c === 'x')); }));
 const clueOf = line => { const r = []; let n = 0; line.forEach(v => { if (v) n++; else if (n) { r.push(n); n = 0; } }); if (n) r.push(n); return r.length ? r : [0]; };
 
 /* ---------- heroine ---------- */
@@ -1828,7 +2092,7 @@ function sizeHeroine() {
   const avail = $('scene').clientWidth - 24;
   const k = big ? Math.max(2, Math.min(4, Math.floor(Math.min(avail, 330) / 96))) : 1.5;
   hc.style.width = 96 * k + 'px'; hc.style.height = 108 * k + 'px'; hc.style.setProperty('--px', k + 'px');
-  sizeSky();
+  sizeSky(); sizeCrowd();
 }
 
 /* ---------- sky ---------- */
@@ -1930,6 +2194,14 @@ function sfx(kind) {
   else if (kind === 'clear') { [72, 76, 79, 84].forEach((m, i) => { const oo = ac.createOscillator(), gg = ac.createGain(); oo.type = 'square'; oo.frequency.value = hz(m); oo.connect(gg); gg.connect(master); env(gg, t + i * 0.09, 0.1, 0.005, 0.35); oo.start(t + i * 0.09); oo.stop(t + i * 0.09 + 0.4); }); o.disconnect(); }
 }
 
+function cheer(power) { // crowd applause: a cloud of short noise claps over a swelling "wow"
+  if (!ac) return; const t0 = ac.currentTime + 0.02, out = ac.createGain(), bp = ac.createBiquadFilter(); out.gain.value = power; bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 0.5; bp.connect(out); out.connect(master);
+  for (let i = Math.round(70 * power); i > 0; i--) { const t = t0 + Math.pow(Math.random(), 1.5) * 2.2 * power, n = ac.createBufferSource(), g = ac.createGain(); n.buffer = noise; n.connect(g); g.connect(bp);
+    env(g, t, 0.18 * (0.4 + Math.random() * 0.6), 0.001, 0.025 + Math.random() * 0.03); n.start(t, Math.random() * 0.4); n.stop(t + 0.07); }
+  const v = ac.createBufferSource(), vf = ac.createBiquadFilter(), vg = ac.createGain(); v.buffer = noise; v.loop = true; vf.type = 'bandpass'; vf.Q.value = 4; vf.frequency.setValueAtTime(420, t0); vf.frequency.linearRampToValueAtTime(760, t0 + 0.5);
+  v.connect(vf); vf.connect(vg); vg.connect(out); vg.gain.setValueAtTime(0.0001, t0); vg.gain.linearRampToValueAtTime(0.35, t0 + 0.3); vg.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.4 + power); v.start(t0); v.stop(t0 + 1.5 + power);
+}
+
 /* ---------- sequencer ---------- */
 let nextT = 0, step = 0; const visQ = [];
 function startLoop() { initAudio(); if (!ac) return; visQ.length = 0; G.playing = true; step = 0; nextT = ac.currentTime + 0.08; $('playBtn').textContent = '⏸ 멈춤'; }
@@ -1939,7 +2211,7 @@ function tick() {
   while (nextT < ac.currentTime + 0.12) {
     const song = G.mode === 'song', idx = song ? G.songBar : G.stage, st = STAGES[idx];
     const full = song || prog().stars[idx] > 0 && G.mode === 'clear';
-    if (step === 0 && full) pad(nextT, st);
+    if (step === 0 && (full || G.live)) pad(nextT, st);
     let mel = false;
     st.lanes.forEach((l, y) => { const on = full ? st.sol[y][step] : G.cells && G.cells[y][step] === 'on'; if (on) { voice(l, nextT, st); if (MELODY.has(l)) mel = true; } });
     visQ.push({ t: nextT, step, bar: idx, mel });
@@ -1962,7 +2234,7 @@ function frame(now) {
     if (v.mel) { expr.sing = now + STEP * 900; const st = STAGES[v.bar]; st.lanes.forEach((l, y) => { if (MELODY.has(l) && st.sol[y][v.step]) spawnNote(LANES[l].c); }); }
     if (v.step % 2 === 0 && !reduceMotion) { hc.classList.add('bob'); setTimeout(() => hc.classList.remove('bob'), 110); }
   }
-  renderHeroine(now); drawSky(now);
+  liveTick(now); renderHeroine(now); drawSky(now); drawCrowd(now);
   requestAnimationFrame(frame);
 }
 
@@ -1982,7 +2254,7 @@ function buildBoard(i, solved) {
   });
   if (!solved) for (let y = 0; y < st.lanes.length; y++) checkLine('row', y); if (!solved) for (let x = 0; x < W; x++) checkLine('col', x);
   if (solved) { document.querySelectorAll('.board .rc, .board .cc').forEach(e => e.classList.add('done')); }
-  $('boardTitle').innerHTML = `<b>${i + 1}소절</b> · ${st.title}`; fitBoard();
+  $('boardTitle').innerHTML = `<b>${st.encore ? '라스트 소절' : i + 1 + '소절'}</b> · ${st.title}`; fitBoard();
 }
 const div = cls => { const d = document.createElement('div'); if (cls) d.className = cls; return d; };
 const cellEl = (x, y) => $('board').querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
@@ -1991,14 +2263,18 @@ function checkLine(kind, i) {
   const st = STAGES[G.stage], H = st.lanes.length;
   const pts = kind === 'row' ? [...Array(W)].map((_, x) => [x, i]) : [...Array(H)].map((_, y) => [i, y]);
   const done = pts.every(([x, y]) => !st.sol[y][x] || G.cells[y][x] === 'on');
-  if (done) { pts.forEach(([x, y]) => { if (!G.cells[y][x]) setCell(x, y, 'x'); }); $('board').querySelector(kind === 'row' ? `.rc[data-row="${i}"]` : `.cc[data-col="${i}"]`).classList.add('done'); }
+  if (!done) return;
+  pts.forEach(([x, y]) => { if (!G.cells[y][x]) setCell(x, y, 'x'); });
+  const clue = $('board').querySelector(kind === 'row' ? `.rc[data-row="${i}"]` : `.cc[data-col="${i}"]`);
+  if (G.live && G.live.armed && !clue.classList.contains('done')) heat(2);
+  clue.classList.add('done');
 }
 function act(x, y, action) {
   const st = STAGES[G.stage], s = G.cells[y][x];
   if (action === 'fill' && !s) {
     if (G.guide && !G.guide.steps[G.guide.i].cells.includes(st.lanes[y] + x)) { say(CAST[G.char].glow, true); return false; }
-    if (st.sol[y][x]) { setCell(x, y, 'on'); if (ac) voice(st.lanes[y], ac.currentTime + 0.005, st, 0.9); if (MELODY.has(st.lanes[y])) { expr.sing = performance.now() + 220; spawnNote(LANES[st.lanes[y]].c); } checkLine('row', y); checkLine('col', x); guideProgress(); checkClear(); return true; }
-    setCell(x, y, 'err'); G.misses++; updateMiss(); sfx('err'); expr.temp = 'oops'; expr.tempUntil = performance.now() + 1300; say(OOPS()[G.misses % OOPS().length], true); return false;
+    if (st.sol[y][x]) { setCell(x, y, 'on'); if (G.live && G.live.armed) heat(G.live.gain); if (ac) voice(st.lanes[y], ac.currentTime + 0.005, st, 0.9); if (MELODY.has(st.lanes[y])) { expr.sing = performance.now() + 220; spawnNote(LANES[st.lanes[y]].c); } checkLine('row', y); checkLine('col', x); guideProgress(); checkClear(); return true; }
+    setCell(x, y, 'err'); G.misses++; updateMiss(); if (G.live && G.live.armed) heat(-G.live.penalty); sfx('err'); expr.temp = 'oops'; expr.tempUntil = performance.now() + 1300; say(OOPS()[G.misses % OOPS().length], true); return false;
   }
   if (action === 'mark' && !s) { setCell(x, y, 'x'); sfx('mark'); return true; }
   if (action === 'unmark' && s === 'x') { setCell(x, y, ''); return true; }
@@ -2026,6 +2302,7 @@ $('board').addEventListener('pointermove', e => {
 function checkClear() {
   const st = STAGES[G.stage];
   if (!st.sol.every((r, y) => r.every((v, x) => !v || G.cells[y][x] === 'on'))) return;
+  if (G.live) return liveClear();
   const stars = G.misses === 0 ? 3 : G.misses <= 2 ? 2 : 1;
   prog().stars[G.stage] = Math.max(prog().stars[G.stage], stars); prog().unlocked = Math.max(prog().unlocked, Math.min(STAGES.length - 1, G.stage + 1)); persist();
   G.mode = 'clear'; $('board').classList.add('locked'); sfx('clear'); expr.base = 'happy'; renderBars();
@@ -2037,15 +2314,16 @@ function checkClear() {
 
 /* ---------- song strip ---------- */
 function renderBars() {
-  const wrap = $('bars'); wrap.innerHTML = '';
+  const wrap = $('bars'); wrap.innerHTML = ''; wrap.style.setProperty('--n', STAGES.length);
   STAGES.forEach((st, i) => {
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'bar'; b.disabled = i > prog().unlocked; b.setAttribute('aria-label', `${i + 1}소절 ${st.title}` + (prog().stars[i] ? ' 완성' : ''));
+    const enc = !!st.encore, done = enc ? G.live && G.live.done : prog().stars[i];
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'bar' + (enc ? ' enc' : ''); b.disabled = !enc && i > prog().unlocked; b.setAttribute('aria-label', `${enc ? '라스트 소절' : i + 1 + '소절'} ${st.title}` + (done ? ' 완성' : ''));
     if (G.mode !== 'title' && G.mode !== 'song' && i === G.stage) b.setAttribute('aria-current', 'true');
     const cv = document.createElement('canvas'); cv.width = 8; cv.height = 6; const x = cv.getContext('2d');
-    if (prog().stars[i]) { const order = ['A', 'G', 'E', 'D', 'C'];
+    if (done) { const order = ['A', 'G', 'E', 'D', 'C'];
       st.lanes.forEach((l, y) => st.sol[y].forEach((v, sx) => { if (!v) return; x.fillStyle = LANES[l].c; if (MELODY.has(l)) x.fillRect(sx, order.indexOf(l), 1, 1); else x.fillRect(sx, 5, 1, 1); })); }
     else { x.fillStyle = '#3d3785'; for (let sx = 0; sx < 8; sx += 2) x.fillRect(sx, 3, 1, 1); }
-    const n = div('n'); n.innerHTML = `<span>${i + 1}</span><i>${'★'.repeat(prog().stars[i])}</i>`;
+    const n = div('n'); n.innerHTML = enc ? `<span>LIVE</span><i>${done ? G.live.grade : ''}</i>` : `<span>${i + 1}</span><i>${'★'.repeat(prog().stars[i])}</i>`;
     b.append(cv, n); b.addEventListener('click', () => { if (G.mode === 'song' || G.simLock) return; initAudio(); openStage(i); }); wrap.append(b);
   });
 }
@@ -2075,9 +2353,9 @@ function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add(
 /* ---------- flow ---------- */
 function openStage(i) {
   G.stage = i; G.mode = 'intro'; G.misses = 0; updateMiss(); stopLoop(); markPlayingBar(-1);
-  const st = STAGES[i]; $('stageLabel').textContent = `${i + 1}소절 · ${st.title}`; expr.base = 'idle';
+  const st = STAGES[i]; $('stageLabel').textContent = st.encore ? `축제 라이브 · ${st.title}` : `${i + 1}소절 · ${st.title}`; expr.base = 'idle';
   setScene('big'); showPlayUI(false); $('simPanel').hidden = true; $('songStrip').hidden = false; $('act').innerHTML = ''; renderBars();
-  G.guide = null; talk(st.intro, () => { G.mode = 'play'; setScene('small'); buildBoard(i); showPlayUI(true); startLoop();
+  G.guide = null; talk(st.intro, () => { G.mode = 'play'; setScene('small'); buildBoard(i); showPlayUI(true); startLoop(); if (G.live) liveBegin();
     if (st.guide && (!prog().stars[i] || SONG.lesson)) { G.guide = { steps: st.guide, i: 0 }; applyGuide(); } else say(CAST[G.char].start, true, []); });
 }
 function playSong() {
@@ -2122,6 +2400,7 @@ function guideProgress() {
 }
 function hint() {
   if (G.mode !== 'play') return; initAudio();
+  if (G.live && G.live.armed) { heat(-5); toast('힌트 · 관객 열기 −5'); }
   if (G.guide) { applyGuide(); return; }
   const st = STAGES[G.stage], H = st.lanes.length; let best = null;
   const left = pts => pts.filter(([x, y]) => st.sol[y][x] && G.cells[y][x] !== 'on').length;
@@ -2160,7 +2439,9 @@ const SIM = {
       { lines: ['있잖아, 너랑 연습하는 시간이 제일 좋아. …왜 그런지는 비밀!'], opts: [['나도 그래.', 15, '에헤헤… 얼굴 빨개진 거 보지 마!'], ['비밀이 뭔데?', 8, '그, 그건 축제 날 말해 줄게!'], ['연습이 좋은 거구나.', 0, '…바보.']] }],
     small: ['오늘도 옥상에서 발성 연습! 같이 할래?', '헤헤, {N야}! 너 오니까 기분 좋다.'],
     love: ['끝났다…! 우리 노래, 다들 따라 불렀어!', '있잖아, 연습이 제일 좋았던 이유… 너랑이라서였어.', '앞으로도 내 맨 앞자리는 너야. 약속!'],
-    friend: '오늘 무대 최고였어! 다음엔 더 큰 무대 가자!' },
+    friend: '오늘 무대 최고였어! 다음엔 더 큰 무대 가자!',
+    stage: ['무대 뒤라서 다리가 막 떨려… 그래도 네가 옆에 있으니까 괜찮아!', '마지막 소절은 아직 악보가 없잖아. 무대 위에서 같이 완성하자!'],
+    live: ['봤어? 응원봉이 전부 분홍색이었어! 우리 최고였어!', '헤헤, 조금 떨었지만… 끝까지 같이 해 줘서 고마워!', '으으, 실수도 있었지만… 그래도 너랑 서서 좋았어.'] },
   yuna: { place: '음악실', pref: 'comp', song: 'rain', grade: '2학년 · 피아노 보컬',
     meet: { lines: ['#방과 후 음악실. 피아노 소리가 뚝 멈췄다.', '…누구야. 노크 정도는 하지.', '유나. 2학년. 여기 피아노는 내가 매일 쓰고 있어.'],
       opts: [['곡 좋더라. 직접 쓴 거야?', 15, '…응. 아직 아무한테도 안 들려줬는데.'], ['나도 키보드 쳐. 같이 써도 될까?', 10, '…요일 정해서 쓰면 되겠네.'], ['미안, 바로 나갈게.', 3, '…딱히 나가라고는 안 했어.']],
@@ -2171,7 +2452,9 @@ const SIM = {
       { lines: ['비 오는 날 만든 노래, 사실 너한테 처음 들려준 거야.'], opts: [['영광이야.', 15, '…과장은. 근데, 고마워.'], ['왜 나한테?', 12, '…몰라. 그냥, 너라면 괜찮을 것 같았어.'], ['다른 사람한테도 들려줘.', 0, '…그래.']] }],
     small: ['…왔어? 앉아. 방금 새 코드 찾았어.', '…오늘은 비 안 오네.'],
     love: ['…박수 소리, 아직도 귀에 남아 있어.', '비 오는 날 만든 노래가, 오늘은 별빛 아래서 울렸네.', '…좋아해. 두 번은 안 말해.'],
-    friend: '…나쁘지 않았어. 다음에도 반주 부탁해.' },
+    friend: '…나쁘지 않았어. 다음에도 반주 부탁해.',
+    stage: ['…손 차가워. 긴장한 거 아니야. 그냥 추운 거야.', '마지막 소절은 즉흥으로 가. 네 소리, 믿을게.'],
+    live: ['…박수가 그치질 않아. 이런 거, 처음이야.', '…나쁘지 않았어. 아니, 좋았어.', '…다음엔 더 잘할 수 있어. 너랑이면.'] },
   hana: { place: '체육관', pref: 'play', song: 'jump', grade: '1학년 · 락 보컬 지망',
     meet: { lines: ['#체육관 무대에서 누군가 마이크도 없이 노래를 부르고 있다.', '예~이! 오늘도 목 상태 최고! …어? 관객이다!', '나 하나! 1학년, 락 보컬 지망! 밴드 멤버 모집 중인데 아무도 안 와~'],
       opts: [['나 키보드 쳐. 같이 하자!', 15, '진짜?! 오늘 운 좋다! 하이파이브!'], ['목소리 엄청 크다…', 8, '하하, 칭찬이지? 칭찬으로 들을게!'], ['체육관에서 그러면 혼나지 않아?', 0, '괜찮아, 배구부 선배들이 박수 쳐 줬거든!']],
@@ -2182,7 +2465,9 @@ const SIM = {
       { lines: ['축제 끝나도 계속 같이 밴드 해 줄 거지? 약속!'], opts: [['약속.', 15, '새끼손가락 걸었다! 취소 불가야!'], ['졸업할 때까지는.', 8, '짧아! 평생으로 해!'], ['생각해 볼게.', 0, '에엥~ 그게 뭐야.']] }],
     small: ['점심 먹었어? 나는 두 번 먹었어!', '오늘 목 상태 120%야! {N야}, 들어 봐!'],
     love: ['최고였어!!! 목 다 쉬었다!', '중학교 때 못 했던 거, 너 덕분에 다 했어.', '그러니까… 밴드 말고도, 평생 같이 있어 줄래?'],
-    friend: '와아, 재밌었다! 다음 라이브도 같이 하는 거다!' },
+    friend: '와아, 재밌었다! 다음 라이브도 같이 하는 거다!',
+    stage: ['으아아 떨려! 근데 신난다! 이 기분 알지?!', '마지막 소절은 즉흥 잼이야! 관객 다 뛰게 만들자!'],
+    live: ['들었어?! 강당이 무너지는 줄 알았어! 우리 전설 됐다!', '좋았어! 땀범벅이지만 최고야!', '헥헥… 삐끗했지만 재밌었다! 다음엔 더 크게!'] },
   sora: { place: '도서관', pref: 'comp', song: 'lullaby', grade: '1학년 · 도서부',
     meet: { lines: ['#도서관 구석. 작은 오르골 소리가 들린다.', '아, 저기… 시끄러웠죠? 죄송해요…', '소라예요. 1학년, 도서부… 노래는, 그냥 혼자 흥얼거리는 정도라…'],
       opts: [['오르골 소리 예쁘다.', 15, '…할머니가 주신 거예요. 예쁘다고 해 줘서 기뻐요.'], ['흥얼거린 거 다시 들려줄래?', 8, '에, 에엣…! 다, 다음에요…!'], ['도서관에선 조용히 해야지.', -5, '…네. 죄송해요.']],
@@ -2193,7 +2478,9 @@ const SIM = {
       { lines: ['오르골 자장가, 축제에서 부르고 싶어요. …당신 반주로요.'], opts: [['꼭 같이 하자.', 15, '약속… 했어요. 이제 도망 못 가요.'], ['떨리지 않겠어?', 8, '떨려요. 그래도 해 보고 싶어요.'], ['다른 사람 반주는 어때?', -5, '…당신이 아니면 싫어요.']] }],
     small: ['이 책, 가사 쓸 때 도움이 돼요.', '…와 주셔서 기뻐요.'],
     love: ['…끝까지 노래했어요. 저, 노래했어요…!', '당신 반주가 들려서, 하나도 안 무서웠어요.', '이 오르골처럼… 계속 곁에 있어도 될까요?'],
-    friend: '떨렸지만… 같이 서 줘서 고마웠어요.' },
+    friend: '떨렸지만… 같이 서 줘서 고마웠어요.',
+    stage: ['사람이… 너무 많아요… 목소리가 안 나올 것 같아요…', '…그래도, 당신이 반주해 주면 괜찮을 거예요. 마지막 소절, 같이 만들어요.'],
+    live: ['다들… 박수를 쳐 주고 있어요. 저한테요…!', '떨렸지만… 끝까지 노래했어요. 고마워요.', '…조금 흔들렸지만, 도망치지 않았어요.'] },
   arin: { place: '상점가', pref: 'sense', song: 'festival', grade: '2학년 · 화과자집 딸',
     meet: { lines: ['#상점가의 화과자 가게. 가게 앞에서 누군가 노래하며 손님을 부르고 있다.', '모찌~ 모찌~ 말랑말랑 모찌 사세요~ 어머, 손님!', '나 아린! 이 가게 딸이자 2학년, 상점가 축제 노래 담당이야!'],
       opts: [['노래 듣고 왔어. 모찌 하나 줘.', 15, '센스 있네! 덤으로 하나 더!'], ['그 노래 직접 만든 거야?', 10, '응! 근데 가사만. 멜로디는 늘 같아~'], ['다이어트 중이라서…', 0, '그럼 구경만 하고 가~ 노래는 공짜야!']],
@@ -2204,7 +2491,9 @@ const SIM = {
       { lines: ['축제 날 유카타 입고 갈 건데… 같이 노점 돌래?'], opts: [['당연하지.', 15, '약속이다! 금붕어 건지기 대결이야!'], ['공연 끝나고라면.', 10, '좋아! 그럼 끝나고 불꽃놀이 같이 보자!'], ['바쁠 것 같아.', 0, '…흥, 알았어.']] }],
     small: ['신메뉴 시식해 볼래? 공짜야!', '상점가 아저씨들이 너 누구냐고 물어봤어~'],
     love: ['불꽃놀이 시작한다! 빨리빨리, 이쪽!', '…노래하는 화과자집, 진짜 해 볼래. 너랑 같이라면.', '그러니까, 다음 축제도, 그다음 축제도 같이 있어 줘!'],
-    friend: '수고했어! 가게로 와, 모찌 쏠게!' },
+    friend: '수고했어! 가게로 와, 모찌 쏠게!',
+    stage: ['유카타 어때? 무대 의상 겸 노점 알바복이야!', '마지막 소절은 불꽃놀이처럼 즉석에서 팡! 하고 터뜨리자!'],
+    live: ['객석이 전부 춤추고 있어! 상점가 축제보다 더 대박이야!', '좋았어~! 모찌 백 개 판 것보다 뿌듯해!', '아하하, 조금 탔지만 맛은 있었어! …무대 얘기야.'] },
   sena: { place: '방송실', pref: 'play', song: 'neon', grade: '3학년 · 방송부장',
     meet: { lines: ['#점심시간 방송실. 시티팝이 흐르던 스피커가 뚝 멈췄다.', '어머, 후배님? 방송실은 관계자 외 출입 금지인데.', '세나야. 3학년, 방송부장. 점심 방송 선곡은 전부 내 취향이지.'],
       opts: [['오늘 선곡 최고였어요.', 15, '후후, 귀가 좋네. 마음에 들어.'], ['선배도 노래해요?', 10, '가끔. 방송 끝나고 아무도 없을 때만.'], ['길을 잃었어요.', 3, '그럼 정문까지 데려다줄까? …농담이야.']],
@@ -2215,7 +2504,9 @@ const SIM = {
       { lines: ['드라이브 곡이 완성되면, 마지막 방송에 틀어도 될까? 우리 둘 이름으로.'], opts: [['영광이에요.', 15, '그럼 약속. 졸업 선물로 받을게.'], ['제 이름은 빼 주세요.', 5, '겸손하긴. 안 빼 줄 거야.'], ['부끄러워요.', 8, '그 표정 보려고 한 말이야.']] }],
     small: ['오늘 점심 방송, 후배님 들으라고 고른 곡이야.', '표정이 피곤해 보여. 사탕 먹을래?'],
     love: ['후배님, 아니… {N}.', '마지막 방송, 우리 곡으로 끝낼 거야. 그리고 다음 방송도.', '졸업해도 내 첫 번째 청취자는 너야. 알겠지?'],
-    friend: '후배님, 수고했어. 다음 방송 게스트로 불러 줄게.' }
+    friend: '후배님, 수고했어. 다음 방송 게스트로 불러 줄게.',
+    stage: ['후배님, 넥타이 삐뚤어졌어. …자, 이제 됐다.', '마지막 소절은 라이브로 가자. 진짜 음악은 무대 위에서 나오거든.'],
+    live: ['이 함성, 라디오로 내보내고 싶을 정도야. 최고였어, 후배님.', '좋은 라이브였어. 합격점.', '실수도 라이브의 맛이야. …다음엔 완벽하게 하자.'] }
 };
 const PRACTICE = { play: '건반 앞에서 손가락이 저릴 때까지 연습했다.', comp: '노트에 멜로디를 적고 지우기를 몇 번이고 반복했다.', sense: '잡지와 영상을 보며 무대 연출을 연구했다.' };
 const WEEKS = 12;
@@ -2296,7 +2587,7 @@ function hub() {
   G.mode = 'sim'; G.simLock = true; stopLoop(); simStore.save(); setScene('big'); setChar('me'); expr.base = 'idle'; showHub(true);
   $('stageLabel').textContent = `${S.week}주차 · 축제 D-${WEEKS - S.week + 1}주`;
   const anyMet = HEROINES.some(h => S.met[h]);
-  say(S.week === WEEKS ? '마지막 주다. 축제 전에 할 일은?' : `${S.week}주차. 이번 주엔 뭘 할까?`, false, [
+  say(S.week === WEEKS ? '마지막 주다. 축제 라이브에서는 연습한 능력치도 힘이 된다. 축제 전에 할 일은?' : `${S.week}주차. 이번 주엔 뭘 할까?`, false, [
     ['연습하기\n연주·작곡·센스 올리기', practiceMenu], ['학교 둘러보기\n새로운 만남', exploreMenu],
     ['만나러 가기\n대화로 호감도 올리기', anyMet ? meetMenu : () => toast('아직 만난 사람이 없어요. 학교를 둘러보세요!'), anyMet ? false : true],
     ['합주하기\n퍼즐로 곡 완성하기', anyMet ? duetMenu : () => toast('먼저 함께할 보컬을 만나야 해요.'), anyMet ? false : true]]);
@@ -2355,35 +2646,126 @@ function duet(h) {
   };
   openStage(S.bars[h]);
 }
+const LOVE_AT = 75;
+function finishSim(title, key, lines) {
+  scene('me', lines, () => { if (key) simStore.addEnding(key); simStore.clear(); setChar('me'); say(title, false, [['타이틀로', mainMenu]]); });
+}
 function finale() {
-  G.mode = 'sim'; showHub(false); $('songStrip').hidden = true; setScene('big'); simStore.clear();
+  G.mode = 'sim'; G.simLock = true; stopLoop(); showHub(false); $('songStrip').hidden = true; setScene('big'); setChar('me');
   $('stageLabel').textContent = '축제 당일';
-  const met = HEROINES.filter(h => S.met[h]).sort((a, b) => S.aff[b] - S.aff[a] || S.bars[b] - S.bars[a]);
-  const best = met[0];
+  const ready = HEROINES.filter(h => S.met[h] && (S.aff[h] >= 45 || S.bars[h] >= 5)).sort((a, b) => S.aff[b] - S.aff[a] || S.bars[b] - S.bars[a]);
   const intro = ['#그리고, 축제 날.', '#강당은 생각보다 훨씬 많은 사람으로 가득 찼다.'];
-  const finish = (title, key, lines) => scene('me', lines, () => { if (key) simStore.addEnding(key); setChar('me'); say(title, false, [['타이틀로', mainMenu]]); }, '다음 ▸');
-  const song = (h, after) => { selectSong(SIM[h].song); $('songStrip').hidden = false; G.afterSong = after; playSong(); };
-  if (best && S.aff[best] >= 70 && S.bars[best] >= 5) {
-    scene('me', intro.concat([`#무대 뒤에서 ${ga(CAST[best].name)} 기다리고 있었다.`]), () => scene(best, ['마지막 곡, 같이 하자.'], () => song(best, () => {
-      expr.base = 'happy'; scene(best, SIM[best].love, () => finish(`♥ ${CAST[best].name} 엔딩 · 별빛처럼 오래`, best, ['#축제 마지막 곡을 함께 부른 두 사람은, 별빛처럼 오래 이어진다.', '#전설은, 아무래도 진짜였나 보다.']), '다음 ▸');
-    }), '무대로 ▸'), '다음 ▸');
-  } else if (best && (S.aff[best] >= 45 || S.bars[best] >= 5)) {
-    const end = () => scene(best, [SIM[best].friend], () => finish(`♪ ${CAST[best].name} 우정 엔딩`, 'f-' + best, ['#고백은 하지 못했지만, 좋은 무대였다.', '#…다음 축제에는, 조금 더 용기를 내 보자.']));
-    scene('me', intro.concat([`#${wa(CAST[best].name)} 함께 무대에 섰다.`]), () => S.bars[best] >= 5 ? song(best, end) : end());
-  } else {
-    finish('솔로 엔딩 · 혼자만의 무대', 'solo', intro.concat(['#결국 혼자 무대에 섰다.', '#박수는 작았지만, 끝까지 내 노래였다.', '#…다음엔 꼭, 누군가와 함께.']));
+  const solo = () => finishSim('솔로 엔딩 · 혼자만의 무대', 'solo', ['#결국 혼자 무대에 섰다.', '#박수는 작았지만, 끝까지 내 노래였다.', '#…다음엔 꼭, 누군가와 함께.']);
+  if (!ready.length) return scene('me', intro, solo);
+  scene('me', intro.concat(['#무대 뒤. 마지막 곡을 누구와 함께 부를까?']), () => say('마지막 곡을 함께 부를 사람은…', true,
+    ready.map(h => [`${CAST[h].name} · ${SONGS.find(sg => sg.id === SIM[h].song).title}\n${hearts(S.aff[h])} ${level(S.aff[h])} · ♪${S.bars[h]}/5`, () => startLive(h), 'choice'])
+      .concat([['혼자 무대에 선다\n솔로 무대', solo, true]])));
+}
+
+/* --- festival live: the last bar is solved on stage while the crowd's heat rises and falls --- */
+const GRADES = [['S', 90], ['A', 75], ['B', 55], ['C', 0]];
+const gradeOf = v => GRADES.find(([, min]) => v >= min)[0];
+const LIVE_BONUS = { S: 15, A: 10, B: 5, C: 0 };
+const CHANTS = [() => '객석에서 박수가 커진다!', n => `"${n}—!" 함성이 터졌다!`, () => '객석 전체가 응원봉을 흔든다!'];
+const HINT_TEXT = $('hint').textContent;
+function startLive(h) {
+  liveSetup(h); $('scene').classList.add('live'); $('crowd').hidden = false; sizeCrowd(true);
+  scene(h, SIM[h].stage, () => scene('me', ['#조명이 켜지고, 객석이 숨을 죽였다.', '#마지막 소절은 악보 없이, 무대 위에서 함께 완성한다.'],
+    () => { setChar(h); openStage(STAGES.length - 1); }, '무대로 ▸'));
+}
+// stats pay off on stage: sense warms the crowd up, play softens mistakes, comp pre-writes a few notes as stars
+function liveSetup(h) {
+  selectSong(SIM[h].song);
+  const enc = SONG.encore, pool = [], extra = [];
+  enc.lanes.forEach((l, y) => enc.sol[y].forEach((v, x) => { if (v && !enc.givens.includes(l + x)) pool.push(l + x); }));
+  for (let n = Math.floor(S.stats.comp / 3); n > 0; n--) extra.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  STAGES = SONG.stages.concat([Object.assign({}, enc, { givens: enc.givens.concat(extra) })]);
+  const start = 30 + S.stats.sense * 2;
+  G.live = { who: h, heat: start, start, gain: 40 / pool.length, decay: 0.3 - S.stats.sense * 0.015, penalty: 13 - S.stats.play, extra: extra.length, cheered: 0, armed: false, done: false };
+}
+function liveBegin() {
+  const L = G.live; L.armed = true; L.t0 = L.last = performance.now(); L.shown = null;
+  $('liveMeter').hidden = false; $('liveMeter').style.setProperty('--c', CAST[L.who].tag);
+  $('hint').textContent = `맞히면 관객 열기가 오르고, 틀리거나 시간이 흐르면 내려가요. 센스 ${S.stats.sense}: 시작 ${L.start}% · 연주 ${S.stats.play}: 실수 −${L.penalty} · 작곡 ${S.stats.comp}: 별 칸 +${L.extra}`;
+  liveDraw();
+}
+function heat(d) {
+  const L = G.live, before = L.heat; L.heat = Math.max(5, Math.min(100, L.heat + d));
+  [50, 75, 90].forEach((m, i) => { if (before < m && L.heat >= m && L.cheered <= i) { L.cheered = i + 1; cheer(0.35 + i * 0.15); toast(CHANTS[i](CAST[L.who].name)); } });
+  liveDraw();
+}
+function liveTick(now) {
+  const L = G.live; if (!L || !L.armed || G.mode !== 'play') return;
+  const dt = Math.min(0.1, (now - L.last) / 1000); L.last = now; L.heat = Math.max(5, L.heat - L.decay * dt); liveDraw();
+}
+function liveDraw() {
+  const L = G.live, v = Math.round(L.heat); if (v === L.shown) return; L.shown = v;
+  $('heatBar').style.width = v + '%'; $('heatNum').textContent = v + '%'; $('heatGrade').textContent = gradeOf(v); $('liveMeter').setAttribute('aria-valuenow', v);
+}
+function liveClear() {
+  const L = G.live; L.armed = false; L.done = true; L.time = Math.round((performance.now() - L.t0) / 1000); L.grade = gradeOf(Math.round(L.heat));
+  G.mode = 'clear'; $('board').classList.add('locked'); sfx('clear'); cheer(1); expr.base = 'happy'; renderBars();
+  toast(`라스트 소절 완성! 라이브 ${L.grade}`);
+  say(STAGES[G.stage].clear, false, [['결과 보기 ▸', liveResult]]);
+}
+function liveResult() {
+  const L = G.live, h = L.who, bonus = LIVE_BONUS[L.grade], r = $('liveResult');
+  stopLoop(); showPlayUI(false); $('liveMeter').hidden = true; $('songStrip').hidden = true;
+  r.style.setProperty('--c', CAST[h].tag);
+  r.innerHTML = `<span class="k">LIVE RESULT</span><b class="grade">${L.grade}</b><dl>` + [['관객 열기', Math.round(L.heat) + '%'], ['실수', G.misses], ['시간', `${Math.floor(L.time / 60)}:${String(L.time % 60).padStart(2, '0')}`], ['호감도', '+' + bonus]]
+    .map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('') + '</dl>';
+  r.hidden = false;
+  if (bonus) like(h, bonus);
+  scene(h, [SIM[h].live[L.grade === 'S' || L.grade === 'A' ? 0 : L.grade === 'B' ? 1 : 2]], liveEncore);
+}
+function liveEncore() {
+  const h = G.live.who;
+  if (S.bars[h] < 5) return scene('me', ['#박수가 쏟아졌다.', '#…끝내 완성하지 못한 소절들이, 조금 아쉽다.'], () => liveEnding(h));
+  scene('me', ['#"앵콜! 앵콜!" 함성이 멈추지 않는다.', `#${wa(CAST[h].name)} 눈을 맞췄다. 이번엔 처음부터 끝까지, 우리 곡을.`], () => {
+    $('liveResult').hidden = true; $('songStrip').hidden = false; setChar(h); G.afterSong = () => liveEnding(h); playSong();
+  }, '앵콜 ▸');
+}
+function liveEnding(h) {
+  $('liveResult').hidden = true; $('songStrip').hidden = true;
+  if (S.bars[h] >= 5 && S.aff[h] >= LOVE_AT) { expr.base = 'happy';
+    return scene(h, SIM[h].love, () => finishSim(`♥ ${CAST[h].name} 엔딩 · 별빛처럼 오래`, h, ['#축제 마지막 곡을 함께 부른 두 사람은, 별빛처럼 오래 이어진다.', '#전설은, 아무래도 진짜였나 보다.'])); }
+  scene(h, [SIM[h].friend], () => finishSim(`♪ ${CAST[h].name} 우정 엔딩`, 'f-' + h, ['#고백은 하지 못했지만, 좋은 무대였다.', '#…다음 축제에는, 조금 더 용기를 내 보자.']));
+}
+function liveEnd() {
+  G.live = null; $('scene').classList.remove('live'); ['crowd', 'liveMeter', 'liveResult'].forEach(id => $(id).hidden = true); $('hint').textContent = HINT_TEXT;
+  if (SONG) STAGES = SONG.stages;
+}
+/* crowd strip: two rows of silhouettes; penlights in her colour light up with the heat and jump on the beat past 75% */
+const crowd = $('crowd'), cg = crowd.getContext('2d'); let fans = [];
+function sizeCrowd(force) {
+  if (crowd.hidden) return; const w = Math.max(1, Math.round(crowd.clientWidth / 3));
+  if (!force && w === crowd.width && fans.length) return;
+  crowd.width = w; crowd.height = 12; fans = [];
+  for (let x = 2, i = 0; x < w - 1; x += 4 + (i % 3 ? 1 : 0), i++) fans.push({ x, back: i % 2 === 1, p: Math.random(), th: Math.random(), c: Math.random() < 0.75 ? null : Math.random() < 0.5 ? '#fff4c2' : '#9ef0ff' });
+  fans.sort((a, b) => b.back - a.back);
+}
+function drawCrowd(now) {
+  if (crowd.hidden || !G.live) return;
+  const L = G.live, beat = now / 1000 * SONG.bpm / 60 * Math.PI, hype = L.heat >= 75 && !reduceMotion;
+  cg.clearRect(0, 0, crowd.width, crowd.height);
+  for (const f of fans) {
+    const lit = f.th * 100 < L.heat, y = (f.back ? 4 : 6) - (hype && lit && Math.sin(beat * 2 + f.p * 2) > 0.3 ? 1 : 0), sil = f.back ? '#1d1850' : '#0b0920';
+    if (lit) { const ax = f.x + (f.back ? -3 : 3), tx = ax + (reduceMotion ? 0 : Math.round(Math.sin(beat + f.p * 1.2) * 1.2));
+      cg.fillStyle = f.c || CAST[L.who].tag; cg.globalAlpha = 0.3; cg.fillRect(tx - 1, y - 6, 3, 5); cg.globalAlpha = 1; cg.fillRect(tx, y - 5, 1, 3);
+      cg.fillStyle = sil; cg.fillRect(ax, y - 2, 1, 5); }
+    cg.fillStyle = sil; cg.fillRect(f.x - 1, y, 3, 1); cg.fillRect(f.x - 2, y + 1, 5, 2); cg.fillRect(f.x - 3, y + 3, 7, crowd.height);
   }
 }
 let titleCycle = null;
 function mainMenu() {
-  G.mode = 'title'; G.simLock = false; G.after = G.afterSong = null; stopLoop(); setScene('big'); showHub(false); showPlayUI(false); $('songStrip').hidden = true;
+  G.mode = 'title'; G.simLock = false; G.after = G.afterSong = null; stopLoop(); liveEnd(); setScene('big'); showHub(false); showPlayUI(false); $('songStrip').hidden = true;
   $('stageLabel').textContent = '별빛 멜로디'; expr.base = 'idle';
   let k = 0; setChar(HEROINES[0]); clearInterval(titleCycle);
   titleCycle = setInterval(() => { if (G.mode !== 'title') return clearInterval(titleCycle); k = (k + 1) % HEROINES.length; setChar(HEROINES[k]); $('who').textContent = CAST[HEROINES[k]].name; }, 2600);
   const save = simStore.load(), ends = Object.keys(simStore.endings()).filter(k => HEROINES.includes(k)).length;
   say(`축제까지 ${WEEKS}주. 여섯 명의 보컬 중, 누구와 마지막 곡을 부르게 될까? (연애 엔딩 ${ends}/6)`, true, [
     ['새 게임\n12주의 이야기', () => { clearInterval(titleCycle); simStart(); }],
-    save ? ['이어 하기\n' + save.name + ' · ' + save.week + '주차', () => { clearInterval(titleCycle); S = save; CAST.me.name = S.name; G.char = null; hub(); }] : ['이어 하기\n저장 없음', () => toast('저장된 이야기가 없어요.'), true],
+    save ? ['이어 하기\n' + save.name + ' · ' + (save.week > WEEKS ? '축제 당일' : save.week + '주차'), () => { clearInterval(titleCycle); S = save; CAST.me.name = S.name; G.char = null; S.week > WEEKS ? finale() : hub(); }] : ['이어 하기\n저장 없음', () => toast('저장된 이야기가 없어요.'), true],
     ['자유 연주\n6곡 골라 풀기', () => { clearInterval(titleCycle); freePlay(); }, true],
     ['풀이 연습\n숫자 맞추는 요령', () => { clearInterval(titleCycle); selectSong('lesson'); openStage(0); }, true]]);
 }
