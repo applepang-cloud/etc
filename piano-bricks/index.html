@@ -3100,13 +3100,15 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
   }
   const keyArtReady = () => KEY_IMG.whiteUp && KEY_IMG.whiteDown && KEY_IMG.blackUp && KEY_IMG.blackDown;
 
-  // Rows are one semitone each; a white key spans its row plus half of each black neighbour.
+  // Rows are one semitone each, but like a real keyboard the seven white keys share the octave's
+  // twelve rows equally (12/7 rows each); every white note's row centre still falls on its key.
+  const WHITE_INDEX = { 0: 0, 2: 1, 4: 2, 5: 3, 7: 4, 9: 5, 11: 6 };
   function whiteSpan(midi, rows) {
     const top = C.ROLL_TOP, h = rows.h;
-    const y = top + (rows.hi - midi) * h;
-    const lo = core.isBlack(midi - 1) ? y + h * 1.5 : y + h;
-    const hi = core.isBlack(midi + 1) ? y - h * 0.5 : y;
-    return [Math.max(top, hi), Math.min(C.ROLL_BOTTOM, lo)];
+    const c = midi - (midi % 12); // the C of this octave
+    const cBottom = top + (rows.hi - c) * h + h;
+    const k = WHITE_INDEX[midi % 12], kh = (12 / 7) * h;
+    return [Math.max(top, cBottom - (k + 1) * kh), Math.min(C.ROLL_BOTTOM, cBottom - k * kh)];
   }
 
   function drawKeysArt(rows) {
