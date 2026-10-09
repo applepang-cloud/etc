@@ -120,6 +120,28 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
 .toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 14px); transform: translate(-50%, -160%); visibility: hidden; background: var(--gold); color: #2b1b00; font-family: var(--pixel); padding: 8px 16px; border-radius: 6px; box-shadow: 0 4px 0 #b8892a; transition: transform .3s ease; z-index: 5; white-space: nowrap; }
 .toast.show { transform: translate(-50%, 0); visibility: visible; }
 
+.scene.narr { grid-template-columns: 1fr; min-height: 180px; align-content: end; }
+.sim { display: flex; flex-direction: column; gap: 10px; background: var(--night-2); border: 1px solid var(--slot-line); border-radius: 10px; padding: 12px; }
+.sim-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--ink-dim); }
+.sim-head b { font-family: var(--pixel); font-weight: 400; font-size: 17px; color: var(--gold); }
+.weeks { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; }
+.weeks i { height: 6px; border-radius: 2px; background: var(--slot); }
+.weeks i.past { background: var(--pink); } .weeks i.now { background: var(--gold); }
+.stats { display: grid; grid-template-columns: auto 1fr 2ch; gap: 6px 10px; align-items: center; font-size: 13px; }
+.stats .num { font-family: var(--pixel); text-align: right; font-variant-numeric: tabular-nums; }
+.meter { height: 8px; background: var(--slot); border-radius: 4px; overflow: hidden; }
+.meter b { display: block; height: 100%; background: var(--c); }
+.girls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.girl { display: flex; flex-direction: column; align-items: center; gap: 2px; background: var(--slot); border-radius: 6px; padding: 6px 4px; min-width: 0; text-align: center; }
+.girl canvas { width: 64px; height: 64px; image-rendering: pixelated; }
+.girl .nm { font-family: var(--pixel); color: var(--c); font-size: 14px; }
+.girl .hearts { color: var(--pink); font-size: 11px; letter-spacing: -1px; }
+.girl .lv { color: var(--ink-dim); font-size: 11px; }
+.act button.choice, .act button.locked { background: var(--night-2); color: var(--ink); box-shadow: none; border: 1px solid var(--slot-line); text-align: left; font-family: var(--body); font-size: 15px; padding: 10px 12px; }
+.act button.choice:hover { border-color: var(--pink); }
+.act button.locked { opacity: .45; cursor: not-allowed; }
+.talk .act.choices { display: flex; flex-direction: column; align-items: stretch; }
+#nameInput { font: inherit; font-size: 16px; padding: 7px 10px; border-radius: 4px; border: 1px solid var(--slot-line); background: var(--night); color: var(--ink); width: 9em; }
 [hidden] { display: none !important; }
 @media (max-width: 380px) { .board .rc, .board .cc { font-size: 12px; } .brand { letter-spacing: .06em; } }
 @media (prefers-reduced-motion: reduce) { #heroine, .scene, .toast { transition: none; } #heroine.bob { transform: none; } .cell.pop, .cell.glow { animation: none; } }
@@ -145,7 +167,14 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
     </div>
   </section>
 
-  <section class="song" aria-label="곡 진행">
+  <section class="sim" id="simPanel" hidden aria-label="이번 주 상태">
+    <div class="sim-head" id="simHead"></div>
+    <div class="weeks" id="weeks" aria-hidden="true"></div>
+    <div class="stats" id="stats"></div>
+    <div class="girls" id="girls"></div>
+  </section>
+
+  <section class="song" id="songStrip" aria-label="곡 진행">
     <span class="label" id="songLabel">별빛 멜로디</span>
     <div class="bars" id="bars"></div>
   </section>
@@ -198,8 +227,21 @@ const BASE = {
   blush: '#ffb0c0', blush2: '#ff94ac', mouth: '#a8364f', mouthIn: '#d9506a', tongue: '#ff8c9c', sweat: '#a6ecff'
 };
 const CHARS = {
-  ria: { colors: {}, lid: 0, tails: true, cat: true, ahoge: true, bangs: 'soft', long: false, idle: 'idle' },
-  yuna: { lid: 1.8, tails: false, cat: false, ahoge: false, bangs: 'hime', long: true, idle: 'flat',
+  ria: { colors: {}, lid: 0, tails: true, tailSides: [-1, 1], cat: true, ahoge: true, bangs: 'soft', back: 'default', idle: 'idle' },
+  hana: { lid: 0, tails: true, tailSides: [1], tailTop: 30, tailBot: 94, bangs: 'soft', back: 'bob', idle: 'grin',
+    colors: { hairL: '#5a2a12', h0: '#ffd9a8', h1: '#ffb36b', h2: '#f08c3c', h3: '#c0642a', h4: '#ff9a6b', h5: '#d8693f', hH: '#fff1dc',
+      irA: '#14532d', irB: '#1f8a4c', irC: '#35b76a', irD: '#7fe0a0', irE: '#c8ffd8', pupil: '#0b2a18', pink: '#ff5a5a', pinkS: '#d63c3c' } },
+  sora: { lid: 0.8, bangs: 'soft', back: 'bob', front: 'braids', glasses: true, idle: 'tiny',
+    colors: { hairL: '#4a3f6e', h0: '#f4f0ff', h1: '#ddd5f5', h2: '#bdb2e6', h3: '#9a8cc8', h4: '#c9b8f0', h5: '#a493d8', hH: '#ffffff',
+      irA: '#3b1f6e', irB: '#6a3fc2', irC: '#9a6ff0', irD: '#c6a8ff', irE: '#efe2ff', pupil: '#1e0f3a', blush: '#ffa8bc', blush2: '#ff8aa6', pink: '#7cc4ff', pinkS: '#4f97d8', frame: '#6b5a9a' } },
+  arin: { lid: 0.3, bangs: 'hime', back: 'bob', buns: true, flower: true, idle: 'idle',
+    colors: { hairL: '#1a1020', h0: '#6a5470', h1: '#4a3850', h2: '#36283c', h3: '#24192a', h4: '#5a3048', h5: '#42223a', hH: '#a890b0',
+      irA: '#5a0f1e', irB: '#a8203a', irC: '#e0455c', irD: '#ff8a98', irE: '#ffd0d6', pupil: '#2a0610', pink: '#ff8fb8', pinkS: '#e0679a', petal: '#ff9cc4', petalS: '#f0709e' } },
+  sena: { lid: 1.2, bangs: 'swept', back: 'wavy', front: 'wavy', shades: true, shirt: true, idle: 'smirk',
+    colors: { hairL: '#5a3e12', h0: '#fff6c8', h1: '#ffe08a', h2: '#f2c055', h3: '#cc9636', h4: '#f7b8c8', h5: '#e090a8', hH: '#ffffff',
+      irA: '#0d4a4a', irB: '#178080', irC: '#2fb4a8', irD: '#78e6d6', irE: '#c8fff6', pupil: '#062626',
+      cl1: '#7a2c4f', cl2: '#5c1f3b', navy: '#9a3a64', navyS: '#7a2c4f', clothL: '#2c0f1e', pink: '#ffd76a', pinkS: '#e0a63a', lens: '#2b2140', lensH: '#8b78b8' } },
+  yuna: { lid: 1.8, bangs: 'hime', back: 'long', front: 'long', note: true, idle: 'flat',
     shirt: true, colors: { hairL: '#120f30', h0: '#6c7bd6', h1: '#4b53b2', h2: '#383e8e', h3: '#272b68', h4: '#5a48b0', h5: '#3e2f86', hH: '#b4c0ff',
       skin: '#fff1ec', skinS: '#f6d0c6', skinS2: '#e9ada2', skinH: '#fff9f6',
       irA: '#6e2d14', irB: '#b6561a', irC: '#e08a2a', irD: '#ffbb52', irE: '#ffe4a0', pupil: '#2a1208',
@@ -208,7 +250,7 @@ const CHARS = {
 };
 let C = BASE, CH = CHARS.ria;
 const ell = (x, y, cx, cy, rx, ry) => ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1;
-const R = { tailB: 1, back: 2, body: 3, collar: 4, frill: 5, neck: 6, face: 7, bangs: 8, ahoge: 9, band: 10, cup: 11, ear: 12, tie: 13, ribbon: 14, brooch: 15, front: 16 };
+const R = { tailB: 1, back: 2, body: 3, collar: 4, frill: 5, neck: 6, face: 7, bangs: 8, ahoge: 9, band: 10, cup: 11, ear: 12, tie: 13, ribbon: 14, brooch: 15, front: 16, bun: 17, shades: 18, flower: 19 };
 // ---- shapes ----
 const face = (x, y) => { if (y < 48) return ell(x, y, CX, 48, 20.5, 22); if (y > 76) return false; const t = (y - 48) / 28.5; return Math.abs(x - CX) <= 20.5 * Math.pow(Math.max(0, 1 - Math.pow(t, 3.2)), 0.62); };
 const skull = (x, y) => ell(x, y, CX, 45, 26, 25.5);
@@ -222,16 +264,34 @@ const sideLock = (x, y) => [[-1, 23.5], [1, 72.5]].some(([s, rx]) => { if (y < 4
 const HIME = [[27, 53, 0.9], [33, 54, 0.9], [39, 53.5, 0.9], [45, 54.5, 0.9], [51, 53.5, 0.9], [57, 54, 0.9], [63, 53.5, 0.9], [69, 53, 0.9]];
 const himeLine = x => (Math.abs(x - 37) < 0.8 || Math.abs(x - 59) < 0.8) ? 49 : (x < 30 || x > 66) ? 54 : 53;
 const himeLock = (x, y) => [[-1, 24], [1, 72]].some(([s, rx]) => y >= 40 && y <= 90 && Math.abs(x - rx) <= 4.6 - (y > 88 ? 1 : 0));
-const bangs = (x, y) => CH.bangs === 'hime' ? (skull(x, y) && (y < 37 || y < himeLine(x))) || himeLock(x, y) : (skull(x, y) && (y < 37 || y < bangLine(x))) || sideLock(x, y);
+const SWEPT = [[30, 59, 0.2], [40, 56, 0.2], [50, 51, 0.22], [60, 47, 0.3], [67, 46, 0.42]];
+const sweptLine = x => Math.max(40, ...SWEPT.map(([cx, ty, k]) => ty - k * (x - cx) ** 2));
+const bangs = (x, y) => CH.bangs === 'swept' ? (skull(x, y) && (y < 37 || y < sweptLine(x))) || sideLock(x, y) : CH.bangs === 'hime' ? (skull(x, y) && (y < 37 || y < himeLine(x))) || himeLock(x, y) : (skull(x, y) && (y < 37 || y < bangLine(x))) || sideLock(x, y);
 const ahoge = (x, y) => { if (!CH.ahoge || y < 6 || y > 22) return false; const t = (y - 6) / 16; const cx = 50 + Math.sin(t * 3.4 + 0.4) * 7 * (1 - t * 0.5); return Math.abs(x - cx) <= 0.9 + t * 1.8; };
-const back = (x, y) => ell(x, y, CX, 46, 29, 28.5) || (CH.long ? (y >= 46 && y <= 107 && Math.abs(x - CX) <= 29 + Math.min(4, Math.max(0, y - 70) * 0.12) - (y > 104 ? (x % 3) : 0)) : (y >= 46 && y <= 86 && Math.abs(x - CX) <= 27.5 - Math.max(0, y - 58) * 0.35));
-function tailInfo(x, y) { const top = 28, bot = 106; if (y < top || y > bot) return null; const t = (y - top) / (bot - top);
-  for (const side of [-1, 1]) { const cx = CX + side * (31 + 7 * Math.sin(t * Math.PI * 0.85) - t * 3); const hw = 8.2 * Math.pow(1 - t, 0.6) + 1 + 1.2 * Math.sin(t * 9) * (1 - t);
+const back = (x, y) => { if (ell(x, y, CX, 46, 29, 28.5)) return true; if (y < 46) return false; const d = Math.abs(x - CX);
+  if (CH.back === 'long') return y <= 107 && d <= 29 + Math.min(4, Math.max(0, y - 70) * 0.12) - (y > 104 ? (x % 3) : 0);
+  if (CH.back === 'wavy') return y <= 107 && d <= 30 + 2.2 * Math.sin(y / 4.2) + Math.min(3, Math.max(0, y - 70) * 0.1);
+  if (CH.back === 'bob') return y <= 78 && d <= 28 - Math.max(0, y - 66) * 0.9;
+  return y <= 86 && d <= 27.5 - Math.max(0, y - 58) * 0.35; };
+const buns = (x, y) => CH.buns && [-1, 1].some(s => ell(x, y, CX + s * 18, 20, 8, 7.4));
+function tailInfo(x, y) { const top = CH.tailTop || 28, bot = CH.tailBot || 106; if (y < top || y > bot) return null; const t = (y - top) / (bot - top);
+  for (const side of CH.tailSides || [-1, 1]) { const cx = CX + side * (31 + 7 * Math.sin(t * Math.PI * 0.85) - t * 3); const hw = 8.2 * Math.pow(1 - t, 0.6) + 1 + 1.2 * Math.sin(t * 9) * (1 - t);
     if (Math.abs(x - cx) <= hw) return { side, t, rel: (x - cx) / hw * side }; } return null; }
 const tails = (x, y) => CH.tails && !!tailInfo(x, y);
-const frontLock = (x, y) => CH.long && y >= 74 && y <= 107 && [-1, 1].some(s => { const t = (y - 74) / 33, cx = CX + s * (26 + t * 4); return Math.abs(x - cx) <= 4.5 - t * 1.5 + (y > 105 ? -1 : 0); });
+function frontInfo(x, y) {
+  if (!CH.front) return null;
+  for (const s of [-1, 1]) {
+    if (CH.front === 'long' && y >= 74 && y <= 107) { const t = (y - 74) / 33, cx = CX + s * (26 + t * 4); if (Math.abs(x - cx) <= 4.5 - t * 1.5 + (y > 105 ? -1 : 0)) return { s, cx, t }; }
+    if (CH.front === 'wavy' && y >= 70 && y <= 107) { const t = (y - 70) / 37, cx = CX + s * (26 + t * 3) + 2 * Math.sin(y / 3.6); if (Math.abs(x - cx) <= 4.8 - t * 1.6) return { s, cx, t }; }
+    if (CH.front === 'braids' && y >= 64 && y <= 104) { const t = (y - 64) / 40, cx = CX + s * (24 + t * 3); if (Math.abs(x - cx) <= 4.4 - 1.4 * Math.abs(Math.sin((y - 64) * Math.PI / 6)) - (y > 101 ? 1.5 : 0)) return { s, cx, t }; }
+  }
+  return null;
+}
+const frontLock = (x, y) => !!frontInfo(x, y);
+const shades = (x, y) => CH.shades && ([-1, 1].some(s => Math.abs(x - (CX + s * 10)) <= 7 && y >= 26 && y <= 31.5 - Math.abs(x - (CX + s * 10)) * 0.15) || (Math.abs(x - CX) <= 3.5 && y >= 26.5 && y <= 28));
+const flower = (x, y) => CH.flower && (Math.hypot(x - (CX - 21), y - 38) <= 1.8 || [0, 1, 2, 3, 4].some(i => { const a = i * Math.PI * 2 / 5 - Math.PI / 2; return ell(x, y, CX - 21 + Math.cos(a) * 3.2, 38 + Math.sin(a) * 3.2, 2.5, 2.5); }));
 const noteClip = (x, y) => { const cx = 66, cy = 40; return ell(x, y, cx, cy + 3, 2.4, 1.9) || (x >= cx + 1.4 && x <= cx + 2.6 && y >= cy - 5 && y <= cy + 3) || (y >= cy - 5 && y <= cy - 3.5 && x >= cx + 1.4 && x <= cx + 5 - (y - cy + 5) * 0.8); };
-const tie = (x, y) => !CH.tails ? noteClip(x, y) : [-1, 1].some(s => { const dx = x - (CX + s * 31.5), dy = y - 30, a = Math.atan2(dy, dx) + s * 0.3, r = Math.hypot(dx, dy); return r <= 2.6 + 2.2 * Math.max(0, Math.cos(5 * a - Math.PI / 2)) ** 1.5; });
+const tie = (x, y) => !CH.tails ? (CH.note && noteClip(x, y)) : (CH.tailSides || [-1, 1]).some(s => { const dx = x - (CX + s * 31.5), dy = y - (CH.tailTop ? CH.tailTop + 1 : 30), a = Math.atan2(dy, dx) + s * 0.3, r = Math.hypot(dx, dy); return r <= 2.6 + 2.2 * Math.max(0, Math.cos(5 * a - Math.PI / 2)) ** 1.5; });
 const neck = (x, y) => y >= 70 && y <= 86 && Math.abs(x - CX) <= 5 + Math.max(0, y - 80) * 0.6;
 const body = (x, y) => y >= 82 && Math.abs(x - CX) <= Math.min(36, 10 + (y - 82) * 3.2);
 const collar = (x, y) => body(x, y) && y <= 98 && Math.abs(x - CX) <= 12 + (y - 82) * 2.3 && !(y < 95 && Math.abs(x - CX) <= Math.max(0, 9.5 - (y - 82) * 0.75));
@@ -241,8 +301,8 @@ const brooch = (x, y) => { const dx = x - CX, dy = y - 92; const a = Math.atan2(
 const band = (x, y) => { const d = Math.hypot(x - CX, (y - 46) * 1.03); return CH.cat ? d >= 28 && d <= 31 && y < 40 : d >= 25.3 && d <= 27.4 && y < 34; };
 const cup = (x, y) => CH.cat && [-1, 1].some(s => ell(x, y, CX + s * 28.5, 48, 5.2, 8.2));
 const ear = (x, y) => CH.cat && [-1, 1].some(s => { const bx = CX + s * 19, by = 21; const u = (x - bx) * s, v = by - y; return v >= -1 && v <= 11 && Math.abs(u - v * 0.35) <= 5.2 * (1 - v / 11.5); });
-const LAYERS = [[R.tailB, tails], [R.back, back], [R.body, body], [R.collar, collar], [R.frill, frill], [R.ribbon, ribbon], [R.brooch, brooch], [R.neck, neck], [R.face, face], [R.ear, ear], [R.bangs, bangs], [R.ahoge, ahoge], [R.band, band], [R.cup, cup], [R.tie, tie], [R.front, frontLock]];
-const LINE = { 1: 'hairL', 2: 'hairL', 3: 'clothL', 4: 'clothL', 5: 'clothL', 6: 'skinL', 7: 'skinL', 8: 'hairL', 9: 'hairL', 10: 'clothL', 11: 'clothL', 12: 'clothL', 13: 'hairL', 14: 'clothL', 15: 'hairL', 16: 'hairL' };
+const LAYERS = [[R.tailB, tails], [R.back, back], [R.bun, buns], [R.body, body], [R.collar, collar], [R.frill, frill], [R.ribbon, ribbon], [R.brooch, brooch], [R.neck, neck], [R.face, face], [R.ear, ear], [R.bangs, bangs], [R.ahoge, ahoge], [R.band, band], [R.cup, cup], [R.tie, tie], [R.front, frontLock], [R.shades, shades], [R.flower, flower]];
+const LINE = { 1: 'hairL', 2: 'hairL', 3: 'clothL', 4: 'clothL', 5: 'clothL', 6: 'skinL', 7: 'skinL', 8: 'hairL', 9: 'hairL', 10: 'clothL', 11: 'clothL', 12: 'clothL', 13: 'hairL', 14: 'clothL', 15: 'hairL', 16: 'hairL', 17: 'hairL', 18: 'hairL', 19: 'hairL' };
 // hair colour ramp by height: pink on top, lavender toward tips
 let DX = 0;
 function hairCol(y, shade) { const lav = y > 89 || (y > 86 && (y + DX) % 2 === 0);
@@ -293,6 +353,9 @@ function eyes(px, eye) {
 const MOUTH = {
   idle: ['L....L', '.LLLL.'],
   flat: ['.LLLL.'],
+  grin: ['L....L', '.LmmL.', '..LL..'],
+  tiny: ['.LL.'],
+  smirk: ['.....L', '.LLLL.'],
   smile: ['LLLLLLL', '.LmmmL.', '.LmttL.', '..LLL..'],
   sing: ['.LLL.', 'LmmmL', 'LmttL', 'LmttL', '.LLL.'],
   oops: ['L.L.L.L', '.L.L.L.'],
@@ -311,7 +374,7 @@ function drawHeroine(opt) {
     if (!id) { const n = N4.map(([a, b]) => at(x + a, y + b)).filter(Boolean); if (n.length) px[y * W + x] = C[LINE[Math.max(...n)]] || C.hairL; continue; }
     const behind = N4.some(([a, b]) => { const n = at(x + a, y + b); return n && n !== id && ord(n) < ord(id); });
     let c;
-    const hair = id === R.bangs || id === R.back || id === R.tailB || id === R.ahoge || id === R.front;
+    const hair = id === R.bangs || id === R.back || id === R.tailB || id === R.ahoge || id === R.front || id === R.bun;
     if (hair) {
       let sh = 1;
       if (id === R.back) sh = Math.abs(x - CX) > 22 || y > 70 ? 3 : 2;
@@ -319,7 +382,10 @@ function drawHeroine(opt) {
       if (id === R.bangs) { const tip = at(x, y + 1) !== R.bangs || at(x, y + 2) !== R.bangs || at(x, y + 3) !== R.bangs; sh = tip ? 2 : ((x - CX) * 0.8 + (y - 30) * 0.9 > 14 ? 1 : 0); if (at(x + 1, y) !== R.bangs && at(x + 1, y) === R.face) sh = 2;
         const d = Math.hypot(x + 0.5 - CX, (y + 0.5 - 45) * 1.12); if (d > 17 && d < 20.2 && y < 38 && y > 20 && (Math.floor(x / 3) % 3) !== 1) { px[y * W + x] = C.hH; continue; } }
       if (id === R.ahoge) sh = 1;
-      if (id === R.front) { const s = x > CX ? 1 : -1, cx = CX + s * (26 + (y - 74) / 33 * 4); sh = (x - cx) * s > 1.5 ? 3 : (x - cx) * s < -2 ? 1 : 2; if (Math.abs(x - cx + s * 1) < 0.6 && y > 78 && y < 90) { px[y * W + x] = C.hH; continue; } }
+      if (id === R.front) { const fi = frontInfo(x + 0.5, y + 0.5); const s = fi.s, cx = fi.cx; sh = (x + 0.5 - cx) * s > 1.5 ? 3 : (x + 0.5 - cx) * s < -2 ? 1 : 2;
+        if (CH.front === 'braids') { if (y >= 99 && y <= 101) { px[y * W + x] = C.pink; continue; } sh = ((y + Math.round((x - cx) * s)) % 6 < 2) ? 3 : (x + 0.5 - cx) * s < -1 ? 1 : 2; }
+        else if (Math.abs(x + 0.5 - cx + s * 1) < 0.6 && y > 78 && y < 90) { px[y * W + x] = C.hH; continue; } }
+      if (id === R.bun) { const s = x > CX ? 1 : -1, bx = CX + s * 18; sh = (y < 17 && x < bx) ? 0 : (y > 23 || x > bx + 3) ? 2 : 1; if (Math.hypot(x + 0.5 - bx + 3, y + 0.5 - 16) < 1.6) { px[y * W + x] = C.hH; continue; } }
       c = hairCol(y, sh); if (behind && id !== R.ahoge) c = id === R.bangs && at(x, y + 1) !== R.face ? hairCol(y, 2) : C.h3;
     } else if (id === R.face || id === R.neck) {
       c = C.skin;
@@ -331,7 +397,7 @@ function drawHeroine(opt) {
       if (behind) c = C.skinL;
     } else {
       const M = { [R.body]: ['cl1', 'cl2'], [R.collar]: ['navy', 'navyS'], [R.frill]: ['cl0', 'cl2'], [R.ribbon]: ['pink', 'pinkS'], [R.brooch]: ['gold', 'goldS'],
-        [R.band]: ['ph', 'phS'], [R.cup]: ['cup', 'cupS'], [R.ear]: ['ph', 'phS'], [R.tie]: ['gold', 'goldS'] }[id];
+        [R.band]: ['ph', 'phS'], [R.cup]: ['cup', 'cupS'], [R.ear]: ['ph', 'phS'], [R.tie]: ['gold', 'goldS'], [R.shades]: ['lens', 'lensH'], [R.flower]: ['petal', 'petalS'] }[id];
       c = C[M[0]];
       if (id === R.body && (x > CX + 18 || y > 104)) c = C[M[1]];
       if (CH.shirt && id === R.body && Math.abs(x - CX) <= 5 + (y - 82) * 0.5) c = C.cl0;
@@ -341,6 +407,8 @@ function drawHeroine(opt) {
       if (id === R.cup) { const s = x > CX ? 1 : -1; if (ell(x + 0.5, y + 0.5, CX + s * 28.5, 48, 2.6, 4.5)) c = C.cupS; if (ell(x + 0.5, y + 0.5, CX + s * 28.5, 48, 1.1, 2)) c = C.led; }
       if (id === R.ear) { const s = x > CX ? 1 : -1, u = (x + 0.5 - (CX + s * 19)) * s, v = 21 - (y + 0.5); if (Math.abs(u - v * 0.35) <= 2.4 * (1 - v / 11.5) && v > 0.5) c = C.ear; }
       if (id === R.band && y < 18) c = C.cl0;
+      if (id === R.shades && y === 27 && Math.abs(x - CX) > 5) c = C.lensH;
+      if (id === R.flower && Math.hypot(x + 0.5 - (CX - 21), y + 0.5 - 38) <= 1.8) c = C.gold;
       if (behind) c = C[LINE[id]] || C.clothL;
     }
     px[y * W + x] = c;
@@ -349,6 +417,9 @@ function drawHeroine(opt) {
   px[67 * W + CX + 1] = C.nose;
   for (const s of [-1, 1]) { const bx = CX + s * 14, by = 68; for (let y = by - 2; y <= by + 2; y++) for (let x = bx - 5; x <= bx + 5; x++) if (ell(x + 0.5, y + 0.5, bx, by, 5, 2) && px[y * W + x] && reg[y * W + x] === R.face) px[y * W + x] = ell(x + 0.5, y + 0.5, bx, by, 3, 1.2) ? C.blush2 : C.blush; }
   eyes(px, eye);
+  if (CH.glasses) for (const s of [-1, 1]) { const ex = CX + s * 13.5, ey = 60.5;
+    for (let y = ey - 11; y <= ey + 11; y++) for (let x = ex - 12; x <= ex + 12; x++) { const xi = Math.floor(x), yi = Math.floor(y); if (ell(xi + 0.5, yi + 0.5, ex, ey, 10.2, 9) && !ell(xi + 0.5, yi + 0.5, ex, ey, 9, 7.8)) px[yi * W + xi] = C.frame; } }
+  if (CH.glasses) for (let x = CX - 3; x <= CX + 2; x++) px[58 * W + x] = C.frame;
   const M = MOUTH[mouth], mx = CX - Math.floor(M[0].length / 2), my = 71 - (M.length > 3 ? 1 : 0);
   M.forEach((row, j) => [...row].forEach((ch, i) => { const k = { L: 'mouth', m: 'mouthIn', t: 'tongue' }[ch]; if (k) px[(my + j) * W + mx + i] = C[k]; }));
   if (opt.sweat) [[0, 0], [-1, 1], [0, 1], [1, 1], [-1, 2], [0, 2], [1, 2], [-1, 3], [0, 3], [1, 3], [0, 4]].forEach(([a, b]) => px[(30 + b) * W + 76 + a] = C.sweat);
@@ -753,8 +824,8 @@ const SONGS = [
      "A6"
     ],
     "intro": [
-     "…리아가 말한 도우미가 너구나. 난 유나, 밴드 키보드 담당이야.",
-     "이 곡은 비 오는 날 혼자 만든 거야. 천천히 해. 서두를 필요 없어."
+     "이 곡은 비 오는 날 혼자 만든 거야.",
+     "천천히 해. 서두를 필요 없어."
     ],
     "clear": "…빗소리 같네. 나쁘지 않아."
    },
@@ -919,7 +990,7 @@ const SONGS = [
   "bpm": 132,
   "ending": [
    "다들 아직도 뛰고 있어… 우리가 해냈어!",
-   "다음 라이브도 같이 만들자. 약속이야!"
+   "다음 라이브도 같이 하자. 약속이야!"
   ],
   "stages": [
    {
@@ -947,10 +1018,10 @@ const SONGS = [
     },
     "givens": [],
     "intro": [
-     "앙코르 곡이야! 빠르고 신나는 노래.",
+     "내 밴드 앙코르 곡이야! 빠르고 신나!",
      "이번엔 별 칸 없이 숫자만으로 풀어야 해. 할 수 있지?"
     ],
-    "clear": "좋아, 무대 조명이 켜졌어!"
+    "clear": "좋아, 무대 조명 켜졌다!"
    },
    {
     "id": "j2",
@@ -1101,7 +1172,7 @@ const SONGS = [
    }
   ],
   "lead": "synth",
-  "singer": "ria"
+  "singer": "hana"
  },
  {
   "id": "lullaby",
@@ -1109,8 +1180,8 @@ const SONGS = [
   "bpm": 84,
   "lead": "musicbox",
   "ending": [
-   "이 오르골, 사실 할머니가 주신 거야.",
-   "언젠가 무대에서 이 자장가를 꼭 부를 거야."
+   "이 오르골, 할머니가 주신 거예요.",
+   "언젠가… 무대에서 이 자장가를 꼭 부를 거예요."
   ],
   "stages": [
    {
@@ -1138,10 +1209,10 @@ const SONGS = [
      "G2"
     ],
     "intro": [
-     "어릴 때 갖고 있던 오르골 소리를 떠올리며 만든 자장가야.",
-     "새로 나온 '코드' 줄은 화음을 한꺼번에 울려 줘. 피아노 반주 같은 거야."
+     "어릴 때 할머니가 주신 오르골 소리로 만든 자장가예요.",
+     "'코드' 줄은 화음을 한꺼번에 울려요. 피아노 반주 같은 거예요."
     ],
-    "clear": "태엽을 감으면 이 소리가 났어."
+    "clear": "태엽을 감으면… 이 소리가 났어요."
    },
    {
     "id": "l2",
@@ -1172,9 +1243,9 @@ const SONGS = [
      "Q4"
     ],
     "intro": [
-     "베이스가 살짝 받쳐 주는 부분이야."
+     "베이스가 살짝 받쳐 주는 부분이에요."
     ],
-    "clear": "포근하다… 졸려지는 것 같아."
+    "clear": "포근해요… 졸려지는 것 같아요."
    },
    {
     "id": "l3",
@@ -1203,9 +1274,9 @@ const SONGS = [
      "A2"
     ],
     "intro": [
-     "라 음이 두 번 이어지는 곳을 찾아봐."
+     "라 음이 두 번 이어지는 곳을 찾아봐 주세요."
     ],
-    "clear": "창문으로 달빛이 들어오는 느낌이야."
+    "clear": "창문으로 달빛이 들어오는 느낌이에요."
    },
    {
     "id": "l4",
@@ -1235,9 +1306,9 @@ const SONGS = [
      "Q2"
     ],
     "intro": [
-     "코드가 세 번 울리는 소절이야. 숫자를 잘 봐."
+     "코드가 세 번 울리는 소절이에요. 숫자를 잘 봐 주세요."
     ],
-    "clear": "거의 잠들었어…"
+    "clear": "거의… 잠들었어요."
    },
    {
     "id": "l5",
@@ -1270,12 +1341,12 @@ const SONGS = [
      "C2"
     ],
     "intro": [
-     "마지막 소절. 오르골이 천천히 멈추는 장면이야."
+     "마지막 소절이에요. 오르골이 천천히 멈추는 장면이요."
     ],
-    "clear": "잘 자. 좋은 꿈 꿔."
+    "clear": "잘 자요. 좋은 꿈 꿔요."
    }
   ],
-  "singer": "ria"
+  "singer": "sora"
  },
  {
   "id": "festival",
@@ -1313,7 +1384,7 @@ const SONGS = [
      "T1"
     ],
     "intro": [
-     "여름 축제 노래야! 플루트로 연주해.",
+     "우리 상점가 축제 노래야! 플루트로 연주해.",
      "새로 들어온 '탬버린'은 찰랑찰랑, 박자 사이사이를 채워 줘."
     ],
     "clear": "등불이 하나둘 켜졌어!"
@@ -1466,7 +1537,7 @@ const SONGS = [
     "clear": "최고의 축제였어!"
    }
   ],
-  "singer": "ria"
+  "singer": "arin"
  },
  {
   "id": "neon",
@@ -1475,7 +1546,7 @@ const SONGS = [
   "lead": "guitar",
   "ending": [
    "이 곡은 언젠가 진짜 차 타고 들어 보고 싶어.",
-   "…그때는 네가 운전해. 노래는 리아가 할 테니까."
+   "그때는 네가 운전해. 노래는 내가 할게."
   ],
   "stages": [
    {
@@ -1507,10 +1578,10 @@ const SONGS = [
      "C6"
     ],
     "intro": [
-     "밤거리를 달리는 시티팝이야. 기타는 내가 직접 골랐어.",
-     "'코드' 줄은 엇박으로 들어가. 그게 이 곡의 포인트야."
+     "밤거리를 달리는 시티팝이야. 기타 톤은 내 취향.",
+     "'코드' 줄은 엇박으로 들어가. 그게 이 곡의 맛이지."
     ],
-    "clear": "엔진 걸렸네."
+    "clear": "시동 걸렸네, 후배님."
    },
    {
     "id": "n2",
@@ -1585,7 +1656,7 @@ const SONGS = [
     "intro": [
      "박수가 들어오는 구간. 리듬이 꽉 차."
     ],
-    "clear": "…좋은 리듬이야."
+    "clear": "좋은 그루브야."
    },
    {
     "id": "n4",
@@ -1622,9 +1693,9 @@ const SONGS = [
      "G3"
     ],
     "intro": [
-     "제일 복잡한 소절. 막히면 힌트 써. 부끄러운 거 아니야."
+     "제일 복잡한 소절. 막히면 힌트 써. 창피한 거 아니야."
     ],
-    "clear": "라디오에서 나오면… 리아가 엄청 좋아하겠지."
+    "clear": "라디오에서 나오면… 꽤 멋지겠다."
    },
    {
     "id": "n5",
@@ -1660,10 +1731,10 @@ const SONGS = [
     "intro": [
      "마지막 소절. 목적지가 보여."
     ],
-    "clear": "도착. 밤이 이렇게 예쁜 줄 몰랐어."
+    "clear": "도착. 밤이 이렇게 예쁜 줄 몰랐네."
    }
   ],
-  "singer": "yuna"
+  "singer": "sena"
  }
 ];
 let SONG = SONGS[1], STAGES = SONG.stages;
@@ -1683,7 +1754,20 @@ const CAST = {
     start: '채운 음은 계속 반복해서 들려. 숫자가 큰 줄부터 찾아봐!', song: '처음부터 끝까지, 우리 노래야. 들어 줘!', again: '언제든 다시 들으러 와!' },
   yuna: { name: '유나', tag: '#97a4ff', alt: '금색 음표 머리핀을 한 남색 긴 생머리 소녀 유나',
     oops: ['…그 음 아니야.', '음, 다시 봐.', '괜찮아. 천천히.'], hint: '여기. 반짝이는 칸 눌러.', glow: '반짝이는 칸부터.',
-    start: '채운 음은 반복해서 들려. 큰 숫자부터 봐.', song: '처음부터 끝까지 들어 봐. …우리 곡이야.', again: '또 듣고 싶으면 와.' }
+    start: '채운 음은 반복해서 들려. 큰 숫자부터 봐.', song: '처음부터 끝까지 들어 봐. …우리 곡이야.', again: '또 듣고 싶으면 와.' },
+  hana: { name: '하나', tag: '#ffb36b', alt: '주황 단발에 사이드포니를 한 소녀 하나',
+    oops: ['앗, 삑사리!', '괜찮아괜찮아, 다시!', '오? 그 칸 아닌 듯!'], hint: '여기여기! 반짝이는 거!', glow: '반짝이는 칸 먼저~!',
+    start: '칠한 음이 계속 울려! 큰 숫자부터 가자!', song: '처음부터 끝까지 달린다! 들어 줘!', again: '또 하고 싶으면 언제든!' },
+  sora: { name: '소라', tag: '#c9b8f0', alt: '둥근 안경에 은빛 땋은 머리를 한 소녀 소라',
+    oops: ['아, 그 음은… 아닌 것 같아요.', '괜찮아요, 천천히 해요.', '저도 자주 틀려요…'], hint: '저, 여기… 반짝이는 칸이요.', glow: '반짝이는 칸부터… 부탁해요.',
+    start: '채운 음이 계속 반복돼요. 큰 숫자부터 보면 쉬워요.', song: '처음부터 끝까지… 들어 주세요.', again: '또 들으러 와 주세요.' },
+  arin: { name: '아린', tag: '#ff8fb8', alt: '꽃핀을 꽂은 흑발 똥머리 소녀 아린',
+    oops: ['어라? 그 맛 아닌데~', '아깝다! 다시!', '모찌도 한 번에 안 빚어져~'], hint: '여기야 여기! 반짝반짝!', glow: '반짝이는 칸 먼저!',
+    start: '채운 음은 계속 돌아가~ 큰 숫자부터 빚어 보자!', song: '처음부터 끝까지, 축제 시작이야!', again: '또 놀러 와~' },
+  sena: { name: '세나', tag: '#f2c055', alt: '선글라스를 머리에 얹은 금발 웨이브 선배 세나',
+    oops: ['후배님, 그 음은 아니야.', '음정 체크. 다시.', '실수도 B면의 매력이지만, 아니야.'], hint: '여기. 반짝이는 칸, 보이지?', glow: '반짝이는 칸부터 해 볼까.',
+    start: '채운 음은 계속 루프돼. 큰 숫자부터 짚어 봐.', song: '처음부터 끝까지. 볼륨 올려.', again: '또 듣고 싶으면 방송실로 와.' },
+  me: { name: '나', tag: '#ffd45e', narrator: true, alt: '', oops: ['…틀렸다.'], hint: '여기다.', glow: '반짝이는 칸부터.', start: '', song: '', again: '' }
 };
 const OOPS = () => CAST[G.char].oops;
 const $ = id => document.getElementById(id);
@@ -1718,12 +1802,14 @@ const faceCache = {};
 const expr = { base: 'idle', temp: null, tempUntil: 0, sing: 0, blink: 0, nextBlink: performance.now() + 2500 };
 function setChar(c) {
   if (G.char === c) return; G.char = c; lastFace = ''; const cs = CAST[c];
-  $('who').textContent = cs.name; $('scene').style.setProperty('--tag', cs.tag); $('scene').setAttribute('aria-label', cs.name); hc.setAttribute('aria-label', cs.alt);
+  $('who').textContent = cs.name; $('scene').style.setProperty('--tag', cs.tag); $('scene').setAttribute('aria-label', cs.name);
+  hc.hidden = !!cs.narrator; $('scene').classList.toggle('narr', !!cs.narrator); if (!cs.narrator) hc.setAttribute('aria-label', cs.alt);
 }
-function face(key) {
-  key = G.char + ':' + key; if (faceCache[key]) return faceCache[key];
+function face(key) { return faceOf(G.char, key); }
+function faceOf(who, key) {
+  key = who + ':' + key; if (faceCache[key]) return faceCache[key];
   const o = { idle: {}, happy: { eye: 'happy', mouth: 'smile' }, sing: { mouth: 'sing' }, oops: { eye: 'oops', mouth: 'oops', sweat: true }, blink: { eye: 'closed' }, singHappy: { eye: 'happy', mouth: 'sing' } };
-  const d = drawHeroine(Object.assign({ char: G.char }, o[key.split(':')[1]])), img = hx.createImageData(d.w, d.h);
+  const d = drawHeroine(Object.assign({ char: who }, o[key.split(':')[1]])), img = hx.createImageData(d.w, d.h);
   d.px.forEach((c, i) => { if (!c) return; img.data[i * 4] = parseInt(c.slice(1, 3), 16); img.data[i * 4 + 1] = parseInt(c.slice(3, 5), 16); img.data[i * 4 + 2] = parseInt(c.slice(5, 7), 16); img.data[i * 4 + 3] = 255; });
   return (faceCache[key] = img);
 }
@@ -1734,6 +1820,7 @@ function renderHeroine(now) {
   if (!expr.temp && now < expr.sing) k = k === 'happy' ? 'singHappy' : 'sing';
   if (k === 'idle' && now > expr.nextBlink) { expr.blink = now + 130; expr.nextBlink = now + 2600 + Math.random() * 2600; }
   if (k === 'idle' && now < expr.blink) k = 'blink';
+  if (CAST[G.char] && CAST[G.char].narrator) return;
   if (k !== lastFace) { hx.clearRect(0, 0, 96, 108); hx.putImageData(face(k), 0, 0); lastFace = k; }
 }
 function sizeHeroine() {
@@ -1943,8 +2030,9 @@ function checkClear() {
   prog().stars[G.stage] = Math.max(prog().stars[G.stage], stars); prog().unlocked = Math.max(prog().unlocked, Math.min(STAGES.length - 1, G.stage + 1)); persist();
   G.mode = 'clear'; $('board').classList.add('locked'); sfx('clear'); expr.base = 'happy'; renderBars();
   toast(`${G.stage + 1}소절 완성! ` + '★'.repeat(stars) + '☆'.repeat(3 - stars));
+  if (G.after) { const fn = G.after; G.after = null; say(st.clear, false, [['계속 ▸', () => fn(stars)]]); return; }
   const last = G.stage === STAGES.length - 1, all = prog().stars.every(s => s > 0);
-  say(st.clear, false, SONG.lesson && last ? [['곡 고르러 가기', title]] : last || all ? [['처음부터 듣기', playSong]] : [['다음 소절 ▸', () => openStage(G.stage + 1)]]);
+  say(st.clear, false, SONG.lesson && last ? [['처음으로', mainMenu]] : last || all ? [['처음부터 듣기', playSong]] : [['다음 소절 ▸', () => openStage(G.stage + 1)]]);
 }
 
 /* ---------- song strip ---------- */
@@ -1958,7 +2046,7 @@ function renderBars() {
       st.lanes.forEach((l, y) => st.sol[y].forEach((v, sx) => { if (!v) return; x.fillStyle = LANES[l].c; if (MELODY.has(l)) x.fillRect(sx, order.indexOf(l), 1, 1); else x.fillRect(sx, 5, 1, 1); })); }
     else { x.fillStyle = '#3d3785'; for (let sx = 0; sx < 8; sx += 2) x.fillRect(sx, 3, 1, 1); }
     const n = div('n'); n.innerHTML = `<span>${i + 1}</span><i>${'★'.repeat(prog().stars[i])}</i>`;
-    b.append(cv, n); b.addEventListener('click', () => { if (G.mode === 'song') return; initAudio(); openStage(i); }); wrap.append(b);
+    b.append(cv, n); b.addEventListener('click', () => { if (G.mode === 'song' || G.simLock) return; initAudio(); openStage(i); }); wrap.append(b);
   });
 }
 function markPlayingBar(i) { document.querySelectorAll('.bar').forEach((b, k) => b.classList.toggle('playing', k === i)); }
@@ -1969,7 +2057,7 @@ function say(text, quick, actions) {
   const p = $('line'); clearInterval(typeTimer);
   if (reduceMotion || quick) p.textContent = text;
   else { let i = 0; p.textContent = ''; typeTimer = setInterval(() => { i += 1; p.textContent = text.slice(0, i); if (i >= text.length) clearInterval(typeTimer); }, 28); }
-  if (actions) { const a = $('act'); a.innerHTML = ''; a.classList.toggle('grid', actions.length > 3); a.classList.toggle('odd', actions.length % 2 === 1); actions.forEach(([label, fn, ghost]) => { const b = document.createElement('button'); b.type = 'button'; const [main, sub] = label.split('\n'); b.textContent = main; if (sub) { const sm = document.createElement('small'); sm.textContent = sub; b.append(sm); } if (ghost) b.className = 'ghost'; b.addEventListener('click', () => { initAudio(); fn(); }); a.append(b); }); }
+  if (actions) { const a = $('act'); a.innerHTML = ''; const ch = actions.some(x => x[2] === 'choice' || x[2] === 'locked'); a.classList.toggle('choices', ch); a.classList.toggle('grid', !ch && actions.length > 3); a.classList.toggle('odd', actions.length % 2 === 1); actions.forEach(([label, fn, ghost]) => { const b = document.createElement('button'); b.type = 'button'; const [main, sub] = label.split('\n'); b.textContent = main; if (sub) { const sm = document.createElement('small'); sm.textContent = sub; b.append(sm); } if (ghost === true) b.className = 'ghost'; else if (ghost) b.className = ghost; if (ghost === 'locked') b.disabled = true; b.addEventListener('click', () => { initAudio(); fn(); }); a.append(b); }); }
 }
 function talk(lines, done, lastLabel = '시작 ▸') { let i = 0; const next = () => { if (i >= lines.length) return done(); const last = i === lines.length - 1; say(lines[i++], false, [[last ? lastLabel : '다음 ▸', next]]); }; next(); }
 function setScene(size) { $('scene').dataset.size = size; sizeHeroine(); }
@@ -1988,7 +2076,7 @@ function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add(
 function openStage(i) {
   G.stage = i; G.mode = 'intro'; G.misses = 0; updateMiss(); stopLoop(); markPlayingBar(-1);
   const st = STAGES[i]; $('stageLabel').textContent = `${i + 1}소절 · ${st.title}`; expr.base = 'idle';
-  setScene('big'); showPlayUI(false); $('act').innerHTML = ''; renderBars();
+  setScene('big'); showPlayUI(false); $('simPanel').hidden = true; $('songStrip').hidden = false; $('act').innerHTML = ''; renderBars();
   G.guide = null; talk(st.intro, () => { G.mode = 'play'; setScene('small'); buildBoard(i); showPlayUI(true); startLoop();
     if (st.guide && (!prog().stars[i] || SONG.lesson)) { G.guide = { steps: st.guide, i: 0 }; applyGuide(); } else say(CAST[G.char].start, true, []); });
 }
@@ -1998,16 +2086,17 @@ function playSong() {
 }
 function onSongEnd() {
   if (G.mode !== 'song') return; stopLoop(); markPlayingBar(-1); G.mode = 'ending';
-  talk(SONG.ending, () => say(CAST[G.char].again, true, [['다시 듣기', playSong], ['곡 고르기', title, true]]), '다음 ▸');
+  if (G.afterSong) { const fn = G.afterSong; G.afterSong = null; return fn(); }
+  talk(SONG.ending, () => say(CAST[G.char].again, true, [['다시 듣기', playSong], ['곡 고르기', freePlay, true]]), '다음 ▸');
 }
-function title() {
-  G.mode = 'title'; setChar('ria'); expr.base = 'idle'; setScene('big'); showPlayUI(false); renderBars();
+function freePlay() {
+  G.mode = 'free'; G.simLock = false; $('songStrip').hidden = false; $('simPanel').hidden = true; setChar('ria'); expr.base = 'idle'; setScene('big'); showPlayUI(false); renderBars();
   const fresh = SONGS.every(sg => P.songs[sg.id].stars.every(n => !n));
   stopLoop(); $('stageLabel').textContent = '옥상 라이브 D-3';
   say(fresh ? '와 줬구나! 나는 리아. 이번 주말 옥상 라이브에서 부를 곡들 악보가 다 번져 버렸어. 처음이라면 풀이 연습으로 숫자 보는 법부터 알려 줄게!'
     : '어서 와! 오늘은 어떤 곡을 복원해 볼까?', false,
     SONGS.map(sg => { const st = P.songs[sg.id].stars, done = st.filter(Boolean).length;
-      return [`${sg.title}\n${sg.lesson ? '숫자 맞추는 요령' : CAST[sg.singer].name + ' · ' + LEADS[sg.lead]} · ${done}/${st.length}`, () => { selectSong(sg.id); openStage(done ? Math.min(P.songs[sg.id].unlocked, st.length - 1) : 0); }, sg.id !== (fresh ? 'lesson' : P.last)]; }));
+      return [`${sg.title}\n${sg.lesson ? '숫자 맞추는 요령' : CAST[sg.singer].name + ' · ' + LEADS[sg.lead]} · ${done}/${st.length}`, () => { selectSong(sg.id); openStage(done ? Math.min(P.songs[sg.id].unlocked, st.length - 1) : 0); }, sg.id !== (fresh ? 'lesson' : P.last)]; }).concat([['← 처음으로\n메인 메뉴', mainMenu, true]]));
 }
 
 $('hintBtn').addEventListener('click', hint);
@@ -2052,7 +2141,252 @@ $('muteBtn').addEventListener('click', () => { G.muted = !G.muted; $('muteBtn').
 document.addEventListener('visibilitychange', () => { if (document.hidden && G.playing && G.mode !== 'song') stopLoop(); });
 addEventListener('resize', () => { sizeHeroine(); fitBoard(); });
 
-function boot(data) { if (data && data.progress) Object.assign(P, migrate(data.progress)); selectSong(P.last); title(); sizeHeroine(); requestAnimationFrame(frame); }
+function boot(data) { if (data && data.progress) Object.assign(P, migrate(data.progress)); selectSong(P.last); mainMenu(); sizeHeroine(); requestAnimationFrame(frame); }
 hc.addEventListener('transitionend', sizeSky);
+/* ---------- dating sim: 12 weeks to the festival ---------- */
+const STATS = { play: '연주', comp: '작곡', sense: '센스' };
+const HEROINES = ['ria', 'yuna', 'hana', 'sora', 'arin', 'sena'];
+const jong = s => { const c = s.charCodeAt(s.length - 1); return c >= 0xAC00 && c <= 0xD7A3 && (c - 0xAC00) % 28 !== 0; };
+const ga = s => s + (jong(s) ? '이' : '가'), wa = s => s + (jong(s) ? '과' : '와'), ya = s => s + (jong(s) ? '아' : '야');
+const fmt = t => t.replace(/\{N야\}/g, () => ya(S.name)).replace(/\{N\}/g, () => S.name);
+const SIM = {
+  ria: { place: '옥상', pref: 'sense', song: 'starlight', grade: '1학년 · 아이돌 지망',
+    meet: { lines: ['#옥상 문을 열자, 누군가 노래하고 있었다.', '♪ 반짝반짝… 앗! 들었어? 들었구나…!', '나는 리아. 1학년이고, 언젠가 아이돌이 되는 게 꿈이야. 지금은 혼자 연습 중!'],
+      opts: [['노래 진짜 잘한다!', 15, '정말? 헤헤, 칭찬받으니까 힘이 난다!'], ['아이돌? 대단한 꿈이네.', 10, '응! 웃지 않아 줘서 고마워.'], ['여기 출입 금지 아니야?', 0, '으… 선생님한테는 비밀로 해 줘!']],
+      after: ['너도 음악 해? 키보드? 그럼 언젠가 같이 하자!'] },
+    talks: [
+      { lines: ['요즘 무대 의상 고민 중이야. 고양이 귀 헤드폰… 너무 튀나?'], opts: [['리아한테 딱이야.', 15, '헤헤, 그럼 이걸로 결정!'], ['좀 더 어른스러운 게 어때?', 3, '으음… 그것도 생각해 볼게.'], ['의상보다 노래가 중요하지.', 8, '맞는 말이야! 그래도 귀여운 것도 중요해~']] },
+      { lines: ['가끔 무서워. 무대 위에서 아무도 안 들어 주면 어떡하지 하고…'], opts: [['내가 맨 앞에서 들을게.', 15, '…정말? 그 말, 잊지 않을 거야.'], ['같이 응원 구호를 만들자!', 20, '꺄, 좋아! 너 진짜 센스 있다!', 'sense', 4], ['다들 그런 거지 뭐.', 0, '…응, 그렇겠지.']] },
+      { lines: ['있잖아, 너랑 연습하는 시간이 제일 좋아. …왜 그런지는 비밀!'], opts: [['나도 그래.', 15, '에헤헤… 얼굴 빨개진 거 보지 마!'], ['비밀이 뭔데?', 8, '그, 그건 축제 날 말해 줄게!'], ['연습이 좋은 거구나.', 0, '…바보.']] }],
+    small: ['오늘도 옥상에서 발성 연습! 같이 할래?', '헤헤, {N야}! 너 오니까 기분 좋다.'],
+    love: ['끝났다…! 우리 노래, 다들 따라 불렀어!', '있잖아, 연습이 제일 좋았던 이유… 너랑이라서였어.', '앞으로도 내 맨 앞자리는 너야. 약속!'],
+    friend: '오늘 무대 최고였어! 다음엔 더 큰 무대 가자!' },
+  yuna: { place: '음악실', pref: 'comp', song: 'rain', grade: '2학년 · 피아노 보컬',
+    meet: { lines: ['#방과 후 음악실. 피아노 소리가 뚝 멈췄다.', '…누구야. 노크 정도는 하지.', '유나. 2학년. 여기 피아노는 내가 매일 쓰고 있어.'],
+      opts: [['곡 좋더라. 직접 쓴 거야?', 15, '…응. 아직 아무한테도 안 들려줬는데.'], ['나도 키보드 쳐. 같이 써도 될까?', 10, '…요일 정해서 쓰면 되겠네.'], ['미안, 바로 나갈게.', 3, '…딱히 나가라고는 안 했어.']],
+      after: ['…다음에 올 때는 노크해.'] },
+    talks: [
+      { lines: ['…이 코드 진행, 어떻게 생각해? 솔직하게.'], opts: [['여기 7th를 넣으면 더 아련해질 것 같아.', 20, '…맞아. 그게 내가 찾던 소리야.', 'comp', 4], ['잘 모르겠지만 좋아.', 8, '…그런 대답도 나쁘진 않네.'], ['너무 어둡지 않아?', 0, '어두운 게 내 곡이야.']] },
+      { lines: ['리아가 나보고 웃는 연습 좀 하래. …웃는 거 어려워.'], opts: [['지금 그대로도 좋아.', 15, '…그런 말, 처음 들어.'], ['같이 거울 보고 연습할까?', 8, '…너 앞에서? 절대 싫어.'], ['그럼 내가 웃겨 줄게.', 5, '…해 봐. …안 웃겨.']] },
+      { lines: ['비 오는 날 만든 노래, 사실 너한테 처음 들려준 거야.'], opts: [['영광이야.', 15, '…과장은. 근데, 고마워.'], ['왜 나한테?', 12, '…몰라. 그냥, 너라면 괜찮을 것 같았어.'], ['다른 사람한테도 들려줘.', 0, '…그래.']] }],
+    small: ['…왔어? 앉아. 방금 새 코드 찾았어.', '…오늘은 비 안 오네.'],
+    love: ['…박수 소리, 아직도 귀에 남아 있어.', '비 오는 날 만든 노래가, 오늘은 별빛 아래서 울렸네.', '…좋아해. 두 번은 안 말해.'],
+    friend: '…나쁘지 않았어. 다음에도 반주 부탁해.' },
+  hana: { place: '체육관', pref: 'play', song: 'jump', grade: '1학년 · 락 보컬 지망',
+    meet: { lines: ['#체육관 무대에서 누군가 마이크도 없이 노래를 부르고 있다.', '예~이! 오늘도 목 상태 최고! …어? 관객이다!', '나 하나! 1학년, 락 보컬 지망! 밴드 멤버 모집 중인데 아무도 안 와~'],
+      opts: [['나 키보드 쳐. 같이 하자!', 15, '진짜?! 오늘 운 좋다! 하이파이브!'], ['목소리 엄청 크다…', 8, '하하, 칭찬이지? 칭찬으로 들을게!'], ['체육관에서 그러면 혼나지 않아?', 0, '괜찮아, 배구부 선배들이 박수 쳐 줬거든!']],
+      after: ['다음에 또 와! 내 노래 들으러!'] },
+    talks: [
+      { lines: ['기타 솔로 배우고 싶은데 손가락이 안 따라와~'], opts: [['내가 운지법 알려 줄게.', 20, '우와, 손가락이 움직인다! 너 천재야?', 'play', 4], ['매일 조금씩 하면 돼.', 10, '그치? 오늘부터 매일 100번!'], ['보컬이니까 노래나 해.', 0, '치사해! 다 하고 싶단 말이야!']] },
+      { lines: ['사실 중학교 때 밴드가 깨졌었어. 다들 나보고 진지하지 않대.'], opts: [['넌 누구보다 진지해.', 15, '…헤헤. 그 말 듣고 싶었나 봐.'], ['이번엔 잘될 거야.', 10, '응! 너랑이면 왠지 그럴 것 같아!'], ['좀 시끄럽긴 하지.', 0, '윽… 반박할 수가 없다.']] },
+      { lines: ['축제 끝나도 계속 같이 밴드 해 줄 거지? 약속!'], opts: [['약속.', 15, '새끼손가락 걸었다! 취소 불가야!'], ['졸업할 때까지는.', 8, '짧아! 평생으로 해!'], ['생각해 볼게.', 0, '에엥~ 그게 뭐야.']] }],
+    small: ['점심 먹었어? 나는 두 번 먹었어!', '오늘 목 상태 120%야! {N야}, 들어 봐!'],
+    love: ['최고였어!!! 목 다 쉬었다!', '중학교 때 못 했던 거, 너 덕분에 다 했어.', '그러니까… 밴드 말고도, 평생 같이 있어 줄래?'],
+    friend: '와아, 재밌었다! 다음 라이브도 같이 하는 거다!' },
+  sora: { place: '도서관', pref: 'comp', song: 'lullaby', grade: '1학년 · 도서부',
+    meet: { lines: ['#도서관 구석. 작은 오르골 소리가 들린다.', '아, 저기… 시끄러웠죠? 죄송해요…', '소라예요. 1학년, 도서부… 노래는, 그냥 혼자 흥얼거리는 정도라…'],
+      opts: [['오르골 소리 예쁘다.', 15, '…할머니가 주신 거예요. 예쁘다고 해 줘서 기뻐요.'], ['흥얼거린 거 다시 들려줄래?', 8, '에, 에엣…! 다, 다음에요…!'], ['도서관에선 조용히 해야지.', -5, '…네. 죄송해요.']],
+      after: ['저, 또… 와 주실 건가요?'] },
+    talks: [
+      { lines: ['저, 시를 써 봤는데… 노래 가사가 될 수 있을까요…?'], opts: [['이 줄에 멜로디를 붙여 볼게.', 20, '와… 제 글이 노래가 됐어요…!', 'comp', 4], ['읽어 봐도 돼?', 12, '네, 네…! 너무 자세히는 보지 마세요…'], ['가사는 쉬워야 해.', 0, '…역시 어렵네요.']] },
+      { lines: ['사람 많은 곳에 가면 목소리가 안 나와요…'], opts: [['나한테 하는 것처럼 하면 돼.', 15, '…당신 앞에서는, 신기하게 괜찮아요.'], ['연습하면 나아질 거야.', 8, '…네. 노력해 볼게요.'], ['그럼 무대는 무리 아니야?', -5, '…그렇죠.']] },
+      { lines: ['오르골 자장가, 축제에서 부르고 싶어요. …당신 반주로요.'], opts: [['꼭 같이 하자.', 15, '약속… 했어요. 이제 도망 못 가요.'], ['떨리지 않겠어?', 8, '떨려요. 그래도 해 보고 싶어요.'], ['다른 사람 반주는 어때?', -5, '…당신이 아니면 싫어요.']] }],
+    small: ['이 책, 가사 쓸 때 도움이 돼요.', '…와 주셔서 기뻐요.'],
+    love: ['…끝까지 노래했어요. 저, 노래했어요…!', '당신 반주가 들려서, 하나도 안 무서웠어요.', '이 오르골처럼… 계속 곁에 있어도 될까요?'],
+    friend: '떨렸지만… 같이 서 줘서 고마웠어요.' },
+  arin: { place: '상점가', pref: 'sense', song: 'festival', grade: '2학년 · 화과자집 딸',
+    meet: { lines: ['#상점가의 화과자 가게. 가게 앞에서 누군가 노래하며 손님을 부르고 있다.', '모찌~ 모찌~ 말랑말랑 모찌 사세요~ 어머, 손님!', '나 아린! 이 가게 딸이자 2학년, 상점가 축제 노래 담당이야!'],
+      opts: [['노래 듣고 왔어. 모찌 하나 줘.', 15, '센스 있네! 덤으로 하나 더!'], ['그 노래 직접 만든 거야?', 10, '응! 근데 가사만. 멜로디는 늘 같아~'], ['다이어트 중이라서…', 0, '그럼 구경만 하고 가~ 노래는 공짜야!']],
+      after: ['또 와~ 단골 되면 서비스 많이 줄게!'] },
+    talks: [
+      { lines: ['새 메뉴 이름 짓는 중인데, 별 모양 모찌! 이름 추천해 줘!'], opts: [["'별빛 모찌' 어때?", 20, '천재다! 바로 간판에 쓸게!', 'sense', 4], ['별 모찌?', 8, '음~ 무난! 무난해서 좋아!'], ['그냥 모찌.', 0, '성의가 없잖아~!']] },
+      { lines: ['가게를 물려받을지, 노래할지… 가끔 고민돼.'], opts: [['둘 다 하면 되지.', 15, '…그런 방법이 있었네! 노래하는 화과자집!'], ['아린이 하고 싶은 걸 해.', 10, '응. 진지하게 들어 줘서 고마워.'], ['가게가 안정적이지.', 0, '…그렇지. 다들 그렇게 말해.']] },
+      { lines: ['축제 날 유카타 입고 갈 건데… 같이 노점 돌래?'], opts: [['당연하지.', 15, '약속이다! 금붕어 건지기 대결이야!'], ['공연 끝나고라면.', 10, '좋아! 그럼 끝나고 불꽃놀이 같이 보자!'], ['바쁠 것 같아.', 0, '…흥, 알았어.']] }],
+    small: ['신메뉴 시식해 볼래? 공짜야!', '상점가 아저씨들이 너 누구냐고 물어봤어~'],
+    love: ['불꽃놀이 시작한다! 빨리빨리, 이쪽!', '…노래하는 화과자집, 진짜 해 볼래. 너랑 같이라면.', '그러니까, 다음 축제도, 그다음 축제도 같이 있어 줘!'],
+    friend: '수고했어! 가게로 와, 모찌 쏠게!' },
+  sena: { place: '방송실', pref: 'play', song: 'neon', grade: '3학년 · 방송부장',
+    meet: { lines: ['#점심시간 방송실. 시티팝이 흐르던 스피커가 뚝 멈췄다.', '어머, 후배님? 방송실은 관계자 외 출입 금지인데.', '세나야. 3학년, 방송부장. 점심 방송 선곡은 전부 내 취향이지.'],
+      opts: [['오늘 선곡 최고였어요.', 15, '후후, 귀가 좋네. 마음에 들어.'], ['선배도 노래해요?', 10, '가끔. 방송 끝나고 아무도 없을 때만.'], ['길을 잃었어요.', 3, '그럼 정문까지 데려다줄까? …농담이야.']],
+      after: ['또 놀러 와, 후배님. 사탕 정도는 줄게.'] },
+    talks: [
+      { lines: ['후배님, 이 레코드 B면 들어 봤어? 진짜는 B면이거든.'], opts: [['이 베이스 라인, 따라 쳐 볼게요.', 20, '…어머. 생각보다 훨씬 멋진데?', 'play', 4], ['선배 추천이면 들어 볼게요.', 10, '착하네. 다음엔 감상문 받을 거야.'], ['요즘 누가 레코드 들어요.', 0, '나. 그리고 이제 너.']] },
+      { lines: ['졸업하면 라디오 DJ가 되고 싶어. 근데 다들 현실적이지 않대.'], opts: [['선배 목소리면 충분해요.', 15, '…그런 말 쉽게 하면 안 돼. 진짜 믿어 버리잖아.'], ['꿈은 꾸라고 있는 거죠.', 10, '후후, 맞아.'], ['현실도 중요하죠.', 0, '…너까지 그러기야?']] },
+      { lines: ['드라이브 곡이 완성되면, 마지막 방송에 틀어도 될까? 우리 둘 이름으로.'], opts: [['영광이에요.', 15, '그럼 약속. 졸업 선물로 받을게.'], ['제 이름은 빼 주세요.', 5, '겸손하긴. 안 빼 줄 거야.'], ['부끄러워요.', 8, '그 표정 보려고 한 말이야.']] }],
+    small: ['오늘 점심 방송, 후배님 들으라고 고른 곡이야.', '표정이 피곤해 보여. 사탕 먹을래?'],
+    love: ['후배님, 아니… {N}.', '마지막 방송, 우리 곡으로 끝낼 거야. 그리고 다음 방송도.', '졸업해도 내 첫 번째 청취자는 너야. 알겠지?'],
+    friend: '후배님, 수고했어. 다음 방송 게스트로 불러 줄게.' }
+};
+const PRACTICE = { play: '건반 앞에서 손가락이 저릴 때까지 연습했다.', comp: '노트에 멜로디를 적고 지우기를 몇 번이고 반복했다.', sense: '잡지와 영상을 보며 무대 연출을 연구했다.' };
+const WEEKS = 12;
+let S = null;
+const simStore = {
+  load() { try { return JSON.parse(localStorage.getItem('starlight-sim') || 'null'); } catch (e) { return null; } },
+  save() { try { localStorage.setItem('starlight-sim', JSON.stringify(S)); } catch (e) {} },
+  clear() { try { localStorage.removeItem('starlight-sim'); } catch (e) {} },
+  endings() { try { return JSON.parse(localStorage.getItem('starlight-endings') || '{}'); } catch (e) { return {}; } },
+  addEnding(k) { const e = simStore.endings(); e[k] = true; try { localStorage.setItem('starlight-endings', JSON.stringify(e)); } catch (_) {} }
+};
+function newSim(name) {
+  S = { name, week: 1, stats: { play: 1, comp: 1, sense: 1 }, aff: {}, met: {}, talks: {}, bars: {} };
+  HEROINES.forEach(h => { S.aff[h] = 0; S.met[h] = false; S.talks[h] = 0; S.bars[h] = 0; });
+}
+const level = a => a < 20 ? '아는 사이' : a < 40 ? '친구' : a < 60 ? '친한 친구' : a < 80 ? '두근두근' : '좋아해';
+const hearts = a => '♥'.repeat(Math.min(5, Math.floor(a / 20))) + '♡'.repeat(5 - Math.min(5, Math.floor(a / 20)));
+
+/* --- scene runner: lines starting with # are narration, others are spoken by `who` --- */
+function speak(who, line) { const narr = line.startsWith('#'); setChar(narr ? 'me' : who); return fmt(narr ? line.slice(1) : line); }
+function scene(who, lines, done, lastLabel = '다음 ▸') {
+  setScene('big'); let i = 0;
+  const next = () => { if (i >= lines.length) return done(); const t = speak(who, lines[i++]); say(t, false, [[i >= lines.length ? lastLabel : '다음 ▸', next]]); };
+  next();
+}
+function choose(who, opts, done) {
+  setChar(who);
+  const acts = opts.map(([label, gain, reply, stat, need]) => {
+    const locked = stat && S.stats[stat] < need;
+    return [(stat ? `[${STATS[stat]} ${need}] ` : '') + label + (locked ? ' (부족)' : ''), () => { like(who, gain); say(fmt(reply), false, [['다음 ▸', done]]); }, locked ? 'locked' : 'choice'];
+  });
+  say('', true, acts); $('line').textContent = '▼ 어떻게 대답할까?';
+}
+function like(who, n) {
+  S.aff[who] = Math.max(0, Math.min(100, S.aff[who] + n));
+  toast(`${CAST[who].name} ♥ ${n > 0 ? '+' + n : n}`);
+  expr.temp = n >= 12 ? 'happy' : n <= 0 ? 'oops' : null; expr.tempUntil = performance.now() + 1800;
+}
+
+/* --- status panel --- */
+const thumbCache = {};
+function thumb(who, met) {
+  const key = who + met; if (thumbCache[key]) return thumbCache[key];
+  const full = document.createElement('canvas'); full.width = 96; full.height = 108; full.getContext('2d').putImageData(faceOf(who, 'idle'), 0, 0);
+  const c = document.createElement('canvas'); c.width = 64; c.height = 64; const x = c.getContext('2d'); x.drawImage(full, 16, 14, 64, 64, 0, 0, 64, 64);
+  if (!met) { x.globalCompositeOperation = 'source-in'; x.fillStyle = '#3d3785'; x.fillRect(0, 0, 64, 64); }
+  return (thumbCache[key] = c);
+}
+function renderSim() {
+  const left = WEEKS - S.week + 1;
+  $('simHead').innerHTML = `<b>${S.week}주차</b><span>${left > 1 ? `축제까지 ${left}주` : '이번 주 금요일이 축제!'}</span>`;
+  $('weeks').innerHTML = Array.from({ length: WEEKS }, (_, i) => `<i class="${i + 1 < S.week ? 'past' : i + 1 === S.week ? 'now' : ''}"></i>`).join('');
+  $('stats').innerHTML = Object.entries(STATS).map(([k, n]) => `<span>${n}</span><span class="meter" style="--c:${{ play: '#6ccbff', comp: '#b597ff', sense: '#ff8fc8' }[k]}"><b style="width:${S.stats[k] * 10}%"></b></span><span class="num">${S.stats[k]}</span>`).join('');
+  const g = $('girls'); g.innerHTML = '';
+  HEROINES.forEach(h => {
+    const met = S.met[h], d = document.createElement('div'); d.className = 'girl'; d.style.setProperty('--c', CAST[h].tag);
+    d.append(thumb(h, met));
+    d.insertAdjacentHTML('beforeend', met ? `<span class="nm">${CAST[h].name}</span><span class="hearts" aria-label="호감도 ${S.aff[h]}">${hearts(S.aff[h])}</span><span class="lv">${level(S.aff[h])} · ♪${S.bars[h]}/5</span>`
+      : `<span class="nm">???</span><span class="lv">${SIM[h].place} 어딘가</span>`);
+    g.append(d);
+  });
+}
+function showHub(on) { $('simPanel').hidden = !on; $('songStrip').hidden = on; if (on) { showPlayUI(false); renderSim(); } }
+
+/* --- flow --- */
+function simStart() {
+  G.mode = 'sim'; G.simLock = true; stopLoop(); setScene('big'); setChar('me'); showHub(false); $('songStrip').hidden = true;
+  $('stageLabel').textContent = '프롤로그';
+  say('내 이름은…', true, [['결정', () => { const v = ($('nameInput').value || '').trim().slice(0, 6) || '하루'; newSim(v); CAST.me.name = v; G.char = null; setChar('me'); prologue(); }]]);
+  const inp = document.createElement('input'); inp.id = 'nameInput'; inp.maxLength = 6; inp.value = '하루'; inp.setAttribute('aria-label', '주인공 이름');
+  $('act').prepend(inp); setTimeout(() => inp.focus(), 50);
+}
+function prologue() {
+  scene('me', ['#봄. 나는 별빛고 경음부의 하나뿐인 부원이다.', '#악기는 키보드. 곡도 몇 개 써 뒀다. 문제는… 노래할 사람이 없다는 것.', `#${WEEKS}주 뒤 학교 축제. 그 무대에 함께 설 보컬을 찾아야 한다.`,
+    '#이 학교에는 전설이 있다. 축제 마지막 곡을 함께 부른 두 사람은, 별빛처럼 오래 이어진다고.', '#…일단 학교부터 둘러보자.'], hub, '시작 ▸');
+}
+function hub() {
+  G.mode = 'sim'; G.simLock = true; stopLoop(); simStore.save(); setScene('big'); setChar('me'); expr.base = 'idle'; showHub(true);
+  $('stageLabel').textContent = `${S.week}주차 · 축제 D-${WEEKS - S.week + 1}주`;
+  const anyMet = HEROINES.some(h => S.met[h]);
+  say(S.week === WEEKS ? '마지막 주다. 축제 전에 할 일은?' : `${S.week}주차. 이번 주엔 뭘 할까?`, false, [
+    ['연습하기\n연주·작곡·센스 올리기', practiceMenu], ['학교 둘러보기\n새로운 만남', exploreMenu],
+    ['만나러 가기\n대화로 호감도 올리기', anyMet ? meetMenu : () => toast('아직 만난 사람이 없어요. 학교를 둘러보세요!'), anyMet ? false : true],
+    ['합주하기\n퍼즐로 곡 완성하기', anyMet ? duetMenu : () => toast('먼저 함께할 보컬을 만나야 해요.'), anyMet ? false : true]]);
+}
+const back = ['← 돌아가기', () => hub(), true];
+function endWeek() {
+  S.week++; simStore.save();
+  if (S.week > WEEKS) return finale();
+  hub();
+}
+function practiceMenu() {
+  say('무엇을 연습할까?', true, Object.entries(STATS).map(([k, n]) => [`${n} 연습\n지금 ${S.stats[k]}`, () => practice(k)]).concat([back]));
+}
+function practice(k) {
+  showHub(true); S.stats[k] = Math.min(10, S.stats[k] + 2); renderSim(); toast(`${STATS[k]} +2`);
+  const fans = HEROINES.filter(h => S.met[h] && SIM[h].pref === k);
+  const lines = ['#' + PRACTICE[k]];
+  if (fans.length && Math.random() < 0.5) { const h = fans[Math.floor(Math.random() * fans.length)]; S.aff[h] = Math.min(100, S.aff[h] + 3); lines.push(`#연습하는 모습을 ${ga(CAST[h].name)} 몰래 보고 갔다는 소문이 들렸다. (♥ +3)`); }
+  scene('me', lines, endWeek, '한 주 마치기');
+}
+function exploreMenu() {
+  say('어디로 가 볼까?', true, HEROINES.map(h => [`${SIM[h].place}\n${S.met[h] ? CAST[h].name + ' 있음' : '???'}`, () => explore(h), S.met[h] ? true : false]).concat([back]));
+}
+function explore(h) {
+  showHub(false); $('songStrip').hidden = true;
+  if (!S.met[h]) {
+    const m = SIM[h].meet; S.met[h] = true; expr.base = 'idle';
+    scene(h, m.lines, () => choose(h, m.opts, () => scene(h, m.after, () => { like(h, 5); endWeek(); }, '한 주 마치기')));
+  } else smallTalk(h);
+}
+function smallTalk(h) {
+  const t = SIM[h].small[Math.floor(Math.random() * SIM[h].small.length)];
+  scene(h, ['#' + SIM[h].place + '에서 ' + ga(CAST[h].name) + ' 반겨 주었다.', t], () => { like(h, 4); endWeek(); }, '한 주 마치기');
+}
+function meetMenu() {
+  say('누구를 만나러 갈까?', true, HEROINES.filter(h => S.met[h]).map(h => [`${CAST[h].name}\n${hearts(S.aff[h])} ${level(S.aff[h])}`, () => meet(h)]).concat([back]));
+}
+function meet(h) {
+  showHub(false); $('songStrip').hidden = true; expr.base = 'idle';
+  const n = S.talks[h];
+  if (n >= SIM[h].talks.length) return smallTalk(h);
+  S.talks[h]++; const t = SIM[h].talks[n];
+  scene(h, ['#' + SIM[h].place + '에서 ' + CAST[h].name + (jong(CAST[h].name) ? '을' : '를') + ' 만났다.'].concat(t.lines), () => choose(h, t.opts, endWeek));
+}
+function duetMenu() {
+  say('누구와 합주할까?', true, HEROINES.filter(h => S.met[h]).map(h => { const b = S.bars[h], sg = SONGS.find(s => s.id === SIM[h].song);
+    return [`${CAST[h].name} · ${sg.title}\n${b >= 5 ? '완성! 전곡 연주' : `${b + 1}소절 차례 (${b}/5)`}`, () => duet(h)]; }).concat([back]));
+}
+function duet(h) {
+  showHub(false); selectSong(SIM[h].song); $('songStrip').hidden = false;
+  if (S.bars[h] >= 5) { G.afterSong = () => { like(h, 4); scene(h, [SIM[h].small[0]], endWeek, '한 주 마치기'); }; return playSong(); }
+  G.after = stars => {
+    S.bars[h]++; const bonus = 8 + (stars === 3 ? 2 : 0) + (S.stats[SIM[h].pref] >= 4 ? 4 : 0); like(h, bonus); S.stats.play = Math.min(10, S.stats.play + 1);
+    if (S.bars[h] >= 5) { stopLoop(); scene(h, ['#우리 곡이 처음으로 끝까지 이어졌다.'].concat(SONG.ending), () => { like(h, 10); endWeek(); }, '한 주 마치기'); }
+    else endWeek();
+  };
+  openStage(S.bars[h]);
+}
+function finale() {
+  G.mode = 'sim'; showHub(false); $('songStrip').hidden = true; setScene('big'); simStore.clear();
+  $('stageLabel').textContent = '축제 당일';
+  const met = HEROINES.filter(h => S.met[h]).sort((a, b) => S.aff[b] - S.aff[a] || S.bars[b] - S.bars[a]);
+  const best = met[0];
+  const intro = ['#그리고, 축제 날.', '#강당은 생각보다 훨씬 많은 사람으로 가득 찼다.'];
+  const finish = (title, key, lines) => scene('me', lines, () => { if (key) simStore.addEnding(key); setChar('me'); say(title, false, [['타이틀로', mainMenu]]); }, '다음 ▸');
+  const song = (h, after) => { selectSong(SIM[h].song); $('songStrip').hidden = false; G.afterSong = after; playSong(); };
+  if (best && S.aff[best] >= 70 && S.bars[best] >= 5) {
+    scene('me', intro.concat([`#무대 뒤에서 ${ga(CAST[best].name)} 기다리고 있었다.`]), () => scene(best, ['마지막 곡, 같이 하자.'], () => song(best, () => {
+      expr.base = 'happy'; scene(best, SIM[best].love, () => finish(`♥ ${CAST[best].name} 엔딩 · 별빛처럼 오래`, best, ['#축제 마지막 곡을 함께 부른 두 사람은, 별빛처럼 오래 이어진다.', '#전설은, 아무래도 진짜였나 보다.']), '다음 ▸');
+    }), '무대로 ▸'), '다음 ▸');
+  } else if (best && (S.aff[best] >= 45 || S.bars[best] >= 5)) {
+    const end = () => scene(best, [SIM[best].friend], () => finish(`♪ ${CAST[best].name} 우정 엔딩`, 'f-' + best, ['#고백은 하지 못했지만, 좋은 무대였다.', '#…다음 축제에는, 조금 더 용기를 내 보자.']));
+    scene('me', intro.concat([`#${wa(CAST[best].name)} 함께 무대에 섰다.`]), () => S.bars[best] >= 5 ? song(best, end) : end());
+  } else {
+    finish('솔로 엔딩 · 혼자만의 무대', 'solo', intro.concat(['#결국 혼자 무대에 섰다.', '#박수는 작았지만, 끝까지 내 노래였다.', '#…다음엔 꼭, 누군가와 함께.']));
+  }
+}
+let titleCycle = null;
+function mainMenu() {
+  G.mode = 'title'; G.simLock = false; G.after = G.afterSong = null; stopLoop(); setScene('big'); showHub(false); showPlayUI(false); $('songStrip').hidden = true;
+  $('stageLabel').textContent = '별빛 멜로디'; expr.base = 'idle';
+  let k = 0; setChar(HEROINES[0]); clearInterval(titleCycle);
+  titleCycle = setInterval(() => { if (G.mode !== 'title') return clearInterval(titleCycle); k = (k + 1) % HEROINES.length; setChar(HEROINES[k]); $('who').textContent = CAST[HEROINES[k]].name; }, 2600);
+  const save = simStore.load(), ends = Object.keys(simStore.endings()).filter(k => HEROINES.includes(k)).length;
+  say(`축제까지 ${WEEKS}주. 여섯 명의 보컬 중, 누구와 마지막 곡을 부르게 될까? (연애 엔딩 ${ends}/6)`, true, [
+    ['새 게임\n12주의 이야기', () => { clearInterval(titleCycle); simStart(); }],
+    save ? ['이어 하기\n' + save.name + ' · ' + save.week + '주차', () => { clearInterval(titleCycle); S = save; CAST.me.name = S.name; G.char = null; hub(); }] : ['이어 하기\n저장 없음', () => toast('저장된 이야기가 없어요.'), true],
+    ['자유 연주\n6곡 골라 풀기', () => { clearInterval(titleCycle); freePlay(); }, true],
+    ['풀이 연습\n숫자 맞추는 요령', () => { clearInterval(titleCycle); selectSong('lesson'); openStage(0); }, true]]);
+}
+
 window.claude?.hot?.ready ? window.claude.hot.ready(boot) : boot(window.claude?.hot?.data ?? {});
 </script>
