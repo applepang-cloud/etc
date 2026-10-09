@@ -3073,6 +3073,17 @@ function drawBomb(g, x, y, w, h, spark, t = 0) {
 return { shade, rrect, drawBlock, drawBomb };
 })();
 
+// ── js/key-art.js ──
+__mod['key-art'] = (() => {
+// 코덱스 이미지 생성으로 그린 피아노 건반 질감 (가로로 눕힌 건반, webp base64). 보드 왼쪽 건반 패널에 쓴다.
+const KEY_ART = {
+  white: 'UklGRmQEAABXRUJQVlA4IFgEAACQLQCdASqkAYwAPj0ejUSjo6GSjryQOAPEtLdHlm9OBemr3BRvV4HqiAi+ZQw0gRpYOGCq2K3HpD5FJVc2y+64LFZNOKVWjA3MSD1owNzKr7Mf2prRWBhZI6L6g9BHmM937aZ188mZSSrk82aU5LZPPX2ep62V76KB7k6fHq5t2U2ODEVR0wX8FlBpizrb0nTdW2+lydL214f6YGmHG1RrLo4fT0USDMG9JfqbHtPg46JwJVvyxc1TOKVJ05HGidvXf2v0Nr1BNQD2hDZc0/e/92ClCWK+dSyx5ot3ZGHrb6DNEO+fdOUFj1czmH4h6jwUb+YtcZ8+YlWorXpm3NFzotwU2nBHm/uxmPl0CKkjGYWoBPE42/7jsdS/vx4WqQrcpxrNRmGMENeOhikshuMJswJ3oexUuN6S8VSLQGSEBGD3Y7a1pDknmgwfsp/chcE3DSsd9TAk0l8xiw/HnftjrWWbeybv/GkkLIlIOfgMGUG6CEPAAP7/HDseCZlqFQwk1A3bAsCiRpT0z/ZyB6OsDEH9O1LEsaqJ/wbbfIKuEHg6d84gdDos+sVljkUGjyWn/3DplwucyKmTsIOBuCrswp6PuAwS0UAyHBtidZjGeYz3tBCiPmcDpsnvvLTkcY2YVzxAPCvE53LLmvrYNxstJsd4Sz+D6jqwwDiOT+NYAGsHIkypo3j4R4TT/D6IzQhnKF4XFPJRabg1Hq2wa8rmR2RduZSestIDPkDqmxIa31oxAP/twjo9qDVUFpp0t8gBX5Kdmd6mZOdvvmQ9hjPdm3I7elvvq52Qwoxeq5Yibs4+UG3FM9wgrvCz/4sWM7Zzs+n/IPVIXjRxn59Qhp4wNtJ0tfnBIGjaMftDmS1floy+JrUmjopyhdb/vU7zFQ6747z6GjmE4PfGRqEWwR81dpRyBTKrk9tHFxxivPncNtw7OGtxteQWOWka0/U1eecksGpjbneDtR5zMr9yKnwf66FOPYvy5E1dQpERDlZPqLqP7YrvQNk38ZZ5PPvtsbMHBU7zPL4/TSuJjhz6PhiFRGv6G42ur6c70ObazWNUGE7BkGXTPrkw1MCWeQc8tQrIabNHB5SbBpZjupZfbnqgJWgQXgS/iyyJ7dzeuaIXShzOdH54wfLrzdElkPfCPRFwaHt7MEsgnmcWbJiyxQcrZVS+aXe/eKO6ftbavvncwBwnXKmr4eEeRf+3MLekquLMd+uOcJfgo69c0wJ1UH1vasEJa1pb/XSmDHbtZQPMmNhrF8y4FQ0O0rPVwej4NHcRKpHa+JI0dwXlQy4YX5/bD5sg17AtyoUgchXMCQm3+jUiZJKcLV4AFV3nocIs3gDyIB8P6zgRWoQdDV5JHaKNJx4CRC6TDu4YMl6PJE8px/lnvssgQy0ArQWiWYGw2nEyk5/CgJv8RRDDRaC7PzRgFpHMvAX5sF/105UzEjFsJQedqgO6zV3BEYtPNQULJo6PUhje0R8AAA==',
+  black: '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',
+};
+
+return { KEY_ART };
+})();
+
 // ── js/game.js ──
 __mod['game'] = (() => {
 // 게임 본체: 상단 피아노 롤(보드) + 하단 블록 3개.
@@ -3092,6 +3103,17 @@ __mod['game'] = (() => {
 const { makeTray } = __mod['pieces'];
 const { INSTRUMENTS, melodicInst, pianoRows, vocalRows, drumRows, solfege, isBlack } = __mod['instruments'];
 const { drawBlock, drawBomb, rrect, shade } = __mod['draw'];
+const { KEY_ART } = __mod['key-art'];
+// 건반 질감 그림 (읽기 전에는 단색으로 그린다)
+const KEY_IMG = {};
+if (typeof Image !== 'undefined') {
+  for (const [k, data] of Object.entries(KEY_ART)) {
+    KEY_IMG[k] = new Image();
+    KEY_IMG[k].src = `data:image/webp;base64,${data}`;
+  }
+}
+const keyReady = (k) => KEY_IMG[k]?.complete && KEY_IMG[k].naturalWidth > 0;
+
 const SCENE_TIME = 30; // 정지 모드 한 페이지 제한 시간(초)
 const PLAYHEAD_COLS = 1; // 재생선 왼쪽에 보이는 칸 수
 const SCHEDULE_AHEAD = 0.1; // 오디오 예약 선행 시간(초)
@@ -4493,12 +4515,28 @@ class Game {
       const bw = Math.round(kbW * 0.6);
       g.fillStyle = COL.keyWhite;
       g.fillRect(0, top, kbW, n * ch);
+      if (keyReady('white')) {
+        // 흰 건반 하나 = 경계(미-파, 시-도 사이와 검은 건반 가운데) 사이 구간마다 질감 그림 한 장
+        const edges = [top, top + n * ch];
+        for (let r = 0; r < n; r++) {
+          const pc = part.rows[r].key % 12;
+          if (pc === 4 || pc === 11) edges.push(top + r * ch);
+          if (part.rows[r].black) edges.push(top + r * ch + ch / 2);
+        }
+        edges.sort((a, b) => a - b);
+        for (let i = 0; i + 1 < edges.length; i++) {
+          const h = edges[i + 1] - edges[i];
+          if (h > 0.5) g.drawImage(KEY_IMG.white, 0, edges[i], kbW, h);
+        }
+      }
       for (let r = 0; r < n; r++) {
         if (part.rows[r].black) continue;
         const color = lit(r);
         if (color) {
+          g.globalAlpha = 0.82;
           g.fillStyle = color;
           g.fillRect(0, top + r * ch, kbW, ch);
+          g.globalAlpha = 1;
         }
       }
       g.fillStyle = COL.keyLine;
@@ -4513,11 +4551,22 @@ class Game {
         const y = top + r * ch;
         const inset = Math.max(1, ch * 0.06);
         const color = lit(r);
-        rrect(g, -4, y + inset, bw + 4, ch - inset * 2, 3);
-        g.fillStyle = color ? shade(color, -0.25) : COL.keyBlack;
-        g.fill();
-        g.fillStyle = 'rgba(255,255,255,0.12)';
-        g.fillRect(2, y + inset + 1, bw - 5, 1);
+        if (keyReady('black')) {
+          g.drawImage(KEY_IMG.black, -4, y + inset, bw + 4, ch - inset * 2);
+          if (color) {
+            g.globalAlpha = 0.7;
+            rrect(g, -4, y + inset, bw + 4, ch - inset * 2, 3);
+            g.fillStyle = shade(color, -0.25);
+            g.fill();
+            g.globalAlpha = 1;
+          }
+        } else {
+          rrect(g, -4, y + inset, bw + 4, ch - inset * 2, 3);
+          g.fillStyle = color ? shade(color, -0.25) : COL.keyBlack;
+          g.fill();
+          g.fillStyle = 'rgba(255,255,255,0.12)';
+          g.fillRect(2, y + inset + 1, bw - 5, 1);
+        }
       }
       g.fillStyle = COL.keyLabel;
       g.font = `${Math.max(8, Math.min(11, ch * 0.45))}px ${FONT}`;

@@ -15,6 +15,17 @@
 import { makeTray } from './pieces.js';
 import { INSTRUMENTS, melodicInst, pianoRows, vocalRows, drumRows, solfege, isBlack } from './instruments.js';
 import { drawBlock, drawBomb, rrect, shade } from './draw.js';
+import { KEY_ART } from './key-art.js';
+
+// 건반 질감 그림 (읽기 전에는 단색으로 그린다)
+const KEY_IMG = {};
+if (typeof Image !== 'undefined') {
+  for (const [k, data] of Object.entries(KEY_ART)) {
+    KEY_IMG[k] = new Image();
+    KEY_IMG[k].src = `data:image/webp;base64,${data}`;
+  }
+}
+const keyReady = (k) => KEY_IMG[k]?.complete && KEY_IMG[k].naturalWidth > 0;
 
 export const SCENE_TIME = 30; // 정지 모드 한 페이지 제한 시간(초)
 const PLAYHEAD_COLS = 1; // 재생선 왼쪽에 보이는 칸 수
@@ -1417,12 +1428,28 @@ export class Game {
       const bw = Math.round(kbW * 0.6);
       g.fillStyle = COL.keyWhite;
       g.fillRect(0, top, kbW, n * ch);
+      if (keyReady('white')) {
+        // 흰 건반 하나 = 경계(미-파, 시-도 사이와 검은 건반 가운데) 사이 구간마다 질감 그림 한 장
+        const edges = [top, top + n * ch];
+        for (let r = 0; r < n; r++) {
+          const pc = part.rows[r].key % 12;
+          if (pc === 4 || pc === 11) edges.push(top + r * ch);
+          if (part.rows[r].black) edges.push(top + r * ch + ch / 2);
+        }
+        edges.sort((a, b) => a - b);
+        for (let i = 0; i + 1 < edges.length; i++) {
+          const h = edges[i + 1] - edges[i];
+          if (h > 0.5) g.drawImage(KEY_IMG.white, 0, edges[i], kbW, h);
+        }
+      }
       for (let r = 0; r < n; r++) {
         if (part.rows[r].black) continue;
         const color = lit(r);
         if (color) {
+          g.globalAlpha = 0.82;
           g.fillStyle = color;
           g.fillRect(0, top + r * ch, kbW, ch);
+          g.globalAlpha = 1;
         }
       }
       g.fillStyle = COL.keyLine;
@@ -1437,11 +1464,22 @@ export class Game {
         const y = top + r * ch;
         const inset = Math.max(1, ch * 0.06);
         const color = lit(r);
-        rrect(g, -4, y + inset, bw + 4, ch - inset * 2, 3);
-        g.fillStyle = color ? shade(color, -0.25) : COL.keyBlack;
-        g.fill();
-        g.fillStyle = 'rgba(255,255,255,0.12)';
-        g.fillRect(2, y + inset + 1, bw - 5, 1);
+        if (keyReady('black')) {
+          g.drawImage(KEY_IMG.black, -4, y + inset, bw + 4, ch - inset * 2);
+          if (color) {
+            g.globalAlpha = 0.7;
+            rrect(g, -4, y + inset, bw + 4, ch - inset * 2, 3);
+            g.fillStyle = shade(color, -0.25);
+            g.fill();
+            g.globalAlpha = 1;
+          }
+        } else {
+          rrect(g, -4, y + inset, bw + 4, ch - inset * 2, 3);
+          g.fillStyle = color ? shade(color, -0.25) : COL.keyBlack;
+          g.fill();
+          g.fillStyle = 'rgba(255,255,255,0.12)';
+          g.fillRect(2, y + inset + 1, bw - 5, 1);
+        }
       }
       g.fillStyle = COL.keyLabel;
       g.font = `${Math.max(8, Math.min(11, ch * 0.45))}px ${FONT}`;
