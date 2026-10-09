@@ -208,6 +208,9 @@ export class Game {
     this.goodCells = 0;
     this.badCells = 0;
     this.penaltyBank = 0;
+    this.totalTargets = this.parts.reduce((sum, p) => sum + p.noteAt.size, 0);
+    this.pageScores = new Map();
+    this.pageCard = null;
     this.sceneClears = 0;
     this.scenesDone = 0;
     this.particles = [];
@@ -399,6 +402,42 @@ export class Game {
     return out;
   }
 
+  // ---------- 페이지 점수 ----------
+
+  pageKey(part, col) {
+    return `${this.parts.indexOf(part)}:${Math.floor(col / this.song.sceneSteps)}`;
+  }
+
+  addPageScore(part, col, points) {
+    const k = this.pageKey(part, col);
+    this.pageScores.set(k, (this.pageScores.get(k) || 0) + points);
+  }
+
+  // 한 페이지 연주가 끝나면 그 페이지에서 얻은 점수와 연주 퍼센트를 카드로 보여준다
+  showPageCard(part, page) {
+    if (this.free) return;
+    const ss = this.song.sceneSteps;
+    let total = 0;
+    let covered = 0;
+    for (let c = page * ss; c < Math.min(this.length, (page + 1) * ss); c++) {
+      for (const n of part.byCol[c] || []) {
+        total++;
+        if (part.occupied.has(KEY(n.row, c))) covered++;
+      }
+    }
+    if (!total) return;
+    const score = this.pageScores.get(`${this.parts.indexOf(part)}:${page}`) || 0;
+    const name = this.parts.length > 1 ? ` · ${part.inst.name}` : '';
+    this.pageCard = {
+      title: `${page + 1} 페이지${name}`,
+      score,
+      pct: Math.round((covered / total) * 100),
+      color: part.inst.color,
+      t0: this.now,
+      life: 2,
+    };
+  }
+
   // 정지 모드 페이지 끝: reason = clear | timeup | skip
   endPlace(reason) {
     const ph = this.phase;
@@ -409,6 +448,7 @@ export class Game {
       const left = Math.max(0, Math.ceil(ph.deadline - now));
       const bonus = POINTS_CLEAR + left * POINTS_PER_SEC;
       this.score += bonus;
+      this.addPageScore(this.part, ph.s0, bonus);
       this.sceneClears++;
       this.judge('ALL CLEAR', `+${bonus}`);
       this.audio.sparkle();
@@ -588,6 +628,7 @@ export class Game {
       finale: !!ph?.finale,
       live: !!ph?.live,
       progress: ph?.live && !this.free ? Math.max(0, Math.min(1, this.pos / this.length)) : null,
+      percent: this.free || !this.totalTargets ? null : Math.round((this.goodCells / this.totalTargets) * 100),
       bar: Math.max(1, Math.floor(this.pos / this.song.stepsPerBar) + 1),
     });
   }
@@ -599,12 +640,26 @@ export class Game {
       ph.processed++;
       this.playColumn(ph.processed, ph.t0 + (ph.processed - ph.from) * this.stepSec, ph);
     }
+    // 자동 이동(곡 전체): 재생선이 페이지 경계를 지날 때마다 지난 페이지 결과
+    if (ph.live && !ph.page) {
+      const ss = this.song.sceneSteps;
+      const done = now >= ph.end ? Math.ceil(this.length / ss) - 1 : Math.floor(this.pos / ss) - 1;
+      if (done >= 0 && done > (ph.lastCard ?? -1)) {
+        ph.lastCard = done;
+        this.showPageCard(this.parts[0], done);
+      }
+    }
     if (now < ph.end) return;
     if (ph.page && !this.free && this.sceneComplete()) {
       this.score += POINTS_CLEAR;
+      this.addPageScore(ph.part, ph.s0, POINTS_CLEAR);
       this.sceneClears++;
       this.judge('ALL CLEAR', `+${POINTS_CLEAR}`);
       this.audio.sparkle();
+    }
+    // 정지 모드 / 합주의 악기 페이지가 다 흘러갔으면 그 페이지 결과
+    if (!ph.live || ph.page) {
+      if (!ph.finale && ph.view === 'part' && ph.scene != null) this.showPageCard(ph.part, ph.scene);
     }
     if (this.free && ph.live) {
       // 자동 이동 최대 길이까지 갔으면 지금까지 만든 곡으로 완성
@@ -632,7 +687,8 @@ export class Game {
     else this.audio.note(key, t, dur, 0.85);
   }
 
-  // 재생선이 c열에 닿기 직전에 한 번 호출. 덮인 노트(자유 작곡은 놓인 블록)만 소리를 낸다.
+  // 재생선이 c열에 닿기 직전에 한 번 호출. 덮인 노트와 노트 밖에 놓인 블록(그 줄의 음)이 소리를 낸다.
+  // 원곡 듣기는 원래 노트만.
   playColumn(c, t, ph) {
     const start = ph.playFrom || 0;
     if (c < start) {
@@ -666,6 +722,21 @@ export class Game {
         }
         this.sound(part, n.key, t, run);
         this.pushEvent({ t, part, row: n.row, col: c, run, color: ph.original ? part.inst.color : WHITE });
+      }
+      if (ph.original) continue;
+      // 노트 밖 블록: 같은 줄에 이어진 노트 밖 블록은 하나의 음으로 묶는다 (드럼은 칸마다 한 번)
+      const off = (r, cc) => {
+        const o = part.occupied.get(KEY(r, cc));
+        return o && !o.good ? o : null;
+      };
+      for (let r = 0; r < part.rows.length; r++) {
+        const o = off(r, c);
+        if (!o) continue;
+        if (!drum && c > ph.from && off(r, c - 1)) continue;
+        let run = 1;
+        while (!drum && c + run < ph.to && off(r, c + run)) run++;
+        this.sound(part, part.rows[r].key, t, run);
+        this.pushEvent({ t, part, row: r, col: c, run, color: o.color });
       }
     }
   }
@@ -816,6 +887,7 @@ export class Game {
     }
     const before = this.score;
     this.score = Math.max(0, this.score + gain);
+    this.addPageScore(this.part, c0, this.score - before);
     // 실제로 깎인 감점만큼만 폭탄으로 돌려받을 수 있다 (0점 아래로는 안 깎이므로)
     if (bad) this.penaltyBank += Math.min(bad * POINTS_BAD, before + good * POINTS_GOOD);
     this.judge(word, this.combo > 1 ? `${this.combo} COMBO` : '');
@@ -875,7 +947,9 @@ export class Game {
       this.badCells -= removedBad;
       const refund = Math.min(removedBad * POINTS_BAD, this.penaltyBank);
       this.penaltyBank -= refund;
+      const before = this.score;
       this.score = Math.max(0, this.score + refund - removedGood * POINTS_GOOD);
+      this.addPageScore(part, c0, this.score - before);
     }
     this.judge(removedBad > 0 || (this.free && removedGood > 0) ? 'CLEAR' : 'BOOM');
   }
@@ -973,6 +1047,7 @@ export class Game {
     this.drawPopups();
     this.drawJudgement();
     this.drawBanner();
+    this.drawPageCard();
   }
 
   visibleCols() {
@@ -1512,6 +1587,45 @@ export class Game {
       g.fillStyle = '#ffffff';
       g.fillText(j.sub, 0, base * 0.72);
     }
+    g.restore();
+  }
+
+  // 페이지 결과 카드 (보드 위쪽)
+  drawPageCard() {
+    const c = this.pageCard;
+    if (!c) return;
+    const age = this.now - c.t0;
+    if (age > c.life) {
+      this.pageCard = null;
+      return;
+    }
+    if (age < 0) return;
+    const g = this.g;
+    const k = age / c.life;
+    const alpha = k < 0.1 ? k / 0.1 : k > 0.8 ? (1 - k) / 0.2 : 1;
+    const w = Math.min(this.W - 32, 260);
+    const h = 66;
+    const x = (this.W - w) / 2;
+    const y = this.rollTop + 46 - (k < 0.1 ? (1 - k / 0.1) * 12 : 0);
+    g.save();
+    g.globalAlpha = Math.max(0, alpha);
+    g.fillStyle = 'rgba(8,10,9,0.88)';
+    rrect(g, x, y, w, h, 12);
+    g.fill();
+    g.fillStyle = c.color;
+    g.fillRect(x + 12, y, w - 24, 3);
+    g.textBaseline = 'middle';
+    g.textAlign = 'center';
+    g.font = `12px ${FONT}`;
+    g.fillStyle = 'rgba(255,255,255,0.7)';
+    g.fillText(c.title, this.W / 2, y + 17);
+    g.font = `24px ${FONT}`;
+    g.textAlign = 'right';
+    g.fillStyle = c.score >= 0 ? '#ffe27a' : '#ff7b6e';
+    g.fillText(`${c.score >= 0 ? '+' : ''}${c.score.toLocaleString('ko-KR')}점`, this.W / 2 - 8, y + 44);
+    g.textAlign = 'left';
+    g.fillStyle = c.pct >= 85 ? '#7dffb0' : c.pct >= 50 ? '#ffffff' : '#ffb3a8';
+    g.fillText(`연주 ${c.pct}%`, this.W / 2 + 8, y + 44);
     g.restore();
   }
 

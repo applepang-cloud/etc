@@ -92,6 +92,17 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   color: var(--muted);
   letter-spacing: 0.02em;
 }
+.hud-value-row { display: flex; align-items: center; gap: 8px; }
+.hud-pct {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #1c2a22;
+  color: #9fe6b4;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .hud-value {
   font-family: var(--font-display);
   font-size: 26px;

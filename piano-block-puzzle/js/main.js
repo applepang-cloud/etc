@@ -26,6 +26,7 @@ const el = {
   result: $('#result'),
   hudTitle: $('#hud-title'),
   hudScore: $('#hud-score'),
+  hudPct: $('#hud-pct'),
   hudTimer: $('#hud-timer'),
   hudTimerN: $('#hud-timer-n'),
   hudProgress: $('#hud-progress'),
@@ -65,6 +66,9 @@ const game = new Game($('#board'), audio, {
     let big = s.score.toLocaleString('ko-KR');
     if (mode === 'free') big = current.auto ? `${s.bar}마디` : `${s.scene + 1} 페이지`;
     setText(el.hudScore, 'score', big);
+    const showPct = s.percent != null;
+    if (el.hudPct.hidden === showPct) el.hudPct.hidden = !showPct;
+    if (showPct) setText(el.hudPct, 'pct', `연주 ${s.percent}%`);
 
     const showTimer = s.timer != null;
     if (el.hudTimer.hidden === showTimer) el.hudTimer.hidden = !showTimer;
