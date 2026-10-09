@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>터치라인 매니저</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=DotGothic16&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar" id="topbar">
+  <div class="tb-in">
+    <div class="tb-club">
+      <span class="tb-crest" id="tb-crest" aria-hidden="true"></span>
+      <div class="tb-id">
+        <h1 class="tb-name" id="tb-name">터치라인 매니저</h1>
+        <p class="tb-meta" id="tb-meta">구단을 불러오는 중</p>
+      </div>
+    </div>
+    <dl class="tb-stats">
+      <div class="tb-stat"><dt>자금</dt><dd id="tb-money">—</dd><dd class="tb-rate" id="tb-rate"></dd></div>
+      <div class="tb-stat"><dt>팬</dt><dd id="tb-fans">—</dd></div>
+      <div class="tb-stat"><dt>순위</dt><dd id="tb-pos">—</dd></div>
+    </dl>
+    <div class="seg speed" role="group" aria-label="게임 속도" id="speed">
+      <button type="button" class="seg-b" data-act="pause" id="btn-pause" aria-pressed="false">정지</button>
+      <button type="button" class="seg-b" data-act="speed" data-v="1" aria-pressed="false">1×</button>
+      <button type="button" class="seg-b" data-act="speed" data-v="2" aria-pressed="false">2×</button>
+      <button type="button" class="seg-b" data-act="speed" data-v="4" aria-pressed="false">4×</button>
+      <button type="button" class="seg-b" data-act="speed" data-v="8" aria-pressed="false">8×</button>
+    </div>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="matchday" id="matchday" aria-label="매치데이"></section>
+  <section class="board" aria-label="구단 운영">
+    <nav class="tabs" role="tablist" aria-label="구단 메뉴" id="tabs"></nav>
+    <div class="panel" id="panel" role="tabpanel"></div>
+  </section>
+</main>
+
+<footer class="foot">
+  <p>터치라인 매니저 · 진행 상황은 자동 저장됩니다 · <span id="save-state">이 브라우저에 저장</span></p>
+</footer>
+
+<div class="modal-wrap" id="modal" hidden></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script src="js/engine.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>

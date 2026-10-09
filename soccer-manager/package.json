@@ -1,0 +1,12 @@
+{
+  "name": "touchline-manager",
+  "version": "1.0.0",
+  "private": true,
+  "description": "축구 감독이 되어 구단을 운영하는 방치형 웹 게임",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "simulate": "node scripts/simulate.js",
+    "build:artifact": "node scripts/build-artifact.js"
+  },
+  "license": "MIT"
+}
