@@ -2770,6 +2770,7 @@ function hub() {
   if (S.week === FESTIVAL && !S.live) return festival();
   if (EVENTS[S.week] && !S.seen[S.week]) return schoolEvent();
   const heart = heartDue(); if (heart) return heartEvent(...heart);
+  if (!S.tutHub) { S.tutHub = true; showHub(true); return scene('me', ['#…좋아, 이제부터 1년. 한 주에 할 수 있는 일은 세 번이다.', '#연습으로 실력을 키우고, 둘러보기로 보컬을 찾고, 만나러 가서 이야기를 나눈다.', '#친해지면 합주로 같이 곡을 완성하고, 주말엔 데이트도 할 수 있다.', '#무리하면 컨디션이 떨어진다. 지치면 하루 쉬자.', '#10월엔 학교 축제. 그리고 2월 종업식 날 밤에는… 옥상에 별이 뜬다.'], hub, '시작 ▸'); }
   simStore.save(); setScene('big'); setChar('me'); expr.base = 'idle'; showHub(true);
   UI.stageLabel = `${weekLabel(S.week)} · ${S.week < FESTIVAL ? `축제 D-${FESTIVAL - S.week}주` : S.week === WEEKS ? '마지막 주' : `종업식 D-${WEEKS - S.week}주`}`;
   const anyMet = HEROINES.some(h => S.met[h]), dateOk = HEROINES.some(h => S.met[h] && S.aff[h] >= 30) && S.dated !== S.week;
