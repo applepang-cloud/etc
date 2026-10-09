@@ -13,8 +13,9 @@
     BALL_R: 6,
     BALL_SPEED: 850,
     TURNS: 30,
-    COLS: 8,
-    CELL_W: 25,
+    STEPS: 2, // cells per beat (eighth-note grid)
+    COLS: 16, // cells per stage = 8 beats
+    CELL_W: 26,
     MIN_ROWS: 12,
     PADDLE_W: 100,
     PADDLE_MAX_W: 190,
@@ -40,9 +41,11 @@
   C.ROLL_BOTTOM = C.ROLL_TOP + C.ROLL_H;
   C.ROLL_LEFT = C.KEY_W;
   C.ROLL_W = C.W - C.KEY_W;
-  C.PLAYHEAD_X = C.ROLL_LEFT + C.ROLL_W / 2;
+  // The playback line sits at the left edge of the roll, right next to the keys.
+  C.PLAYHEAD_X = C.ROLL_LEFT + 2;
   C.PHRASE_W = C.COLS * C.CELL_W;
-  // Distance the board travels over the 30 turns before the phrase hits the playback line.
+  // Distance the board travels over the 30 turns before the phrase hits the playback line;
+  // the stage fills the rest of the roll.
   C.GAP = C.W - C.PLAYHEAD_X - C.PHRASE_W;
   C.START_X = C.PLAYHEAD_X + C.GAP;
   PB.C = C;
@@ -79,14 +82,14 @@
 
   // Block HP is tuned with a headless bot that catches the ball with the paddle
   // most of the time (see README): a shaky player scrapes 1–2 stars, a steady one gets 3.
-  const tuning = { hpBase: 4, hpStep: 0.7 };
+  const tuning = { noiseBase: 24, noiseStep: 1.2, hpBase: 2.5, hpStep: 0.5 };
 
   function difficulty(d) {
     const items = ['ball', 'speed', 'paddle'];
     if (d >= 6) items.push('ball');
     if (d >= 11) items.push('paddle');
     return {
-      noise: 14 + d,
+      noise: tuning.noiseBase + Math.round(tuning.noiseStep * d),
       items,
       meanHp: tuning.hpBase + tuning.hpStep * d
     };
@@ -130,11 +133,12 @@
     return SHAPES[0];
   }
 
+  // Melody notes become blocks on the cell grid (start/len in cells).
   function melodyBlocks(src, rows, colOffset) {
     return PB.parseMelody(src).notes.map((n) => ({
       midi: n.midi,
-      start: n.start + colOffset,
-      len: n.len,
+      start: n.start * C.STEPS + colOffset,
+      len: n.len * C.STEPS,
       row: rows.hi - n.midi,
       black: isBlack(n.midi),
       flash: 0,
@@ -199,7 +203,7 @@
       melody,
       noise,
       balls: 1,
-      chords: st.chords.split(/\s+/).map((name, i) => ({ beat: i * 2, chord: PB.parseChord(name) }))
+      chords: st.chords.split(/\s+/).map((name, i) => ({ cell: i * 2 * C.STEPS, chord: PB.parseChord(name) }))
     };
   }
 
@@ -213,9 +217,22 @@
       const st = song.stages[si];
       melody.push(...melodyBlocks(st.melody, rows, off));
       (leftovers[si] || []).forEach(([col, midi, color]) => noise.push(noiseCell(col + off, midi, rows, 1, color)));
-      st.chords.split(/\s+/).forEach((name, j) => chords.push({ beat: off + j * 2, chord: PB.parseChord(name) }));
+      st.chords.split(/\s+/).forEach((name, j) => chords.push({ cell: off + j * 2 * C.STEPS, chord: PB.parseChord(name) }));
     });
     return { song, songIdx, rows, melody, noise, chords, cols: song.form.length * C.COLS };
+  }
+
+  // The song's melody in form order. Every block a ball hits plays the next note of it;
+  // start[stageIdx] is where that stage's phrase first begins.
+  function melodySequence(song) {
+    if (song._seq) return song._seq;
+    const notes = [], start = {};
+    song.form.forEach((si) => {
+      if (start[si] === undefined) start[si] = notes.length;
+      PB.parseMelody(song.stages[si].melody).notes.forEach((n) => notes.push({ midi: n.midi, len: n.len }));
+    });
+    song._seq = { notes, start };
+    return song._seq;
   }
 
   // ★ rule: 0 left → 3, 1–5 → 2, 6–10 → 1, 11+ → game over (0).
@@ -354,6 +371,7 @@
     songRows,
     buildStage,
     buildFullSong,
+    melodySequence,
     starsFor,
     stepBall,
     traceAim,

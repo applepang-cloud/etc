@@ -1,6 +1,6 @@
 /* Piano Bricks — song data.
  *
- * Every stage is one phrase of 8 beats (one column = one beat).
+ * Every stage is one phrase of 8 beats (two grid cells per beat on the board).
  *   melody: "NOTE[:beats] ..."  (R = rest, beats defaults to 1)
  *   chords: one chord per 2 beats, used for the accompaniment
  *   form:   stage order for the full-song playback (전곡 듣기)

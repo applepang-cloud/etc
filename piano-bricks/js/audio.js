@@ -1,5 +1,6 @@
 /* Piano Bricks — a small WebAudio synth: piano-ish notes, wrong-note buzz,
- * chord pads and sound effects. Music goes through a bus that can be cut. */
+ * chord pads, sound effects, and a quiet ambience (looping accompaniment + wind).
+ * Song playback goes through a bus that can be cut. */
 (function (PB) {
   'use strict';
 
@@ -50,6 +51,13 @@
       s.start(0);
       unlocked = true;
     }
+    startAmbient();
+  }
+
+  function setSuspended(hidden) {
+    if (!ctx) return;
+    if (hidden) ctx.suspend();
+    else if (unlocked) ctx.resume();
   }
 
   const freq = (m) => 440 * Math.pow(2, (m - 69) / 12);
@@ -80,7 +88,7 @@
     lp.frequency.exponentialRampToValueAtTime(Math.max(250, bright * 0.25), t + dur + 0.3);
 
     const g = c.createGain();
-    const atk = soft ? 0.04 : 0.006;
+    const atk = opt.attack || (soft ? 0.04 : 0.006);
     const decayEnd = t + atk + Math.min(0.25, dur * 0.5);
     const release = Math.max(t + dur, decayEnd + 0.001);
     const end = release + (soft ? 0.5 : 0.6);
@@ -142,6 +150,111 @@
     o.stop(t + dur + 0.02);
   }
 
+
+  // ---------- ambience: a soft looping accompaniment and wind ----------
+  // The accompaniment loops the current stage's chords, one per bar, as a quiet pad,
+  // a low note and a music-box arpeggio. It dips while a song is being played back.
+  const AMB_BPM = 68;
+  const ACCOMP_LEVEL = 0.45; // ~15 dB under the block-hit melody (measured)
+  const ARP = [[0, 0], [2, 1], [1, 2], [2, 3], [1, 3.5]]; // [chord tone, beat]
+  let amb = null;
+  let ambChords = null;
+
+  function brownNoise(c, seconds) {
+    const buf = c.createBuffer(1, Math.floor(c.sampleRate * seconds), c.sampleRate);
+    const d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < d.length; i++) {
+      last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+      d[i] = last * 3.5;
+    }
+    return buf;
+  }
+
+  // Looping noise through a slowly wandering band-pass, with a slow swell in level.
+  function windLayer(c, dest, centre, sweep, level, rate) {
+    const src = c.createBufferSource();
+    src.buffer = brownNoise(c, 4);
+    src.loop = true;
+    const bp = c.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = centre;
+    bp.Q.value = 0.7;
+    const g = c.createGain();
+    g.gain.value = level;
+    const lfoF = c.createOscillator(), lfoFg = c.createGain();
+    lfoF.frequency.value = rate;
+    lfoFg.gain.value = sweep;
+    lfoF.connect(lfoFg);
+    lfoFg.connect(bp.frequency);
+    const lfoA = c.createOscillator(), lfoAg = c.createGain();
+    lfoA.frequency.value = rate * 1.7;
+    lfoAg.gain.value = level * 0.7;
+    lfoA.connect(lfoAg);
+    lfoAg.connect(g.gain);
+    src.connect(bp);
+    bp.connect(g);
+    g.connect(dest);
+    src.start();
+    lfoF.start();
+    lfoA.start();
+  }
+
+  function startAmbient() {
+    const c = init();
+    if (!c || amb) return;
+    const bus = c.createGain();
+    bus.gain.setValueAtTime(0.0001, c.currentTime);
+    bus.gain.setTargetAtTime(1, c.currentTime, 1.2); // fade in
+    bus.connect(master);
+    const accomp = c.createGain();
+    accomp.gain.value = ACCOMP_LEVEL;
+    accomp.connect(bus);
+    windLayer(c, bus, 520, 260, 0.08, 0.07);
+    windLayer(c, bus, 1800, 600, 0.02, 0.045);
+    amb = { bus, accomp, next: c.currentTime + 0.4, beat: 0 };
+    amb.timer = setInterval(scheduleAmbient, 100);
+  }
+
+  function chordAt(beat) {
+    const list = ambChords || (PB.parseChord ? ['C', 'A', 'F', 'G'].map(PB.parseChord) : null);
+    return list ? list[Math.floor(beat / 4) % list.length] : null;
+  }
+
+  function scheduleAmbient() {
+    if (!amb || ctx.state !== 'running') return;
+    const spb = 60 / AMB_BPM;
+    const now = ctx.currentTime;
+    if (amb.next < now) amb.next = now + 0.05; // skip what was missed while hidden
+    while (amb.next < now + 0.5) {
+      const ch = chordAt(amb.beat);
+      if (ch && amb.beat % 4 === 0) {
+        const at = amb.next - now;
+        ch.notes.forEach((m) => tone(m + 12, { at, dur: 4 * spb, vel: 0.035, kind: 'pad', attack: 0.6, dest: amb.accomp }));
+        tone(ch.bass + 12, { at, dur: 4 * spb, vel: 0.05, kind: 'bass', attack: 0.3, dest: amb.accomp });
+        ARP.forEach(([i, b]) => {
+          tone(ch.notes[i % ch.notes.length] + 24, { at: at + b * spb, dur: 1.4 * spb, vel: 0.045, kind: 'bell', dest: amb.accomp });
+        });
+      }
+      amb.next += spb;
+      amb.beat++;
+    }
+  }
+
+  function ambientChords(chords) {
+    ambChords = chords && chords.length ? chords : null;
+  }
+
+  function ambientDuck(on) {
+    if (amb) amb.accomp.gain.setTargetAtTime(ACCOMP_LEVEL * (on ? 0.12 : 1), ctx.currentTime, 0.4);
+  }
+
+  // Bass note of the accompaniment chord sounding now (for the paddle bounce).
+  function currentBass() {
+    const ch = amb ? chordAt(Math.max(0, amb.beat - 1)) : chordAt(0);
+    return ch ? ch.bass + 12 : 48;
+  }
+
   // Avoids a wall of sound when many balls hit at once.
   function allow(key, gap) {
     const c = init();
@@ -172,6 +285,9 @@
 
   PB.audio = {
     unlock,
+    setSuspended,
+    ambientChords,
+    ambientDuck,
     stopMusic,
     setMuted,
     isMuted: () => muted,
@@ -181,24 +297,23 @@
       tone(ch.bass, { at, dur, vel: vel * 1.3, kind: 'bass' });
       ch.notes.forEach((m) => tone(m, { at, dur, vel: vel * 0.5, kind: 'pad' }));
     },
-    hit(midi) {
-      if (allow('h' + midi, 0.08)) tone(midi, { dur: 0.16, vel: 0.22, dest: sfx });
+    // A block hit plays a note of the song's melody; returns false when throttled
+    // (so the caller does not advance to the next note).
+    melodyHit(midi, seconds) {
+      if (!allow('melody', 0.085)) return false;
+      tone(midi, { dur: Math.min(0.7, Math.max(0.18, seconds * 0.8)), vel: 0.34, dest: sfx });
+      return true;
     },
-    pop(midi) {
-      if (!allow('p' + midi, 0.03)) return;
-      tone(midi + 12, { dur: 0.08, vel: 0.26, kind: 'bell', dest: sfx });
-      noiseBurst(0.05, 2400, 0.16);
-    },
-    bump() {
-      if (allow('bump', 0.04)) noiseBurst(0.04, 900, 0.16);
+    sparkle() {
+      if (allow('sparkle', 0.03)) noiseBurst(0.05, 5200, 0.07);
     },
     launch() {
       if (allow('launch', 0.05)) sweep(420, 760, 0.06, 0.06);
     },
     paddle() {
       if (!allow('paddle', 0.05)) return;
-      tone(48, { dur: 0.12, vel: 0.3, dest: sfx });
-      noiseBurst(0.03, 1800, 0.1);
+      tone(currentBass(), { dur: 0.25, vel: 0.28, dest: sfx });
+      noiseBurst(0.03, 1800, 0.06);
     },
     item() {
       [84, 88, 91].forEach((m, i) => tone(m, { at: i * 0.06, dur: 0.12, vel: 0.25, kind: 'bell', dest: sfx }));

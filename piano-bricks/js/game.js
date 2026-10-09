@@ -14,7 +14,7 @@
   let canvas, ctx;
 
   // ---------- saved progress ----------
-  const STORE_KEY = 'pianoBricks.v1';
+  const STORE_KEY = 'pianoBricks.v2'; // v2: 16-cell stages, old layouts don't carry over
   const store = { stars: {}, left: {}, best: {}, muted: false };
 
   function loadStore() {
@@ -61,6 +61,8 @@
     keyDir: 0,
     pointer: null,
     padDrag: false,
+    seq: null, // song melody played by block hits
+    seqIdx: 0,
     play: null,
     keyFlash: {},
     particles: [],
@@ -93,6 +95,10 @@
     G.pad.w = G.padW = C.PADDLE_W;
     G.perLaunch = G.st.balls;
     G.speedMult = 1;
+    G.seq = core.melodySequence(G.st.song);
+    G.seqIdx = G.seq.start[stageIdx] || 0;
+    SND.ambientChords(G.st.chords.map((c) => c.chord));
+    SND.ambientDuck(false);
     G.keyFlash = {};
     G.particles = [];
     G.floaters = [];
@@ -184,17 +190,28 @@
     }
   }
 
+  // Every block hit plays the next note of the song, so play itself sounds like the melody.
+  function playHitNote() {
+    const notes = G.seq && G.seq.notes;
+    if (!notes || !notes.length) return;
+    const n = notes[G.seqIdx % notes.length];
+    if (!SND.melodyHit(n.midi, (n.len * 60) / G.st.song.bpm)) return;
+    G.seqIdx++;
+    flashKey(n.midi, false);
+  }
+
   function onHit(kind, obj, b) {
     if (kind === 'noise') {
       obj.hp--;
       obj.flash = 1;
       const cx = G.world.x + obj.col * CW + CW / 2, cy = rowY(obj.row) + G.st.rows.h / 2;
+      playHitNote();
       if (obj.hp <= 0) {
         obj.alive = false;
         G.score += 100;
         burst(cx, cy, obj.color);
         floater('+100', cx, cy, '#fff');
-        SND.pop(obj.midi);
+        SND.sparkle();
         if (obj.item) giveItem(obj.item, cx, cy);
         if (!G.allClear && aliveCount() === 0) {
           G.allClear = true;
@@ -202,20 +219,15 @@
         }
       } else {
         G.score += 10;
-        SND.bump();
       }
     } else if (kind === 'paddle') {
       G.pad.flash = 1;
       SND.paddle();
     } else if (kind === 'melody') {
       obj.flash = 1;
-      flashKey(obj.midi, false);
-      SND.hit(obj.midi);
+      playHitNote();
     } else if (kind === 'key') {
-      const row = clamp(Math.floor((b.y - C.ROLL_TOP) / G.st.rows.h), 0, G.st.rows.n - 1);
-      const midi = G.st.rows.hi - row;
-      flashKey(midi, false);
-      SND.hit(midi);
+      playHitNote();
     }
   }
 
@@ -295,19 +307,20 @@
   // Board scrolls through the playback line at the song tempo; every block that
   // crosses it sounds — leftover interference blocks become wrong notes.
   function schedulePlayback(board, startX, lead) {
-    const spb = 60 / board.song.bpm;
-    const speed = CW / spb;
+    const spc = 60 / board.song.bpm / C.STEPS; // seconds per grid cell
+    const speed = CW / spc;
     const at = (px) => lead + (px - PH) / speed;
     SND.stopMusic();
-    board.melody.forEach((n) => SND.note(n.midi, at(startX + n.start * CW), n.len * spb * 0.95, 0.5));
-    board.noise.forEach((c) => { if (c.alive) SND.wrong(c.midi, at(startX + c.col * CW), spb * 0.9, 0.3); });
-    board.chords.forEach((ch) => SND.chord(ch.chord, at(startX + ch.beat * CW), 2 * spb, 0.16));
+    board.melody.forEach((n) => SND.note(n.midi, at(startX + n.start * CW), n.len * spc * 0.95, 0.5));
+    board.noise.forEach((c) => { if (c.alive) SND.wrong(c.midi, at(startX + c.col * CW), spc * 1.6, 0.3); });
+    board.chords.forEach((ch) => SND.chord(ch.chord, at(startX + ch.cell * CW), 2 * C.STEPS * spc, 0.16));
     return { t: -lead, speed, startX, wrong: 0 };
   }
 
   function startPlay(perfect) {
     G.mode = 'play';
     G.aim = null;
+    SND.ambientDuck(true);
     G.play = schedulePlayback(G.st, G.x, 0.9);
     G.play.perfect = perfect;
     setBanner(perfect ? 'PERFECT!' : 'PLAY', 1.1, perfect ? YELLOW : '#fff');
@@ -367,6 +380,7 @@
       SND.fail();
     }
     G.mode = 'result';
+    SND.ambientDuck(false);
     showStageResult(stars, rem, bonus);
   }
 
@@ -384,6 +398,8 @@
     G.floaters = [];
     G.x = PH + CW;
     G.mode = 'full';
+    SND.ambientChords(G.st.chords.slice(0, 4).map((c) => c.chord));
+    SND.ambientDuck(true);
     G.play = schedulePlayback(G.st, G.x, 1.2);
     showScreen(null);
     setBanner('♪ 전곡 듣기', 1.4, '#fff', 56);
@@ -395,6 +411,7 @@
     const got = song.stages.reduce((a, _, i) => a + starsOf(songIdx, i), 0);
     const wrong = G.st.noise.length;
     G.mode = 'result';
+    SND.ambientDuck(false);
     SND.fanfare(wrong === 0 ? 3 : 2);
     const actions = [{ label: '다시 듣기', fn: () => startFull(songIdx) }, { label: '목록', fn: openMenu }];
     if (songIdx + 1 < PB.SONGS.length) {
@@ -420,6 +437,7 @@
     clearCountdown();
     SND.stopMusic();
     G.mode = 'menu';
+    SND.ambientDuck(false);
     renderMenu();
     showScreen('menu');
   }
@@ -549,6 +567,12 @@
     ctx.fillText(G.score.toLocaleString(), C.W / 2, 76);
   }
 
+  // Grid line weight for cell k: 2 = bar, 1 = beat, 0 = half beat.
+  function gridKind(k) {
+    const m = (n) => ((k % n) + n) % n;
+    return m(4 * C.STEPS) === 0 ? 2 : m(C.STEPS) === 0 ? 1 : 0;
+  }
+
   function drawStrip() {
     const top = C.HUD_H;
     ctx.fillStyle = '#18191b';
@@ -557,9 +581,10 @@
     ctx.fillRect(0, top, C.KEY_W, C.STRIP_H);
     let k = Math.ceil((C.ROLL_LEFT - G.x) / CW);
     for (let x = G.x + k * CW; x < C.W; x += CW, k++) {
-      const bar = ((k % 4) + 4) % 4 === 0;
-      ctx.fillStyle = bar ? '#4a4c51' : '#2c2e32';
-      const h = bar ? 9 : 5;
+      const g = gridKind(k);
+      if (g === 0) continue;
+      ctx.fillStyle = g === 2 ? '#4a4c51' : '#2c2e32';
+      const h = g === 2 ? 9 : 5;
       ctx.fillRect(Math.round(x) - 0.5, top + C.STRIP_H - h, 1, h);
     }
   }
@@ -573,8 +598,9 @@
       ctx.fillRect(C.ROLL_LEFT, y + rows.h - 0.5, C.ROLL_W, 1);
     }
     let k = Math.ceil((C.ROLL_LEFT - G.x) / CW);
+    const colors = ['#17181a', '#1f2023', '#2e3034'];
     for (let x = G.x + k * CW; x < C.W; x += CW, k++) {
-      ctx.fillStyle = ((k % 4) + 4) % 4 === 0 ? '#2b2d31' : '#1b1c1f';
+      ctx.fillStyle = colors[gridKind(k)];
       ctx.fillRect(Math.round(x) - 0.5, C.ROLL_TOP, 1, C.ROLL_H);
     }
   }
@@ -1033,7 +1059,7 @@
     const sc = p < 0.15 ? 0.6 + (p / 0.15) * 0.45 : p < 0.25 ? 1.05 - ((p - 0.15) / 0.1) * 0.05 : 1;
     ctx.save();
     ctx.globalAlpha = p > 0.75 ? 1 - (p - 0.75) / 0.25 : 1;
-    ctx.translate(PH, C.ROLL_TOP + C.ROLL_H * 0.45);
+    ctx.translate(C.ROLL_LEFT + C.ROLL_W / 2, C.ROLL_TOP + C.ROLL_H * 0.45);
     ctx.scale(sc, sc);
     ctx.font = b.size + 'px ' + FONT_D;
     ctx.textAlign = 'center';
@@ -1357,6 +1383,7 @@
     G.x = C.START_X;
     resize();
     window.addEventListener('resize', resize);
+    document.addEventListener('visibilitychange', () => SND.setSuspended(document.hidden));
     bindInput();
     showScreen('title');
     requestAnimationFrame(loop);
