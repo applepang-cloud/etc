@@ -180,3 +180,45 @@ test('유산 효과: 속도와 오프라인 한도가 오른다', () => {
   assert.equal(E.speedOf(state), 2);
   assert.equal(E.offlineCapMs(state), 3 * 3600 * 1000);
 });
+
+test('시작 보너스: 포인트 3개를 원하는 능력치에 나눠 준다 (1포인트 = +10)', () => {
+  const state = fresh(16);
+  assert.equal(state.run.bonusPoints, D.START_POINTS);
+  const before = Object.assign({}, state.run.stats);
+  const res = E.spendStartPoints(state, { int: 2, cha: 1 });
+  assert.ok(res.ok);
+  assert.equal(state.run.bonusPoints, 0);
+  assert.equal(state.run.stats.int, before.int + 2 * D.POINT_VALUE);
+  assert.equal(state.run.stats.cha, before.cha + D.POINT_VALUE);
+  assert.equal(state.run.stats.con, before.con);
+  assert.equal(state.run.monthStart.int, state.run.stats.int, '이번 달 변화에 보너스가 섞이지 않는다');
+});
+
+test('시작 보너스: 남은 포인트보다 많이, 잘못된 값으로, 시작한 뒤에는 쓸 수 없다', () => {
+  const state = fresh(17);
+  assert.equal(E.spendStartPoints(state, { int: 4 }).reason, 'too_many');
+  assert.equal(E.spendStartPoints(state, { int: -1 }).reason, 'invalid');
+  assert.equal(E.spendStartPoints(state, { int: 1.5 }).reason, 'invalid');
+  assert.equal(E.spendStartPoints(state, { luck: 1 }).reason, 'invalid');
+  assert.equal(state.run.bonusPoints, D.START_POINTS, '실패하면 포인트가 그대로 남는다');
+  E.stepDay(state);
+  assert.equal(E.spendStartPoints(state, { int: 1 }).reason, 'started');
+});
+
+test('다음 세대도 시작 보너스를 새로 받는다', () => {
+  const state = fresh(18);
+  E.spendStartPoints(state, { mag: 3 });
+  E.simulate(state, D.TOTAL_DAYS);
+  E.startNextGeneration(state, '아델');
+  assert.equal(state.run.bonusPoints, D.START_POINTS);
+});
+
+test('시작 전 이름 바꾸기는 능력치를 다시 굴리지 않고 첫 일지도 고친다', () => {
+  const state = fresh(19, '아리아');
+  const stats = Object.assign({}, state.run.stats);
+  assert.ok(E.renameRun(state, '  에스텔 '));
+  assert.equal(state.run.name, '에스텔');
+  assert.deepEqual(state.run.stats, stats);
+  assert.match(state.log.find((e) => e.welcome).text, /^에스텔이 /);
+  assert.equal(E.renameRun(state, '   '), false);
+});

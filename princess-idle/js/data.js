@@ -24,6 +24,8 @@
 
   // ── 경제·컨디션 ─────────────────────────────────────────
   const START_GOLD = 300;
+  const START_POINTS = 3;          // 첫 화면에서 직접 나눠 주는 시작 보너스
+  const POINT_VALUE = 10;         // 1포인트 = 능력치 +10
   const ALLOWANCE = 40;           // 매달 1일 왕실 양육비
   const STAT_MAX = 999;
   const SICK_DAYS = 7;
@@ -394,7 +396,7 @@
   return {
     DAY_MS, DAYS_PER_MONTH, SLOT_DAYS, MONTHS_PER_YEAR, DAYS_PER_YEAR,
     START_AGE, END_AGE, TOTAL_DAYS, START_YEAR, START_MONTH, SLOT_NAMES,
-    START_GOLD, ALLOWANCE, STAT_MAX, SICK_DAYS, SICK_COST, EVENT_CHANCE,
+    START_GOLD, START_POINTS, POINT_VALUE, ALLOWANCE, STAT_MAX, SICK_DAYS, SICK_COST, EVENT_CHANCE,
     FESTIVAL_MONTH, FESTIVAL_DAY, BASE_OFFLINE_HOURS,
     birthdayGift, rivalScore,
     STAT_GROUPS, STATS, CATEGORIES, ACTIVITIES,

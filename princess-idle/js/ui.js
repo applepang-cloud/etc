@@ -56,6 +56,10 @@
     }
     return node;
   }
+  // 빈 값(null 등)은 건너뛰고 붙인다
+  function put(parent, ...nodes) {
+    parent.append(...nodes.filter((n) => n !== null && n !== undefined && n !== false));
+  }
   function setText(node, text) { if (node.textContent !== text) node.textContent = text; }
   function setHTML(node, html) { if (node._html !== html) { node._html = html; node.innerHTML = html; } }
   function setWidth(node, frac) {
@@ -272,23 +276,87 @@
     return { input, node: el('div', { class: 'field' }, [el('label', { for: id, text: '공주의 이름' }), el('div', { class: 'name-row' }, [input, reroll])]) };
   }
 
+  // 시작 보너스: 포인트를 능력치에 직접 나눠 준다
+  function pointPicker(onChange) {
+    const run = state.run;
+    const total = run.bonusPoints;
+    const alloc = {};
+    const rows = {};
+    const left = el('b', { class: 'num' });
+    const used = () => Object.values(alloc).reduce((a, b) => a + b, 0);
+    const refresh = () => {
+      const remain = total - used();
+      setText(left, String(remain));
+      for (const s of D.STATS) {
+        const r = rows[s.id];
+        const n = alloc[s.id] || 0;
+        setText(r.val, int(run.stats[s.id] + n * D.POINT_VALUE));
+        setText(r.add, n ? '+' + n * D.POINT_VALUE : '');
+        r.row.classList.toggle('picked', n > 0);
+        r.minus.disabled = n === 0;
+        r.plus.disabled = remain === 0 || run.stats[s.id] + (n + 1) * D.POINT_VALUE > D.STAT_MAX;
+      }
+      onChange(remain);
+    };
+    const grid = el('div', { class: 'alloc-grid' });
+    for (const s of D.STATS) {
+      const val = el('span', { class: 'alloc-val num' });
+      const add = el('span', { class: 'alloc-add' });
+      const minus = el('button', {
+        type: 'button', class: 'step', text: '−', 'aria-label': s.name + ' 포인트 빼기',
+        onclick: () => { if (alloc[s.id]) { alloc[s.id] -= 1; refresh(); } },
+      });
+      const plus = el('button', {
+        type: 'button', class: 'step', text: '+', 'aria-label': s.name + ' 포인트 더하기',
+        onclick: () => { if (used() < total) { alloc[s.id] = (alloc[s.id] || 0) + 1; refresh(); } },
+      });
+      const row = el('div', { class: 'alloc-row' }, [el('span', { class: 'alloc-name', text: s.name }), val, add, minus, plus]);
+      rows[s.id] = { row, val, add, minus, plus };
+      grid.append(row);
+    }
+    const node = el('fieldset', { class: 'alloc' }, [
+      el('legend', { text: '시작 보너스' }),
+      el('p', { class: 'alloc-head' }, [
+        el('span', { text: '포인트를 원하는 능력치에 나눠 주세요. 1포인트 = 능력치 +' + D.POINT_VALUE + '.' }),
+        el('span', { class: 'alloc-left' }, ['남은 포인트 ', left]),
+      ]),
+      grid,
+    ]);
+    refresh();
+    return { node, alloc, remaining: () => total - used() };
+  }
+
   function introModal(m) {
-    const name = nameField('intro-name', state.run.name);
+    const run = state.run;
+    const gen = state.meta.generation;
+    const name = nameField('intro-name', run.name);
+    const hint = el('p', { class: 'hint', 'aria-live': 'polite' });
+    const startBtn = el('button', { type: 'button', class: 'btn btn-primary', text: '키우기 시작' });
+    const picker = run.bonusPoints > 0 ? pointPicker((remain) => {
+      startBtn.disabled = remain > 0;
+      setText(hint, remain > 0 ? '포인트 ' + remain + '개를 더 나눠 주세요.' : '');
+    }) : null;
     const start = () => {
-      const v = name.input.value.trim();
-      if (v && v !== state.run.name) E.newRun(state, v);
+      if (picker && picker.remaining() > 0) return;
+      E.renameRun(state, name.input.value);
+      if (picker) E.spendStartPoints(state, picker.alloc);
       buildAll();
       save();
       closeModal();
+      if (gen > 1) toast(E.fill('{N이} 성에 들어왔어요. ' + gen + '대 공주의 시작이에요.', state.run.name), 'birthday');
     };
+    startBtn.addEventListener('click', start);
     name.input.addEventListener('keydown', (e) => { if (e.key === 'Enter') start(); });
-    m.append(
-      el('p', { class: 'eyebrow', text: '왕국력 ' + D.START_YEAR + '년 봄' }),
-      el('h2', { id: 'modal-title', text: '공주를 맡게 되었어요' }),
-      el('p', { class: 'lede', text: '열 살 공주가 성인식을 치르는 열여덟 살까지, 8년을 함께 보내요. 한 달을 상순·중순·하순으로 나눠 일정을 짜 두면 공주가 알아서 배우고, 일하고, 쉬어요.' }),
-      el('p', { class: 'lede', text: '창을 닫아도 시간은 흘러요(처음엔 최대 1시간). 성인식 날 능력치에 따라 공주의 앞날이 정해지고, 받은 왕관 별로 다음 세대를 더 강하게 키울 수 있어요.' }),
+    put(m,
+      el('p', { class: 'eyebrow', text: gen > 1 ? gen + '대 공주 · 왕국력 ' + D.START_YEAR + '년 봄' : '왕국력 ' + D.START_YEAR + '년 봄' }),
+      el('h2', { id: 'modal-title', text: gen > 1 ? '새 공주가 성에 들어왔어요' : '공주를 맡게 되었어요' }),
+      gen > 1
+        ? el('p', { class: 'lede', text: '선대 공주들의 유산을 이어받은 새 공주예요. 이름을 지어 주고 시작 보너스를 나눠 주세요.' })
+        : el('p', { class: 'lede', text: '열 살 공주가 성인식을 치르는 열여덟 살까지, 8년을 함께 보내요. 한 달을 상순·중순·하순으로 나눠 일정을 짜 두면 공주가 알아서 배우고, 일하고, 쉬어요.' }),
+      gen > 1 ? null : el('p', { class: 'lede', text: '창을 닫아도 시간은 흘러요(처음엔 최대 1시간). 성인식 날 능력치에 따라 공주의 앞날이 정해지고, 받은 왕관 별로 다음 세대를 더 강하게 키울 수 있어요.' }),
       name.node,
-      el('div', { class: 'modal-actions' }, [el('button', { type: 'button', class: 'btn btn-primary', text: '키우기 시작', onclick: start })]),
+      picker ? picker.node : null,
+      el('div', { class: 'modal-actions' }, [hint, startBtn]),
     );
   }
 
@@ -301,18 +369,16 @@
     const ending = E.END[run.ended.ending];
     const tier = D.TIERS[ending.tier];
     const stars = run.ended.stars;
-    const pool = D.NAMES.filter((n) => n !== run.name);
-    const name = nameField('next-name', pool[Math.floor(Math.random() * pool.length)]);
     const next = () => {
-      E.startNextGeneration(state, name.input.value);
+      const pool = D.NAMES.filter((n) => n !== run.name);
+      E.startNextGeneration(state, pool[Math.floor(Math.random() * pool.length)]);
       acc = 0;
       buildAll();
       save();
       closeModal();
-      toast(E.fill('{N이} 성에 들어왔어요. ' + state.meta.generation + '대 공주의 시작이에요.', state.run.name), 'birthday');
+      queueModal(introModal, { locked: true });
     };
-    name.input.addEventListener('keydown', (e) => { if (e.key === 'Enter') next(); });
-    m.append(
+    put(m,
       el('p', { class: 'eyebrow', text: '성인식 · ' + dateLabel(run.totalDays) }),
       el('h2', { id: 'modal-title', text: E.fill('{N}의 열여덟 번째 생일', run.name) }),
       el('div', { class: 'ending-card tier-' + ending.tier }, [
@@ -326,7 +392,6 @@
         el('li', null, [el('span', { text: p.label }), el('span', { class: 'num', text: '★ ' + p.stars })]),
       ).concat(el('li', { class: 'total' }, [el('span', { text: '합계' }), el('span', { class: 'num', text: '★ ' + stars.total })]))),
       el('p', { class: 'lede', text: '왕관 별은 유산 탭에서 다음 세대를 위한 축복으로 바꿀 수 있어요.' }),
-      name.node,
       el('div', { class: 'modal-actions' }, [el('button', { type: 'button', class: 'btn btn-primary', text: '다음 세대 키우기', onclick: next })]),
     );
   }
@@ -339,7 +404,7 @@
       rows.push(el('span', null, ['골드', el('b', { class: 'goldtext', text: signed(rep.goldDiff, 0) })]));
       if (rep.fameDiff >= 0.5) rows.push(el('span', null, ['명성', el('b', { class: 'plus', text: signed(rep.fameDiff, 0) })]));
       const notes = rep.highlights.slice(-14).reverse();
-      m.append(
+      put(m,
         el('p', { class: 'eyebrow', text: '다녀오셨어요' }),
         el('h2', { id: 'modal-title', text: E.fill('{N이} ' + rep.days + '일을 보냈어요', run.name) }),
         el('p', { class: 'lede', text: '자리를 비운 ' + duration(awayMs) + ' 동안의 기록이에요.' + (capped ? ' 오프라인 진행은 최대 ' + duration(E.offlineCapMs(state)) + '까지만 흘러요.' : '') }),
@@ -380,6 +445,7 @@
           save();
           closeModal();
           toast('저장 데이터를 불러왔어요.', 'event');
+          if (needsIntroFor(state.run)) queueModal(introModal, { locked: true });
           if (state.run.ended) queueModal(endingModal, { locked: true });
         } catch (e) {
           setText(status, '불러올 수 없는 데이터예요. 복사한 글자 전체를 붙여 넣었는지 확인하세요.');
@@ -403,7 +469,7 @@
         queueModal(introModal, { locked: true });
       },
     });
-    m.append(
+    put(m,
       el('h2', { id: 'modal-title', text: '설정' }),
       el('p', { class: 'lede', text: '진행 상황은 이 브라우저에 자동으로 저장돼요. 다른 기기로 옮기려면 아래 저장 데이터를 복사해 붙여 넣으세요.' }),
       el('div', { class: 'field' }, [el('label', { for: 'export-box', text: '내 저장 데이터' }), exportBox, el('div', { class: 'modal-actions' }, [copyBtn])]),
@@ -1074,6 +1140,8 @@
   }
 
   // ── 시작 ─────────────────────────────────────────────
+  function needsIntroFor(run) { return !run.ended && run.totalDays === 0 && run.bonusPoints > 0; }
+
   function boot(hotData) {
     cacheRefs();
     bindStatic();
@@ -1084,15 +1152,14 @@
       try { loaded = E.deserialize(hotData.save); } catch (e) { loaded = null; }
     }
     state = loaded || loadSaved();
-    let fresh = false;
     if (!state || !state.run) {
       state = state || E.createState();
       E.newRun(state, '');
-      fresh = true;
     }
-    if (!fresh) offlineCatchUp();
+    const needsIntro = needsIntroFor(state.run);
+    if (!needsIntro) offlineCatchUp();
     buildAll();
-    if (fresh) queueModal(introModal, { locked: true });
+    if (needsIntro) queueModal(introModal, { locked: true });
     if (state.run.ended) queueModal(endingModal, { locked: true });
     lastTick = Date.now();
     save();

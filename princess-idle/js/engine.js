@@ -219,6 +219,7 @@
       festivalWins: 0,
       goldEarned: 0,
       warnSlot: -1,
+      bonusPoints: D.START_POINTS,
       looks: {
         hair: pick(state, D.HAIR_COLORS),
         skin: pick(state, D.SKIN_TONES),
@@ -226,8 +227,38 @@
       ended: null,
     };
     state.log = [];
-    pushLog(state, { kind: 'system', text: fill('{N이} 열 살 생일을 맞아 성에 들어왔다. 오늘부터 잘 부탁해!', state.run.name), day: 0 });
+    pushLog(state, { kind: 'system', text: welcomeText(state.run.name), day: 0, welcome: true });
     return state.run;
+  }
+
+  function welcomeText(name) { return fill('{N이} 열 살 생일을 맞아 성에 들어왔다. 오늘부터 잘 부탁해!', name); }
+
+  // 시작 전에 이름만 바꾼다 (능력치는 그대로)
+  function renameRun(state, name) {
+    const run = state.run;
+    const v = (name || '').trim().slice(0, 12);
+    if (!run || !v) return false;
+    run.name = v;
+    const welcome = state.log.find((e) => e.welcome);
+    if (welcome) welcome.text = welcomeText(v);
+    return true;
+  }
+
+  // 시작 보너스 포인트를 능력치에 나눠 준다. alloc: { int: 2, cha: 1 }
+  function spendStartPoints(state, alloc) {
+    const run = state.run;
+    if (!run || run.ended || run.totalDays > 0) return { ok: false, reason: 'started' };
+    let total = 0;
+    for (const id in alloc) {
+      const n = alloc[id];
+      if (!STAT[id] || !Number.isInteger(n) || n < 0) return { ok: false, reason: 'invalid' };
+      total += n;
+    }
+    if (total > run.bonusPoints) return { ok: false, reason: 'too_many' };
+    for (const id in alloc) addStat(run, id, alloc[id] * D.POINT_VALUE);
+    run.bonusPoints -= total;
+    run.monthStart = Object.assign({}, run.stats);
+    return { ok: true, left: run.bonusPoints };
   }
 
   function pushLog(state, entry) {
@@ -681,6 +712,7 @@
       run.monthStart = run.monthStart || Object.assign({}, run.stats);
       run.looks = run.looks || { hair: D.HAIR_COLORS[0], skin: D.SKIN_TONES[0] };
       run.current = run.current || { id: 'rest', reason: 'start' };
+      run.bonusPoints = run.bonusPoints || 0;
       state.run = run;
     }
     return state;
@@ -693,7 +725,7 @@
     efficiency, masteryLevel, masteryInfo, combatPower, winChance,
     statMul, incomeMul, feeMul, restMul, stressMul, speedOf, offlineCapMs,
     unmetReqs, isUnlocked, preview,
-    createState, newRun, stepDay, simulate,
+    createState, newRun, renameRun, spendStartPoints, stepDay, simulate,
     evaluateEnding, starBreakdown, startNextGeneration,
     setSchedule, upgradeCost, buyUpgrade, buyLegacy, setAutoRest, isUpgradeRelevant, autoBuy,
     legacyLevel, upgradeLevel,
