@@ -6,18 +6,19 @@
   const C = {
     W: 540,
     H: 960,
-    HUD_H: 96,
+    HUD_H: 72, // one compact bar: title, score, blocks left, launches left
     STRIP_H: 22,
-    ROLL_H: 384,
+    BOTTOM_FRAC: 0.22, // the paddle area takes about a fifth of the screen …
+    BOTTOM_MIN: 220, // … and never less than this; the piano roll gets the rest
     KEY_W: 56,
     BALL_R: 6,
-    BALL_SPEED: 850,
+    BALL_SPEED: 620,
     TURNS: 30,
     STEPS: 2, // cells per beat (eighth-note grid)
     COLS: 16, // cells per stage = 8 beats
     CELL_W: 26,
-    MIN_ROWS: 12,
-    PADDLE_W: 100,
+    MIN_ROWS: 24, // at least two octaves of keys
+    PADDLE_W: 110,
     PADDLE_MAX_W: 190,
     PADDLE_GROW: 30,
     PADDLE_H: 14,
@@ -30,15 +31,20 @@
     RAMP_EVERY: 2, // … every 2 s of a turn
     RAMP_CAP: 1.5
   };
-  // The paddle sits near the bottom; balls launch from its top.
+  C.ROLL_TOP = C.HUD_H + C.STRIP_H;
+  // Height depends on the screen: the roll takes what the shorter launch area leaves,
+  // the paddle sits near the bottom and balls launch from its top.
   C.setHeight = function (h) {
     C.H = h;
-    C.PADDLE_Y = h - 74;
+    const bottom = Math.max(C.BOTTOM_MIN, Math.round(h * C.BOTTOM_FRAC));
+    C.ROLL_H = h - C.ROLL_TOP - bottom;
+    C.ROLL_BOTTOM = C.ROLL_TOP + C.ROLL_H;
+    C.PADDLE_Y = h - 44;
     C.LAUNCH_Y = C.PADDLE_Y - C.BALL_R - 1;
+    // Row heights follow the roll (stages keep a reference to their song's rows).
+    (PB.SONGS || []).forEach((song) => { if (song._rows) song._rows.h = C.ROLL_H / song._rows.n; });
   };
   C.setHeight(C.H);
-  C.ROLL_TOP = C.HUD_H + C.STRIP_H;
-  C.ROLL_BOTTOM = C.ROLL_TOP + C.ROLL_H;
   C.ROLL_LEFT = C.KEY_W;
   C.ROLL_W = C.W - C.KEY_W;
   // The playback line sits at the left edge of the roll, right next to the keys.
@@ -62,8 +68,8 @@
         hi = Math.max(hi, n.midi);
       });
     });
-    lo -= 1;
-    hi += 1;
+    lo -= 2;
+    hi += 2;
     for (let grow = 0; hi - lo + 1 < C.MIN_ROWS; grow++) {
       if (grow % 2 === 0) hi++;
       else lo--;
@@ -82,7 +88,7 @@
 
   // Block HP is tuned with a headless bot that catches the ball with the paddle
   // most of the time (see README): a shaky player scrapes 1–2 stars, a steady one gets 3.
-  const tuning = { noiseBase: 24, noiseStep: 1.2, hpBase: 2.5, hpStep: 0.5 };
+  const tuning = { noiseBase: 24, noiseStep: 1.2, hpBase: 1.85, hpStep: 0.43 };
 
   function difficulty(d) {
     const items = ['ball', 'speed', 'paddle'];

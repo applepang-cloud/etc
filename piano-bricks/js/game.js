@@ -592,25 +592,75 @@
     ctx.fill();
   }
 
+  function fitText(text, maxW) {
+    if (ctx.measureText(text).width <= maxW) return text;
+    while (text.length > 1 && ctx.measureText(text + '…').width > maxW) text = text.slice(0, -1);
+    return text + '…';
+  }
+
+  // One compact bar: title + score on the left, blocks-left pill, launches-left ring;
+  // the DOM buttons (close, sound, restart) sit on top of it.
   function drawHud() {
     ctx.fillStyle = '#0f1011';
     ctx.fillRect(0, 0, C.W, C.HUD_H);
     if (!G.st) return;
-    const song = G.st.song;
-    ctx.textAlign = 'center';
+    const song = G.st.song, full = !!G.st.form;
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = '#9a9b9e';
-    ctx.font = '600 18px ' + FONT_U;
-    const sub = G.st.form ? '전곡 듣기' : (G.st.stageIdx + 1) + ' / ' + song.stages.length;
-    ctx.fillText(song.title + '  ·  ' + sub, C.W / 2, 30);
-    if (G.st.form) return;
-    ctx.font = '40px ' + FONT_D;
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = '#000';
-    ctx.strokeText(G.score.toLocaleString(), C.W / 2, 76);
-    ctx.fillStyle = YELLOW;
-    ctx.fillText(G.score.toLocaleString(), C.W / 2, 76);
+    ctx.font = '600 15px ' + FONT_U;
+    const sub = full ? '전곡 듣기' : (G.st.stageIdx + 1) + ' / ' + song.stages.length;
+    ctx.fillText(fitText(song.title + ' · ' + sub, full ? 300 : 158), 68, 27);
+
+    let progress;
+    if (full) {
+      const len = G.st.cols * CW;
+      progress = G.play ? clamp((G.play.startX - G.x) / (G.play.startX - PH + len), 0, 1) : 0;
+    } else {
+      ctx.font = '30px ' + FONT_D;
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = '#000';
+      ctx.strokeText(G.score.toLocaleString(), 68, 59);
+      ctx.fillStyle = YELLOW;
+      ctx.fillText(G.score.toLocaleString(), 68, 59);
+
+      // Pill: interference blocks left, with the stars that count would earn.
+      const left = aliveCount(), stars = core.starsFor(left), bad = stars === 0;
+      roundRect(232, 22, 124, 30, 15);
+      ctx.fillStyle = bad ? 'rgba(239,91,75,0.18)' : 'rgba(76,201,110,0.16)';
+      ctx.fill();
+      for (let i = 0; i < 3; i++) drawStar(250 + i * 15, 37, 6.5, i < stars ? YELLOW : 'rgba(255,255,255,0.22)');
+      ctx.font = '700 15px ' + FONT_U;
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = bad ? '#ff9a8a' : '#8fe3a2';
+      ctx.fillText('방해 ' + left, 292, 38);
+
+      // Ring: launches left.
+      const turnsLeft = C.TURNS - G.turn, warn = turnsLeft <= 5;
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+      ctx.beginPath();
+      ctx.arc(396, 37, 21, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = warn ? RED : YELLOW;
+      ctx.beginPath();
+      ctx.arc(396, 37, 21, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * turnsLeft) / C.TURNS);
+      ctx.stroke();
+      ctx.textAlign = 'center';
+      ctx.font = '22px ' + FONT_D;
+      ctx.fillStyle = warn ? '#ff9a8a' : '#fff';
+      ctx.fillText(String(turnsLeft), 396, 39);
+      ctx.textBaseline = 'alphabetic';
+
+      const total = G.st.noise.length;
+      progress = total ? 1 - left / total : 1;
+    }
+    // Progress line: blocks cleared (stage) or song played (full song).
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(0, C.HUD_H - 3, C.W, 3);
+    ctx.fillStyle = '#4cc96e';
+    ctx.fillRect(0, C.HUD_H - 3, C.W * progress, 3);
   }
 
   // Grid line weight for cell k: 2 = bar, 1 = beat, 0 = half beat.
@@ -625,13 +675,22 @@
     ctx.fillRect(0, top, C.W, C.STRIP_H);
     ctx.fillStyle = '#0d0d0e';
     ctx.fillRect(0, top, C.KEY_W, C.STRIP_H);
+    // Bar numbers count from the start of the song (each stage is two bars).
+    const barOffset = G.st.form ? 0 : Math.max(0, G.st.song.form.indexOf(G.st.stageIdx)) * 2;
+    ctx.font = '700 11px ' + FONT_U;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
     let k = Math.ceil((C.ROLL_LEFT - G.x) / CW);
     for (let x = G.x + k * CW; x < C.W; x += CW, k++) {
       const g = gridKind(k);
       if (g === 0) continue;
       ctx.fillStyle = g === 2 ? '#4a4c51' : '#2c2e32';
-      const h = g === 2 ? 9 : 5;
+      const h = g === 2 ? C.STRIP_H - 4 : 5;
       ctx.fillRect(Math.round(x) - 0.5, top + C.STRIP_H - h, 1, h);
+      if (g === 2 && k >= 0) {
+        ctx.fillStyle = '#76787d';
+        ctx.fillText(String(barOffset + k / (4 * C.STEPS) + 1), Math.round(x) + 4, top + 15);
+      }
     }
   }
 
@@ -1022,50 +1081,37 @@
     ctx.globalAlpha = 1;
   }
 
-  function drawStatus() {
-    const y = C.H - 32, barY = C.H - 14;
-    const left = aliveCount(), turnsLeft = C.TURNS - G.turn;
-    ctx.font = '700 17px ' + FONT_U;
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = turnsLeft <= 5 ? '#ff9a8a' : 'rgba(255,255,255,0.88)';
-    ctx.fillText('남은 발사 ' + turnsLeft, 20, y);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = left > 10 ? '#ff9a8a' : 'rgba(255,255,255,0.88)';
-    ctx.fillText('방해 블럭 ' + left, C.W - 20, y);
-    const s = core.starsFor(left);
-    for (let i = 0; i < 3; i++) drawStar(C.W / 2 + (i - 1) * 26, y - 1, 10, i < s ? YELLOW : 'rgba(255,255,255,0.2)');
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    ctx.fillRect(20, barY, C.W - 40, 4);
-    ctx.fillStyle = turnsLeft <= 5 ? RED : YELLOW;
-    ctx.fillRect(20, barY, ((C.W - 40) * turnsLeft) / C.TURNS, 4);
-  }
 
+  // First-turn help, shown on the board until the player starts aiming.
   function drawHint() {
     if (G.mode !== 'aim' || G.turn > 0 || (G.aim && G.aim.valid)) return;
-    ctx.globalAlpha = 0.55 + 0.45 * Math.sin(G.time * 4);
-    ctx.font = '700 19px ' + FONT_U;
+    const x = C.ROLL_LEFT + 10, w = C.W - x - 10, h = 200, y = C.ROLL_BOTTOM - h - 24, cx = x + w / 2;
+    roundRect(x, y, w, h, 16);
+    ctx.fillStyle = 'rgba(8,9,10,0.82)';
+    ctx.fill();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    ctx.globalAlpha = 0.65 + 0.35 * Math.sin(G.time * 4);
+    ctx.font = '700 19px ' + FONT_U;
     ctx.fillStyle = '#fff';
-    const y = (C.ROLL_BOTTOM + C.LAUNCH_Y) / 2 - 40;
-    ctx.fillText('위쪽을 눌러 조준하고, 손을 떼면 발사!', C.W / 2, y);
+    ctx.fillText(fitText('보드를 눌러 조준하고, 손을 떼면 발사!', w - 24), cx, y + 32);
+    ctx.globalAlpha = 1;
     ctx.font = '600 15px ' + FONT_U;
-    ctx.fillStyle = 'rgba(255,255,255,0.78)';
-    ctx.fillText('공이 날아가는 동안 화면을 좌우로 밀어 발판으로 받으세요', C.W / 2, y + 30);
-    ctx.fillText('흰·검은 블럭 = 원곡 멜로디(안 깨짐) · 컬러 블럭은 숫자만큼 맞히면 깨짐', C.W / 2, y + 54);
-    // Item legend
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.fillText(fitText('공이 날아가는 동안 화면을 좌우로 밀어 발판으로 받으세요', w - 24), cx, y + 64);
+    ctx.fillText(fitText('흰·검은 블럭 = 원곡 멜로디, 깨지지 않아요', w - 24), cx, y + 90);
+    ctx.fillText(fitText('컬러 블럭 = 방해 음, 적힌 숫자만큼 맞히면 깨져요', w - 24), cx, y + 116);
     const items = [['ball', '공 추가'], ['speed', '속도 UP'], ['paddle', '발판 UP (받아야 획득)']];
     ctx.font = '700 14px ' + FONT_U;
     ctx.textAlign = 'left';
-    let x = 40;
-    items.forEach(([type, label]) => {
-      drawItemIcon(type, x, y + 92, 18, core.ITEM_COLORS[type]);
+    const widths = items.map(([, label]) => ctx.measureText(label).width + 22);
+    let ix = cx - (widths.reduce((a, b) => a + b, 0) + 24 * (items.length - 1)) / 2;
+    items.forEach(([type, label], i) => {
+      drawItemIcon(type, ix + 8, y + 158, 18, core.ITEM_COLORS[type]);
       ctx.fillStyle = core.ITEM_COLORS[type];
-      ctx.fillText(label, x + 16, y + 92);
-      x += ctx.measureText(label).width + 52;
+      ctx.fillText(label, ix + 22, y + 158);
+      ix += widths[i] + 24;
     });
-    ctx.globalAlpha = 1;
   }
 
   function drawPlayPanel() {
@@ -1074,27 +1120,28 @@
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const full = !!G.st.form;
-    ctx.font = (full ? 46 : 40) + 'px ' + FONT_D;
+    ctx.font = '32px ' + FONT_D;
     ctx.fillStyle = '#fff';
-    ctx.fillText(full ? '♪ 전곡 듣기' : '♪ 재생 중', C.W / 2, 610);
-    ctx.font = '600 19px ' + FONT_U;
+    const base = C.ROLL_BOTTOM;
+    ctx.fillText(full ? '♪ 전곡 듣기' : '♪ 재생 중', C.W / 2, base + 46);
+    ctx.font = '600 16px ' + FONT_U;
     ctx.fillStyle = 'rgba(255,255,255,0.72)';
-    ctx.fillText(G.st.song.title + ' — ' + G.st.song.en, C.W / 2, 652);
+    ctx.fillText(fitText([G.st.song.title, G.st.song.en].filter(Boolean).join(' — '), C.W - 60), C.W / 2, base + 80);
     const len = full ? G.st.cols * CW : C.PHRASE_W;
     const prog = clamp((P.startX - G.x) / (P.startX - PH + len), 0, 1);
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
-    roundRect(70, 690, C.W - 140, 8, 4);
+    roundRect(70, base + 106, C.W - 140, 8, 4);
     ctx.fill();
     ctx.fillStyle = YELLOW;
-    roundRect(70, 690, Math.max(8, (C.W - 140) * prog), 8, 4);
+    roundRect(70, base + 106, Math.max(8, (C.W - 140) * prog), 8, 4);
     ctx.fill();
-    ctx.font = '700 20px ' + FONT_U;
+    ctx.font = '700 18px ' + FONT_U;
     if (P.wrong > 0) {
       ctx.fillStyle = '#ff8a7a';
-      ctx.fillText('틀린 음 ' + P.wrong + '개', C.W / 2, 740);
+      ctx.fillText('틀린 음 ' + P.wrong + '개', C.W / 2, base + 144);
     } else {
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.fillText(G.st.noise.some((c) => c.alive) ? '방해 블럭이 재생 라인으로 다가와요…' : '원곡 그대로 연주 중', C.W / 2, 740);
+      ctx.fillText(G.st.noise.some((c) => c.alive) ? '방해 블럭이 재생 라인으로 다가와요…' : '원곡 그대로 연주 중', C.W / 2, base + 144);
     }
   }
 
@@ -1143,10 +1190,7 @@
       drawKeys(G.st.rows);
       drawMarker();
       if (G.mode === 'play' || G.mode === 'full') drawPlayPanel();
-      else if (!G.st.form && G.mode !== 'title' && G.mode !== 'menu') {
-        drawHint();
-        drawStatus();
-      }
+      else if (!G.st.form && G.mode !== 'title' && G.mode !== 'menu') drawHint();
       drawAim();
       drawLauncher();
       drawParticles();

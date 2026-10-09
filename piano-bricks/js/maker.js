@@ -144,7 +144,7 @@
     const shift = Math.floor(notes[0].start / 4) * 4;
     notes.forEach((n) => { n.start -= shift; });
     let chords = (src.chords || []).slice(shift / 2).map(normalizeChord);
-    foldRange(notes, 16);
+    foldRange(notes, 20);
 
     const key = detectKey(noteWeights(notes));
     const maxStages = clamp(opts.stages || 6, 1, 12);
