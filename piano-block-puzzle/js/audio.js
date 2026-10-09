@@ -1,4 +1,6 @@
-// Web Audio 합성 피아노. 샘플 파일 없이 배음을 겹쳐 소리를 만든다.
+// Web Audio 악기. 일레븐랩스로 만든 샘플(samples.js)로 소리를 내고,
+// 샘플을 아직 못 읽었거나 디코딩에 실패하면 배음 합성으로 대신한다.
+import { SAMPLES } from './samples.js';
 
 // [배음 배수, 세기]
 const PARTIALS = [
@@ -11,10 +13,67 @@ const PARTIALS = [
   [6, 0.04],
 ];
 
+// 샘플은 모두 -1 dBFS 로 맞춰 두었으니 악기별 음량은 여기서 고른다
+const DRUM_GAIN = { KK: 0.85, SN: 0.6, HH: 0.35, CR: 0.4, TH: 0.6, TL: 0.65 };
+
 export class PianoAudio {
   constructor() {
     this.ctx = null;
     this.bus = null;
+    this.smp = null; // { piano: [{midi, buf}], vocal: [...], drums: {KK: buf}, sfx: {boom: buf} }
+  }
+
+  // base64 mp3 를 한꺼번에 디코딩한다. 끝나기 전까지는 합성음이 난다.
+  loadSamples() {
+    const ctx = this.ctx;
+    const dec = (b64) => {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new Promise((ok, fail) => ctx.decodeAudioData(bytes.buffer, ok, fail)).catch(() => null);
+    };
+    const pitched = (list) => Promise.all(list.map(async ({ midi, data }) => ({ midi, buf: await dec(data) })))
+      .then((xs) => xs.filter((x) => x.buf).sort((a, b) => a.midi - b.midi));
+    const keyed = (obj) => Promise.all(Object.entries(obj).map(async ([k, d]) => [k, await dec(d)]))
+      .then((xs) => Object.fromEntries(xs.filter(([, b]) => b)));
+    Promise.all([pitched(SAMPLES.piano), pitched(SAMPLES.vocal), keyed(SAMPLES.drums), keyed(SAMPLES.sfx)])
+      .then(([piano, vocal, drums, sfx]) => { this.smp = { piano, vocal, drums, sfx }; })
+      .catch(() => {});
+  }
+
+  // 가장 가까운 샘플을 골라 재생 속도로 음정을 맞춘다
+  playPitched(list, midi, when, dur, gain, release) {
+    if (!list || !list.length) return false;
+    let best = list[0];
+    for (const s of list) if (Math.abs(s.midi - midi) < Math.abs(best.midi - midi)) best = s;
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = best.buf;
+    src.playbackRate.value = Math.pow(2, (midi - best.midi) / 12);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gain, when);
+    const end = when + dur;
+    g.gain.setTargetAtTime(0, end, release);
+    src.connect(g);
+    g.connect(this.bus);
+    src.start(when);
+    src.stop(end + release * 6);
+    src.onended = () => g.disconnect();
+    return true;
+  }
+
+  playOne(buf, when, gain, dest = this.bus) {
+    if (!buf) return false;
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const g = ctx.createGain();
+    g.gain.value = gain;
+    src.connect(g);
+    g.connect(dest);
+    src.start(Math.max(when, ctx.currentTime));
+    src.onended = () => g.disconnect();
+    return true;
   }
 
   // 사용자 터치 안에서 호출해야 모바일에서 소리가 난다.
@@ -59,6 +118,7 @@ export class PianoAudio {
       unlock.start(0);
 
       this.resetBus();
+      this.loadSamples();
     }
     if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
     return this.ctx;
@@ -104,6 +164,7 @@ export class PianoAudio {
     const ctx = this.ctx;
     if (!ctx) return;
     when = Math.max(when, ctx.currentTime);
+    if (this.playPitched(this.smp?.piano, midi, when, dur, 0.6 * vel, 0.12)) return;
     const f = 440 * Math.pow(2, (midi - 69) / 12);
     const end = when + dur;
 
@@ -163,6 +224,7 @@ export class PianoAudio {
     const ctx = this.ctx;
     if (!ctx) return;
     when = Math.max(when, ctx.currentTime);
+    if (this.playPitched(this.smp?.vocal, midi, when, Math.max(dur, 0.12), 0.5 * vel, 0.07)) return;
     const f = 440 * Math.pow(2, (midi - 69) / 12);
     const end = when + Math.max(dur, 0.12);
 
@@ -247,6 +309,7 @@ export class PianoAudio {
     if (!ctx) return;
     when = Math.max(when, ctx.currentTime);
     const v = vel;
+    if (this.playOne(this.smp?.drums[key], when, (DRUM_GAIN[key] ?? 0.7) * v)) return;
     switch (key) {
       case 'KK':
         this.toneHit(when, { from: 160, to: 42, gain: 0.95 * v, decay: 0.42, sweep: 0.13 });
@@ -277,6 +340,7 @@ export class PianoAudio {
     const ctx = this.ctx;
     if (!ctx) return;
     const t = ctx.currentTime;
+    if (this.playOne(this.smp?.sfx.boom, t, 0.85, this.master)) return;
     this.toneHit(t, { from: 120, to: 30, gain: 0.9, decay: 0.6, sweep: 0.4, dest: this.master });
     this.noiseHit(t, { type: 'lowpass', freq: 900, gain: 0.8, decay: 0.5, dest: this.master });
     this.noiseHit(t, { type: 'highpass', freq: 3000, gain: 0.2, decay: 0.15, dest: this.master });
@@ -294,6 +358,7 @@ export class PianoAudio {
     const ctx = this.ctx;
     if (!ctx) return;
     const t = ctx.currentTime;
+    if (this.playOne(this.smp?.sfx.thud, t, 0.6, this.master)) return;
     const o = ctx.createOscillator();
     o.type = 'triangle';
     o.frequency.setValueAtTime(170, t);
@@ -327,6 +392,7 @@ export class PianoAudio {
     const ctx = this.ctx;
     if (!ctx) return;
     when = Math.max(when, ctx.currentTime);
+    if (this.playOne(this.smp?.sfx[accent ? 'tock' : 'tick'], when, accent ? 0.3 : 0.35)) return;
     const o = ctx.createOscillator();
     o.type = 'sine';
     o.frequency.value = accent ? 1760 : 1175;
@@ -345,6 +411,7 @@ export class PianoAudio {
     const ctx = this.ctx;
     if (!ctx) return;
     const t = ctx.currentTime;
+    if (this.playOne(this.smp?.sfx.sparkle, t, 0.45, this.master)) return;
     [2093, 2637, 3136, 4186].forEach((freq, i) => {
       const o = ctx.createOscillator();
       o.type = 'sine';

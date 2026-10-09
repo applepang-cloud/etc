@@ -109,11 +109,25 @@ js/instruments.js   악기별 줄 배치(피아노 반음 / 보컬 도레미 / �
 js/pieces.js        블록·폭탄 모양과 트레이 생성
 js/songs.js         곡 데이터와 파서
 js/maker.js         노래 제목으로 레벨 만들기 (Claude 요청, 자동 작곡, 악보 검사)
-js/audio.js         Web Audio 합성 악기: 피아노, 보컬(포먼트), 드럼 (샘플 파일 없음)
+js/audio.js         악기·효과음 재생: samples.js 의 샘플을 음정에 맞춰 재생, 못 읽으면 합성음으로 대신
+js/samples.js       일레븐랩스로 만든 소리(base64 mp3). tools/gen-sounds.mjs 가 만든다
+sounds/             샘플 원본 mp3 와 manifest.json(실제로 잰 음정)
+tools/              gen-sounds.mjs(소리 생성), sfx-lib.mjs(일레븐랩스 호출·음정 분석)
 js/draw.js          블록·폭탄 그리기 도우미
 js/story.js         스토리 모드 엔진 (대사, 선택지, 연주 연동, 심사, 미니게임 2종)
 js/story-data.js    스토리 대본과 등장인물
 js/portraits.js     캐릭터 일러스트 (SVG, 표정 6종)
+```
+
+## 소리
+
+피아노(10음), 보컬 '아'(5음), 드럼 6종, 효과음(폭탄·착지·카운트 틱 2종·반짝임)은 일레븐랩스 효과음 생성으로 만들었다. 생성된 음의 실제 음정을 재서 기록해 두고, 각 건반은 가장 가까운 샘플을 재생 속도로 옮겨 낸다. 효과음 AI가 요청보다 한 옥타브 높게 만드는 일이 잦아서 피아노 샘플은 E2·G2·C3·C4·E4·G#4·C5·E5·G#5·C6 이다(C3~C4 사이는 최대 6반음 옮김).
+
+```bash
+ELEVENLABS_API_KEY=... node piano-block-puzzle/tools/gen-sounds.mjs           # 없는 소리만 생성
+node piano-block-puzzle/tools/gen-sounds.mjs sfx_boom                          # 그 소리만 다시 생성
+node piano-block-puzzle/tools/gen-sounds.mjs --use=piano_e3=2                  # 후보 중 2번째를 쓴다
+node piano-block-puzzle/build-single.mjs                                       # 단일 HTML 다시 빌드
 ```
 
 ## 곡 추가

@@ -1,0 +1,158 @@
+{
+  "piano_c3": {
+    "group": "piano",
+    "midi": 47.967,
+    "seconds": 2.8,
+    "gain": 4.61
+  },
+  "piano_e3": {
+    "group": "piano",
+    "midi": 39.914,
+    "seconds": 2.8,
+    "gain": 2.86
+  },
+  "piano_gs3": {
+    "group": "piano",
+    "midi": 42.967,
+    "seconds": 2.8,
+    "gain": 7.36
+  },
+  "piano_c4": {
+    "group": "piano",
+    "midi": 60.008,
+    "seconds": 2.8,
+    "gain": 5.83
+  },
+  "piano_e4": {
+    "group": "piano",
+    "midi": 64.07,
+    "seconds": 2.8,
+    "gain": 4.8
+  },
+  "piano_gs4": {
+    "group": "piano",
+    "midi": 68.053,
+    "seconds": 2.8,
+    "gain": 5.92
+  },
+  "piano_c5": {
+    "group": "piano",
+    "midi": 72.088,
+    "seconds": 2.8,
+    "gain": 6.98
+  },
+  "piano_e5": {
+    "group": "piano",
+    "midi": 76.078,
+    "seconds": 2.8,
+    "gain": 1.79
+  },
+  "piano_gs5": {
+    "group": "piano",
+    "midi": 80.085,
+    "seconds": 2.8,
+    "gain": 2.75
+  },
+  "piano_c6": {
+    "group": "piano",
+    "midi": 84.057,
+    "seconds": 2.8,
+    "gain": 7.69
+  },
+  "vocal_c4": {
+    "group": "vocal",
+    "midi": 59.863,
+    "seconds": 2.2,
+    "gain": 13.92
+  },
+  "vocal_e4": {
+    "group": "vocal",
+    "midi": 64.013,
+    "seconds": 2.2,
+    "gain": 2.98
+  },
+  "vocal_g4": {
+    "group": "vocal",
+    "midi": 67.056,
+    "seconds": 2.2,
+    "gain": 2.63
+  },
+  "vocal_b4": {
+    "group": "vocal",
+    "midi": 72.039,
+    "seconds": 2.2,
+    "gain": 0.66
+  },
+  "vocal_d5": {
+    "group": "vocal",
+    "midi": 73.979,
+    "seconds": 2.2,
+    "gain": 0.66
+  },
+  "drum_kk": {
+    "group": "drums",
+    "key": "KK",
+    "seconds": 0.5,
+    "gain": 71.74
+  },
+  "drum_sn": {
+    "group": "drums",
+    "key": "SN",
+    "seconds": 0.6,
+    "gain": 40.63
+  },
+  "drum_hh": {
+    "group": "drums",
+    "key": "HH",
+    "seconds": 0.25,
+    "gain": 10.75
+  },
+  "drum_cr": {
+    "group": "drums",
+    "key": "CR",
+    "seconds": 2,
+    "gain": 1
+  },
+  "drum_th": {
+    "group": "drums",
+    "key": "TH",
+    "seconds": 0.7,
+    "gain": 21.67
+  },
+  "drum_tl": {
+    "group": "drums",
+    "key": "TL",
+    "seconds": 0.9,
+    "gain": 56.38
+  },
+  "sfx_boom": {
+    "group": "sfx",
+    "key": "boom",
+    "seconds": 1.2,
+    "gain": 0.6
+  },
+  "sfx_thud": {
+    "group": "sfx",
+    "key": "thud",
+    "seconds": 0.35,
+    "gain": 0.65
+  },
+  "sfx_tick": {
+    "group": "sfx",
+    "key": "tick",
+    "seconds": 0.12,
+    "gain": 296.61
+  },
+  "sfx_tock": {
+    "group": "sfx",
+    "key": "tock",
+    "seconds": 0.15,
+    "gain": 1.8
+  },
+  "sfx_sparkle": {
+    "group": "sfx",
+    "key": "sparkle",
+    "seconds": 1.1,
+    "gain": 1.64
+  }
+}
