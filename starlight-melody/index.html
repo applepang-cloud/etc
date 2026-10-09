@@ -2498,14 +2498,75 @@ function freePlay(page = 0) {
   UI.bg = null;
   bgm('school');
   G.mode = 'free'; G.simLock = false; UI.strip = true; UI.hub = false; setChar('ria'); expr.base = 'idle'; setScene('big'); showPlayUI(false);
-  const fresh = SONGS.every(sg => P.songs[sg.id].stars.every(n => !n)), pages = Math.ceil(SONGS.filter(sg => !sg.ai).length / 6);
+  const fresh = SONGS.every(sg => sg.improv || P.songs[sg.id].stars.every(n => !n)), pages = Math.ceil(SONGS.filter(sg => !sg.ai && !sg.improv).length / 4);
   stopLoop(); UI.stageLabel = '옥상 라이브 D-3';
   say(fresh ? '와 줬구나! 나는 리아. 이번 주말 옥상 라이브에서 부를 곡들 악보가 다 번져 버렸어. 처음이라면 풀이 연습으로 숫자 보는 법부터 알려 줄게!'
     : '어서 와! 오늘은 어떤 곡을 복원해 볼까?', false,
-    SONGS.filter(sg => !sg.ai).slice(page * 6, page * 6 + 6).map(sg => { const st = P.songs[sg.id].stars, done = st.filter(Boolean).length;
+    SONGS.filter(sg => !sg.ai && !sg.improv).sort((a, b) => (a.lesson ? 0 : a.etude ? 2 : 1) - (b.lesson ? 0 : b.etude ? 2 : 1)).slice(page * 4, page * 4 + 4).map(sg => { const st = P.songs[sg.id].stars, done = st.filter(Boolean).length;
       return [`${sg.title}\n${sg.lesson ? '숫자 맞추는 요령' : sg.etude ? '혼자 연습 · ' + LEADS[sg.lead] : CAST[sg.singer].name + ' · ' + LEADS[sg.lead]} · ${done}/${st.length}`, () => { selectSong(sg.id); openStage(done ? Math.min(P.songs[sg.id].unlocked, st.length - 1) : 0); }, sg.id !== (fresh ? 'lesson' : P.last)]; }).concat(pages > 1 ? [[`다른 곡 ▸\n${page + 1}/${pages}쪽`, () => freePlay((page + 1) % pages), true]] : [])
-      .concat([['AI 뮤직맵 ✦\n노래 검색해서 맵 만들기', aiMenu], ['← 처음으로\n메인 메뉴', mainMenu, true]]));
+      .concat([[`즉흥 퍼즐 ∞\n매번 새 소절 · ${P.improv || 0}개 풀었어`, improvMenu], ['AI 뮤직맵 ✦\n노래 검색해서 맵 만들기', aiMenu], ['← 처음으로\n메인 메뉴', mainMenu, true]]));
 }
+
+/* ---------- 즉흥 퍼즐: a fresh bar every time, made here and checked solvable by line logic alone ---------- */
+function linePlace(clue, len) {
+  if (clue.length === 1 && clue[0] === 0) return [Array(len).fill(0)];
+  const out = [];
+  (function rec(i, pos, acc) {
+    if (i === clue.length) { out.push(acc.concat(Array(len - acc.length).fill(0))); return; }
+    const rest = clue.slice(i + 1).reduce((t, n) => t + n + 1, 0);
+    for (let st = pos; st + clue[i] + rest <= len; st++) { const a = acc.concat(Array(st - acc.length).fill(0), Array(clue[i]).fill(1)); rec(i + 1, st + clue[i] + 1, i + 1 < clue.length ? a.concat([0]) : a); }
+  })(0, 0, []);
+  return out;
+}
+function settle(sol, givens) { // how many cells row/column logic settles from the clues and the star cells
+  const H = sol.length, g = sol.map((r, y) => r.map((_, x) => givens.has(y + ',' + x) ? 1 : -1));
+  const rows = sol.map(clueOf), cols = [...Array(W)].map((_, x) => clueOf(sol.map(r => r[x])));
+  const line = (cells, clue) => { const fits = linePlace(clue, cells.length).filter(pl => pl.every((v, i) => cells[i] < 0 || cells[i] === v)); return fits.length ? cells.map((c, i) => c >= 0 ? c : fits.every(pl => pl[i] === fits[0][i]) ? fits[0][i] : -1) : null; };
+  for (let changed = true; changed;) {
+    changed = false;
+    for (let y = 0; y < H; y++) { const n = line(g[y], rows[y]); if (!n) return 0; if (n.some((v, x) => v !== g[y][x])) { g[y] = n; changed = true; } }
+    for (let x = 0; x < W; x++) { const n = line(g.map(r => r[x]), cols[x]); if (!n) return 0; n.forEach((v, y) => { if (v !== g[y][x]) { g[y][x] = v; changed = true; } }); }
+  }
+  return g.reduce((t, r) => t + r.filter(v => v >= 0).length, 0);
+}
+const IMPROV = [
+  { name: '쉬움', rest: 0.38, extra: [['K', ['x...x...', 'x..x.x..', 'x...xx..']]], stars: 2 },
+  { name: '보통', rest: 0.3, extra: [['B', ['x..x..x.', 'x...x...', 'x.x.x.x.']], ['H', ['x.x.x.x.', '.x.x.x.x']], ['S', ['..x...x.', '..x..xx.']], ['K', ['x...x...', 'x..x.x..', 'x..xx...']]], stars: 2 },
+  { name: '어려움', rest: 0.22, extra: [['Q', ['x...x...', '.x..x..x', 'x..x..x.']], ['B', ['x..x..x.', 'xx..x.x.', 'x..xx..x']], ['T', ['.x...x..', '.xx..xx.', 'x.....x.']], ['S', ['..x...x.', '..x...xx', '..x.x.x.']], ['K', ['x..x.x..', 'x...xx..', 'x.x...x.']]], stars: 1 }];
+function makeImprov(lv) {
+  const C = IMPROV[lv], MEL = ['A', 'G', 'E', 'D', 'C'], ORDER = ['A', 'G', 'E', 'D', 'C', 'Q', 'B', 'H', 'T', 'P', 'S', 'K'], pick = a => a[Math.floor(Math.random() * a.length)];
+  for (let t = 0; t < 400; t++) {
+    let i = Math.floor(Math.random() * 5); const m = {}; MEL.forEach(l => m[l] = '');
+    for (let x = 0; x < W; x++) { const on = x === 0 || Math.random() > C.rest; if (on) i = Math.max(0, Math.min(4, i + pick([-1, -1, 0, 1, 1, 2, -2]))); MEL.forEach((l, k) => m[l] += on && k === i ? 'x' : '.'); }
+    const rows = MEL.filter(l => m[l].includes('x')).map(l => [l, m[l]]).concat(C.extra.map(([l, ps]) => [l, pick(ps)])).sort((a, b) => ORDER.indexOf(a[0]) - ORDER.indexOf(b[0]));
+    const sol = rows.map(r => [...r[1]].map(c => c === 'x')), total = sol.length * W;
+    if ([...Array(W)].some((_, x) => !sol.some(r => r[x]))) continue;
+    const givens = new Set(), pool = []; sol.forEach((r, y) => r.forEach((v, x) => { if (v) pool.push(y + ',' + x); }));
+    while (givens.size <= C.stars && settle(sol, givens) < total) { // greedy: the star cell that settles the most
+      let best = null, score = -1; pool.forEach(k => { if (givens.has(k)) return; const g2 = new Set(givens); g2.add(k); const n = settle(sol, g2); if (n > score) { score = n; best = k; } });
+      givens.add(best);
+    }
+    if (givens.size > C.stars || settle(sol, givens) < total) continue;
+    const lanes = rows.map(r => r[0]), [root, pad] = pick([[48, [60, 64, 67]], [45, [57, 60, 64]], [41, [53, 57, 60]], [43, [55, 59, 62]]]);
+    return { id: 'improv1', title: `즉흥 · ${C.name}`, root, pad, lanes, pattern: Object.fromEntries(rows), givens: [...givens].map(k => { const [y, x] = k.split(',').map(Number); return lanes[y] + x; }), intro: [], clear: '좋아, 손이 먼저 움직였다.', sol };
+  }
+  return null;
+}
+function improvMenu() {
+  G.mode = 'free'; stopLoop(); setChar('me'); setScene('big'); showPlayUI(false); UI.strip = false; UI.stageLabel = '즉흥 퍼즐';
+  say('즉흥 퍼즐. 누를 때마다 처음 보는 소절이 새로 만들어진다. 찍지 않고 숫자만으로 풀리는 판만 나온다.', true,
+    IMPROV.map((c, lv) => [`${c.name}\n${['멜로디 + 킥', '멜로디 + 리듬 4줄', '멜로디 + 5줄 · 별 칸 1개'][lv]}`, () => improv(lv)]).concat([['← 곡 고르기', () => freePlay(), true]]));
+}
+function improv(lv) {
+  const st = makeImprov(lv); if (!st) return toast('다시 눌러 주세요.');
+  const sg = { id: 'improv', improv: true, title: '즉흥 퍼즐', bpm: 92 + Math.floor(Math.random() * 5) * 8, lead: pick1(Object.keys(LEADS)), singer: 'me', etude: true, ending: ['…즉흥으로 한 소절.'], stages: [st] };
+  const old = SONGS.findIndex(x => x.improv); if (old >= 0) SONGS.splice(old, 1); SONGS.push(sg);
+  P.songs.improv = { unlocked: 0, stars: [0] };
+  selectSong('improv'); UI.strip = true;
+  G.after = stars => { P.improv = (P.improv || 0) + 1; persist(); setChar('me'); say(`즉흥 ${P.improv}개째. ${'★'.repeat(stars)} 하나 더 할까?`, true, [['다음 즉흥 ▸', () => improv(lv)], ['난이도 바꾸기', improvMenu], ['← 곡 고르기', () => freePlay(), true]]); };
+  openStage(0);
+}
+const pick1 = a => a[Math.floor(Math.random() * a.length)];
 
 /* ---------- AI music map: type a song, Codex (through the local helper server) turns it into a five-bar map ---------- */
 const MAP_SERVER = 'http://127.0.0.1:8131';
