@@ -16,11 +16,11 @@ API = "https://api.elevenlabs.io/v1"
 
 VOICES = {  # who: (voice id, stability, style)
     "narr": ("jB1Cifc2UQbq1gR3wnb0", 0.55, 0.25),   # Bin - measured
-    "pa": ("gJSDQIpSQ56NBGhorBfg", 0.6, 0.2),       # David - calm, clear
-    "haru": ("srhGhMYcxqeTNVuSRvWg", 0.45, 0.4),    # AF-Sora-Junho
-    "mira": ("bQlkYuipD5BHEhntA5iz", 0.35, 0.6),    # AF-Rara-JY
-    "captain": ("s07IwTCOrCDCaETjUVjx", 0.55, 0.3), # Hyunbin
-    "noa": ("yIiJDIlA4V9TvoOO12TS", 0.5, 0.35),     # Emily
+    "pa": ("ZJCNdZEjYwkOElxugmW2", 0.6, 0.2),       # Hyuk (picked on the audition page)
+    "haru": ("gJSDQIpSQ56NBGhorBfg", 0.45, 0.4),    # David - calm (picked)
+    "mira": ("yIiJDIlA4V9TvoOO12TS", 0.35, 0.6),    # Emily (picked)
+    "captain": ("UmYoqGlufKxhJ6NCx5Mv", 0.55, 0.3), # KO Jang Ho (picked)
+    "noa": ("uyVNoMrnUku1dZyVEXwD", 0.5, 0.35),     # Anna Kim (picked)
     "garon": ("UmYoqGlufKxhJ6NCx5Mv", 0.6, 0.3),    # KO Jang Ho
     "ella": ("uyVNoMrnUku1dZyVEXwD", 0.55, 0.3),    # Anna Kim
 }
