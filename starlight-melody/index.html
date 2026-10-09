@@ -3063,12 +3063,25 @@ function spend() { // one action used; the week turns over after three
 const DAILY = typeof DAILY_DATA !== 'undefined' ? DAILY_DATA : [];
 const seasonKey = w => w < 13 ? 'spring' : w < 25 ? 'summer' : w < 37 ? 'autumn' : 'winter';
 function dailyDue() { S.hap = S.hap || {}; const pool = DAILY.filter(d => !S.hap[d.id] && d.season === seasonKey(S.week)); return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null; }
+function ideaPuzzle(o, st) { // a melody idea: catch it as an improv bar; finishing it is what turns it into skill
+  scene('me', o.reply.concat(['#…잊기 전에, 떠오른 소절을 건반으로 옮겨 두자.']), () => {
+    const sg = { id: 'idea', improv: true, title: '떠오른 소절', bpm: 100, lead: 'piano', singer: 'me', ending: ['…메모 완료.'], stages: [Object.assign(st, { id: 'idea1', title: '떠오른 소절', clear: '좋아, 메모 완료.' })] };
+    const old = SONGS.findIndex(x => x.id === 'idea'); if (old >= 0) SONGS.splice(old, 1); SONGS.push(sg); P.songs.idea = { unlocked: 0, stars: [0] };
+    selectSong('idea'); UI.strip = true; tire(o.fx.cond || 0);
+    G.after = stars => {
+      const got = []; Object.keys(STATS).forEach(k => { const n = (o.fx[k] || 0) + (k === 'sense' && stars === 3 ? 1 : 0); if (n) { S.stats[k] = Math.min(10, S.stats[k] + n); got.push(`${STATS[k]} +${n}`); } });
+      if (got.length) toast(got.join(' · ')); hub();
+    };
+    openStage(0);
+  }, '건반으로 ▸');
+}
 function daily(d) {
   S.hap[d.id] = S.week; showHub(true); UI.strip = false; sfx('pop');
   scene('me', d.lines, () => {
     setChar('me');
     say('▼ 어떻게 할까?', true, d.opts.map(o => [o.label, () => {
       const f = o.fx || {}, got = [];
+      if (f.comp > 0) { const st = makeImprov(S.week < 25 ? 0 : 1); if (st) return ideaPuzzle(o, st); }
       if (f.cond) { tire(f.cond); got.push(`컨디션 ${f.cond > 0 ? '+' : ''}${f.cond}`); }
       Object.keys(STATS).forEach(k => { if (f[k]) { S.stats[k] = Math.max(1, Math.min(10, S.stats[k] + f[k])); got.push(`${STATS[k]} +${f[k]}`); } });
       if (got.length) toast(got.join(' · '));
