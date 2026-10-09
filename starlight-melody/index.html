@@ -2715,7 +2715,7 @@ function choose(who, opts, done) {
   say('▼ 어떻게 대답할까?', true, acts);
 }
 function like(who, n) {
-  S.aff[who] = Math.max(0, Math.min(100, S.aff[who] + n));
+  S.aff[who] = Math.max(0, Math.min(100, S.aff[who] + n)); if (n > 0) { S.last = S.last || {}; S.last[who] = S.week; }
   toast(`${CAST[who].name} ♥ ${n > 0 ? '+' + n : n}`); if (n > 0) sfx('heart');
   expr.temp = n >= 12 ? 'happy' : n <= 0 ? 'oops' : null; expr.tempUntil = performance.now() + 1800;
   if (n >= 12) emote('love', 'hop'); else if (n < 0) emote('anger', 'shake'); else if (n === 0) emote('silence', 'shake');
@@ -2784,9 +2784,13 @@ function encounter(h) { // a chance meeting: free, short, a little affection
   scene('me', [BUMP[Math.floor(Math.random() * BUMP.length)]], () => scene(h, [SIM[h].small[Math.floor(Math.random() * SIM[h].small.length)]], () => { like(h, 2); hub(); }));
 }
 function endWeek() {
-  S.week++; S.ap = AP; tire(8); simStore.save();
+  S.week++; S.ap = AP; tire(8);
+  // someone you have not seen for six weeks starts to feel left out
+  S.last = S.last || {}; const sulky = HEROINES.filter(h => S.met[h] && S.aff[h] > 20 && S.week - (S.last[h] || 0) > 6);
+  sulky.forEach(h => { S.aff[h] = Math.max(0, S.aff[h] - 2); });
+  simStore.save();
   if (S.week > WEEKS) return finalEnding();
-  toast(`${weekLabel(S.week)} · ${seasonOf(S.week)}`); hub();
+  toast(sulky.length ? `${CAST[sulky[0]].name}${jong(CAST[sulky[0]].name) ? '이' : '가'} 서운해하는 것 같다…` : `${weekLabel(S.week)} · ${seasonOf(S.week)}`); hub();
 }
 const REST = ['#하루 푹 쉬었다. 몸이 가벼워졌다.', '#창가에 누워 좋아하는 음악만 들었다.', '#일찍 잠들었다. 꿈에서 누군가 노래하고 있었다.'];
 function rest() { showHub(true); tire(35); toast('컨디션 +35'); scene('me', [REST[Math.floor(Math.random() * REST.length)]], spend); }
