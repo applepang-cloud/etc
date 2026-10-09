@@ -2798,13 +2798,13 @@ function spend() { // one action used; the week turns over after three
 const BUMP = ['#복도 모퉁이에서 누군가와 부딪칠 뻔했다.', '#매점 앞 줄에서 아는 얼굴을 발견했다.', '#하굣길 버스 정류장에서 우연히 마주쳤다.', '#계단을 내려가는데 누가 내 이름을 불렀다.'];
 function encounter(h) { // a chance meeting: free, short, a little affection
   showHub(false); UI.strip = false; expr.base = 'idle';
-  scene('me', [BUMP[Math.floor(Math.random() * BUMP.length)]], () => scene(h, [SIM[h].small[Math.floor(Math.random() * SIM[h].small.length)]], () => { like(h, 2); hub(); }));
+  scene('me', [BUMP[Math.floor(Math.random() * BUMP.length)]], () => scene(h, [SIM[h].small[Math.floor(Math.random() * SIM[h].small.length)]], () => { like(h, 1); hub(); }));
 }
 function endWeek() {
   S.week++; S.ap = AP; tire(8);
   // someone you have not seen for six weeks starts to feel left out
-  S.last = S.last || {}; const sulky = HEROINES.filter(h => S.met[h] && S.aff[h] > 20 && S.week - (S.last[h] || S.week) > 6);
-  sulky.forEach(h => { S.aff[h] = Math.max(0, S.aff[h] - 2); });
+  S.last = S.last || {}; const sulky = HEROINES.filter(h => S.met[h] && S.aff[h] > 20 && S.week - (S.last[h] || S.week) > 5);
+  sulky.forEach(h => { S.aff[h] = Math.max(0, S.aff[h] - 3); });
   simStore.save();
   if (S.week > WEEKS) return finalEnding();
   if ((S.week - 1) % 4 === 0) UI.card = { title: MONTHS[(S.week - 1) / 4], sub: seasonOf(S.week), t0: performance.now() }; // a new month
@@ -2845,7 +2845,7 @@ function explore(h) {
 }
 function smallTalk(h) {
   const t = SIM[h].small[Math.floor(Math.random() * SIM[h].small.length)];
-  scene(h, ['#' + SIM[h].place + '에서 ' + ga(CAST[h].name) + ' 반겨 주었다.', t], () => { like(h, 4); spend(); });
+  scene(h, ['#' + SIM[h].place + '에서 ' + ga(CAST[h].name) + ' 반겨 주었다.', t], () => { like(h, 3); spend(); });
 }
 function meetMenu() {
   say('누구를 만나러 갈까?', true, HEROINES.filter(h => S.met[h]).map(h => [`${CAST[h].name}\n${hearts(S.aff[h])} ${level(S.aff[h])}`, () => meet(h)]).concat([back]));
@@ -2887,7 +2887,7 @@ function datePlace(h) {
 function date(h, p) {
   showHub(false); UI.strip = false; S.dated = S.week; tire(6);
   const D = SIM[h].date, tier = (SIM[h].likes && SIM[h].likes[p]) || 'ok', pool = (D && D[tier]) || SIM[h].small;
-  scene('me', DATE_PLACES[p] || [`#주말, ${PLACE_NAME[p]}에 갔다.`], () => scene(h, [pool[Math.floor(Math.random() * pool.length)]], () => { like(h, { good: 12, ok: 6, bad: 1 }[tier]); spend(); }));
+  scene('me', DATE_PLACES[p] || [`#주말, ${PLACE_NAME[p]}에 갔다.`], () => scene(h, [pool[Math.floor(Math.random() * pool.length)]], () => { like(h, { good: 9, ok: 4, bad: 0 }[tier]); spend(); }));
 }
 const LOVE_AT = 80;
 function finishSim(title, key, lines) {
