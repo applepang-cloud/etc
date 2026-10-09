@@ -555,7 +555,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
             <li><b>컬러 블럭</b>은 방해 음이에요. 적힌 <b>숫자만큼</b> 맞혀야 깨져요.</li>
             <li>특수 블럭: <b>⊕ 공 추가</b>(바로 공 하나 더 + 다음 발사부터 공 +1) · <b>⚡ 속도 UP</b>(이번 턴 공이 빨라짐) · <b>↔ 발판 UP</b>(천천히 떨어지는 아이템을 발판으로 받으면 발판이 넓어짐)</li>
             <li>한 번 쏠 때마다 보드가 가운데 <b>재생 라인</b> 쪽으로 흘러가요.</li>
-            <li><b>30번</b> 발사가 끝나면 남은 방해 블럭이 재생 라인에 닿아 <b>틀린 음</b>으로 연주돼요.</li>
+            <li><b>20번</b> 발사가 끝나면 남은 방해 블럭이 재생 라인에 닿아 <b>틀린 음</b>으로 연주돼요.</li>
             <li>남은 방해 블럭 0개 ★★★ · 1~5개 ★★ · 6~10개 ★ · <b>11개 이상 GAME OVER</b></li>
             <li>한 곡의 모든 스테이지를 깨면 <b>전곡 듣기</b>가 이어져요.</li>
           </ul>
@@ -772,7 +772,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     KEY_W: 56,
     BALL_R: 6,
     BALL_SPEED: 620,
-    TURNS: 30,
+    TURNS: 20, // launches per stage
     STEPS: 2, // cells per beat (eighth-note grid)
     COLS: 16, // cells per stage = 8 beats
     CELL_W: 26,
