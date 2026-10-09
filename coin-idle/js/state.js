@@ -13,7 +13,7 @@ function newState() {
     managers: [], cands: [], candNext: 0, hhFree: -1,
     stocks: {}, sHold: {}, idx: { KR: 100, US: 100 }, idxHist: { KR: [], US: [] }, idxShock: { KR: 0, US: 0 },
     re: 100, reHist: [], reShock: 0, props: {}, biz: {}, startups: [], offers: [], offersNext: 0,
-    news: [], etfDone: [], nextNews: 6, nextYT: 14, sched: { fomc: TPD * 6, bok: TPD * 10, halving: TPD * 45 }, pend: [], tips: [], tipNext: TPD * 2,
+    news: [], etfDone: [], stories: [], nextStory: 20, nextNews: 6, nextYT: 14, sched: { fomc: TPD * 6, bok: TPD * 10, halving: TPD * 45 }, pend: [], tips: [], tipNext: TPD * 2,
     log: [], nwHist: [],
     stats: { taps: 0, buys: 0, sells: 0, wins: 0, losses: 0, realized: 0, hires: 0, liqs: 0, bestRoe: 0, divs: 0, bestExit: 0, rugged: 0, gfs: 0, spent: 0, peak: 0, volume: 0, mined: 0, fees: 0, rent: 0, bizIncome: 0, invests: 0 },
     ach: {},

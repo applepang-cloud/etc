@@ -178,6 +178,27 @@ const Chart = {
       ctx.globalAlpha = 1;
     }
 
+    // 뉴스 · 유튜브 표시: 해당 캔들 아래에 점을 찍고, 십자선을 올리면 제목을 보여준다
+    this.newsAt = new Map();
+    for (const nw of S.news) {
+      if (!(nw.coins || []).includes(sym)) continue;
+      const j = cur - Math.floor((nw.t - 1) / tf);
+      if (j >= n) break;
+      const i = n - 1 - j;
+      if (i < 0) continue;
+      if (!this.newsAt.has(i)) this.newsAt.set(i, []);
+      this.newsAt.get(i).push(nw);
+    }
+    const ny = priceH - (ind.vol ? volH : 0) - 7;
+    for (const [i, list] of this.newsAt) {
+      const nw = list[0];
+      const col = nw.tone > 0 ? V.up : nw.tone < 0 ? V.down : V.muted;
+      ctx.beginPath();
+      ctx.arc(xc(i), ny, list.some(x => x.big) ? 5 : 3.5, 0, Math.PI * 2);
+      if (nw.cat === 'yt') { ctx.fillStyle = V.bg; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = col; ctx.stroke(); ctx.lineWidth = 1; }
+      else { ctx.fillStyle = col; ctx.fill(); }
+    }
+
     // 현재가 라벨
     const yp = py(c.p);
     const last = k[n - 1];
@@ -270,6 +291,22 @@ const Chart = {
         ctx.fillStyle = chg >= 0 ? V.up : V.down;
         ctx.textBaseline = 'middle';
         ctx.fillText(txt, 10, 28);
+        const nl = this.newsAt && this.newsAt.get(i);
+        if (nl) {
+          nl.slice(0, 3).forEach((nw, k) => {
+            let line = (nw.cat === 'yt' ? '▶ ' : nw.tone > 0 ? '▲ ' : nw.tone < 0 ? '▼ ' : '● ') + nw.title;
+            let cut = false;
+            while (ctx.measureText(line + (cut ? '…' : '')).width > plotW - 24 && line.length > 4) { line = line.slice(0, -1); cut = true; }
+            if (cut) line += '…';
+            const w = ctx.measureText(line).width + 12;
+            ctx.fillStyle = V.bg;
+            ctx.globalAlpha = 0.92;
+            ctx.fillRect(4, 40 + k * 20, w, 20);
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = nw.tone > 0 ? V.up : nw.tone < 0 ? V.down : V.fg;
+            ctx.fillText(line, 10, 50 + k * 20);
+          });
+        }
       }
     }
   },

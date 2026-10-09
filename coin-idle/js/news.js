@@ -5,11 +5,17 @@ const News = {
   tick(S) {
     if (--S.nextNews <= 0) {
       this.gen(S, chance(0.5) ? 'kr' : 'gl');
-      S.nextNews = randi(18, 42);
+      S.nextNews = randi(15, 35);
     }
     if (--S.nextYT <= 0) {
       this.genYT(S);
-      S.nextYT = randi(28, 60);
+      S.nextYT = randi(22, 45);
+    }
+    // 연속 보도: 진행 중인 이슈는 정해진 간격으로 다음 소식이 이어진다
+    for (const st of S.stories.slice()) if (S.t >= st.next) this.advanceStory(S, st);
+    if (--S.nextStory <= 0) {
+      if (S.stories.length < 3) this.startStory(S);
+      S.nextStory = randi(60, 140);
     }
     for (let i = S.pend.length - 1; i >= 0; i--) {
       const p = S.pend[i];
@@ -90,14 +96,16 @@ const News = {
       if (tpl.etf === 'approve') S.etfDone.push(syms[0]);
     }
     const sym = syms[0];
-    const v = this.vars(S, sym);
+    const v = extra.vars || this.vars(S, sym);
     if (tpl.fx === 'fgUp') v.n = randi(8, 30);
     if (tpl.fx === 'kpUp') { this.fx(S, 'kpUp', 1, syms); v.kp = (S.kp * 100).toFixed(1); }
     const mag = tpl.mag ? rand(tpl.mag[0], tpl.mag[1]) : 0;
     let tone = tpl.tone;
+    const mkt = !tpl.pool && mag > 0;
     const item = {
       cat, src: cat === 'kr' ? pick(KR_SRC) : pick(GL_SRC), title: fill(tpl.t, v), body: fill(tpl.b || '', v),
-      tone, coins: syms.slice(0, 6), big: !!tpl.big, rumor: tpl.cred != null, power: this.power(mag), planned: !!extra.planned,
+      tone, coins: mkt ? ['BTC', 'ETH'] : syms.slice(0, 6), mkt, big: !!tpl.big, rumor: tpl.cred != null, power: this.power(mag), planned: !!extra.planned,
+      story: extra.story || null,
     };
     if (mag > 0) {
       // 재료 선반영: 가끔은 호재에도 떨어지고 악재에도 오른다
@@ -108,12 +116,66 @@ const News = {
       else for (const s of syms) this.shock(S, s, eff * mag, tpl.dur || 30, o);
       if (tpl.spill) this.marketShock(S, eff * mag * tpl.spill, tpl.dur || 30, {});
       S.sent += tone * Math.min(12, mag * 120);
-      if (tpl.cred != null && !chance(tpl.cred)) {
+      if (typeof tpl.cred === 'number' && !chance(tpl.cred)) {
         S.pend.push({ t: S.t + randi(20, 60), type: 'debunk', title: item.title, syms, amt: -eff * mag * 1.1, pool: !tpl.pool, cat });
       }
     }
     if (tpl.fx && tpl.fx !== 'kpUp') this.fx(S, tpl.fx, tone, syms);
-    return this.push(S, item);
+    this.push(S, item);
+    // 큰 뉴스나 이어지는 이슈에는 유튜버들이 반응 영상을 올린다
+    if (mag > 0 && (item.big || item.story) && chance(item.big ? 0.75 : 0.45)) {
+      S.pend.push({ t: S.t + randi(8, 25), type: 'ytReact', newsId: item.id, sym: syms[0] || 'BTC', topic: this.topic(item.title), tone });
+    }
+    return item;
+  },
+
+  /** 뉴스 제목을 영상 제목에 넣기 좋게 줄인다 */
+  topic(title) {
+    let t = title.replace(/^\[[^\]]*\]\s*/, '').split(/…|\.\.\./)[0].replace(/["“”]/g, '').replace(/\([A-Z]+\)/g, '').replace(/\s+/g, ' ').trim();
+    if (t.length > 26) {
+      const cut = t.lastIndexOf(' ', 26);
+      t = t.slice(0, cut > 12 ? cut : 26).replace(/[,·]$/, '').trim() + '…';
+    }
+    return t;
+  },
+
+  /* ---------- 연속 보도 ---------- */
+  startStory(S) {
+    const active = new Set(S.stories.map(x => x.sid));
+    const f = Math.exp(-Market.dev(S) * 2.5 - S.sent / 50);
+    const cands = STORIES.filter(d => !active.has(d.id) && (!d.etf || COIN_POOLS.etf.some(s => !S.etfDone.includes(s))));
+    if (!cands.length) return null;
+    const def = pickW(cands, d => (d.w || 1) * (d.steps[0].tone > 0 ? f : 1 / f));
+    let sym = null;
+    if (def.pool) {
+      let pool = COIN_POOLS[def.pool];
+      if (def.etf) pool = pool.filter(s => !S.etfDone.includes(s));
+      const busy = new Set(S.stories.map(x => x.sym));
+      sym = pick(pool.filter(s => !busy.has(s)).length ? pool.filter(s => !busy.has(s)) : pool);
+    }
+    // 갈림길 결과는 시작할 때 미리 정해 둔다 (보도 전까지는 인맥 귀띔으로만 알 수 있음)
+    const picks = def.steps.map(stp => stp.branch ? stp.branch.indexOf(pickW(stp.branch, b => b.p)) : 0);
+    const st = { id: uid(S), sid: def.id, sym, v: this.vars(S, sym), step: 0, next: S.t, picks, tipped: false, start: S.t, news: [] };
+    S.stories.push(st);
+    this.advanceStory(S, st);
+    return st;
+  },
+
+  advanceStory(S, st) {
+    const def = STORIES.find(d => d.id === st.sid);
+    if (!def) { S.stories = S.stories.filter(x => x !== st); return; }
+    let step = def.steps[st.step];
+    if (step.branch) step = step.branch[st.picks[st.step]];
+    const item = this.gen(S, def.cat, { ...step, pool: def.pool }, st.sym, {
+      vars: st.v, story: { id: st.id, sid: def.id, name: def.name, step: st.step + 1, total: def.steps.length },
+    });
+    if (step.etfDone && st.sym && !S.etfDone.includes(st.sym)) S.etfDone.push(st.sym);
+    st.news.push(item.id);
+    st.last = item.title;
+    st.lastTone = step.tone;
+    st.step++;
+    if (st.step >= def.steps.length) S.stories = S.stories.filter(x => x !== st);
+    else st.next = S.t + randi(...(step.gap || [40, 90]));
   },
 
   fx(S, key, tone, syms) {
@@ -150,6 +212,8 @@ const News = {
       this.gen(S, p.cat, list[p.idx], p.sym, { planned: true });
     } else if (p.type === 'plannedYT') {
       this.genYT(S, YT_CH[p.ch], p.sym);
+    } else if (p.type === 'ytReact') {
+      this.genYT(S, null, p.sym, p);
     }
   },
 
@@ -162,8 +226,10 @@ const News = {
     });
   },
 
-  genYT(S, chOverride, symOverride) {
-    const ch = chOverride || pick(YT_CH);
+  genYT(S, chOverride, symOverride, react) {
+    const ch = chOverride || (react
+      ? pickW(YT_CH, c => ({ hype: 3, analyst: 2, doom: react.tone < 0 ? 3 : 1.5, calm: 1.5, hodl: 1, diary: 1 }[c.style]))
+      : pick(YT_CH));
     const st = YT_STYLE[ch.style];
     const sym = symOverride || pick(COIN_POOLS[pick(st.pool)]);
     let tone = st.tone;
@@ -174,14 +240,15 @@ const News = {
     const mag = st.mag[1] > 0 ? rand(st.mag[0], st.mag[1]) : 0;
     if (mag > 0) {
       const o = st.bait ? { rev: 1.15, revDelay: 12, jump: 0.3 } : { jump: 0.3 };
-      if (st.market) this.marketShock(S, tone * mag, 12, o);
-      else this.shock(S, sym, tone * mag, 12, o);
+      if (st.market && !react) this.marketShock(S, tone * mag, 12, o);
+      else this.shock(S, sym, tone * mag * (react ? 1.3 : 1), 12, o);
       S.sent += tone * (st.bait ? 3 : 1.5);
     }
     const mm = randi(6, 24), ss = randi(0, 59);
     return this.push(S, {
       cat: 'yt', src: ch.name, ch: ch.name, hue: ch.hue, subs: ch.subs, style: ch.style, bait: !!st.bait, rel: st.rel,
-      title: fill(pick(st.titles), { c: COIN[sym].name, s: sym, kp: ((S.kp + 0.02) * 100).toFixed(1) }),
+      title: fill(pick(react ? YT_REACT[ch.style] : st.titles), { c: COIN[sym].name, s: sym, kp: ((S.kp + 0.02) * 100).toFixed(1), topic: react ? react.topic : '' }),
+      ref: react ? react.newsId : null, topic: react ? react.topic : null,
       tone: st.flavor ? 0 : tone, coins: [sym], power: this.power(mag), views: Math.round(ch.subs * rand(0.08, 0.9)),
       dur: `${mm}:${String(ss).padStart(2, '0')}`, points: st.points,
     });
@@ -275,6 +342,7 @@ const News = {
     if (ex >= 3) options.push('exchange');
     if (yt >= 3) options.push('youtuber');
     if (!options.length) return;
+    if (an >= 2 && this.storyTip(S, an)) return;
     const who = pick(options);
     const at = S.t + randi(15, 40);
     let sym, tone, text, acc;
@@ -309,5 +377,22 @@ const News = {
     const tip = { id: uid(S), who, sym, tone: told, text, at, until: at + 40 };
     S.tips.unshift(tip);
     Game.emit('tip', tip);
+  },
+
+  /** 결말이 다가온 이슈가 있으면 애널리스트가 결과를 귀띔한다 */
+  storyTip(S, an) {
+    const st = S.stories.find(x => !x.tipped && STORIES.find(d => d.id === x.sid).steps[x.step]?.branch);
+    if (!st || !chance(0.7)) return false;
+    st.tipped = true;
+    const def = STORIES.find(d => d.id === st.sid);
+    const br = def.steps[st.step].branch;
+    const real = st.picks[st.step];
+    const acc = an >= 3 ? 0.95 : 0.75;
+    const said = chance(acc) ? real : (real + 1) % br.length;
+    const name = def.name + (st.sym ? ` (${COIN[st.sym].name})` : '');
+    const tip = { id: uid(S), who: 'analyst', sym: st.sym || 'BTC', tone: br[said].tone, text: `"${name} 건 말인데, ${br[said].hint}더라."`, at: st.next, until: st.next + 40, story: st.id };
+    S.tips.unshift(tip);
+    Game.emit('tip', tip);
+    return true;
   },
 };

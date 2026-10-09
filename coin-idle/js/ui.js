@@ -272,7 +272,8 @@ const UI = {
     setH($('#ticker'), items.map(n => {
       const tag = n.cat === 'yt' ? '유튜브' : n.cat === 'kr' ? '국내' : '해외';
       const cls = n.tone > 0 ? 'up' : n.tone < 0 ? 'down' : 'flat';
-      return `<span><b class="${cls}">${n.big ? '속보' : tag}</b>${esc(n.title)}</span>`;
+      const label = n.big ? '속보' : n.story && n.story.step > 1 ? '후속' : n.topic ? '반응' : tag;
+      return `<span><b class="${cls}">${label}</b>${esc(n.title)}</span>`;
     }).join(''));
   },
 
@@ -313,14 +314,22 @@ const UI = {
   updateCoinList() {
     const S = this.S;
     const items = this.coinListItems();
+    // 최근 2시간(게임) 안에 개별 뉴스가 나온 코인 표시
+    const recent = {};
+    for (const n of S.news) {
+      if (S.t - n.t > 10) break;
+      if (!n.mkt) for (const sym of n.coins || []) if (!(sym in recent)) recent[sym] = n.tone;
+    }
     syncList($('#coin-rows'), items, d => d.sym + (S.ui.fav.includes(d.sym) ? '*' : '') + (S.ui.sel === d.sym ? '!' : ''), d => `
       <div class="cl-row" data-key="${d.sym}${S.ui.fav.includes(d.sym) ? '*' : ''}${S.ui.sel === d.sym ? '!' : ''}" data-act="sel" data-arg="${d.sym}" aria-current="${S.ui.sel === d.sym}">
-        <div class="cl-name"><button class="star" data-act="fav" data-arg="${d.sym}" aria-pressed="${S.ui.fav.includes(d.sym)}" aria-label="관심 코인">★</button><div><b>${d.name}</b><small>${d.sym}/KRW</small></div></div>
+        <div class="cl-name"><button class="star" data-act="fav" data-arg="${d.sym}" aria-pressed="${S.ui.fav.includes(d.sym)}" aria-label="관심 코인">★</button><div><b>${d.name}</b><small>${d.sym}/KRW <i class="nd" data-f="nd" title="방금 관련 뉴스" hidden></i></small></div></div>
         <span class="num px" data-f="px"></span><span class="num" data-f="chg"></span><span class="num vol" data-f="vol"></span>
       </div>`, (el, d) => {
       const f = F(el);
       const c = S.coins[d.sym];
       const st = Market.stats24(S, d.sym);
+      f.nd.hidden = !(d.sym in recent);
+      if (d.sym in recent) setC(f.nd, 'nd ' + signCls(recent[d.sym]));
       setT(f.px, fmtPrice(c.p));
       setC(f.px, 'num px ' + pctCls(st.chg));
       setT(f.chg, fmtPct(st.chg));
@@ -364,7 +373,8 @@ const UI = {
           <div><span>사상 최고가</span><b data-f="ath"></b></div>
           <div><span>일 변동성</span><b>${(d.vol * 100).toFixed(1)}%</b></div>
         </div>
-        <div class="ch-desc"><span>${d.desc} <span data-f="badges"></span></span>${refs}</div>`;
+        <div class="ch-desc"><span>${d.desc} <span data-f="badges"></span></span>${refs}</div>
+        <button class="news-line" data-act="btab" data-arg="cnews" data-f="nl" hidden title="이 코인 뉴스 모두 보기"><span class="lbl">최근 뉴스</span><span class="tag" data-f="nlt"></span><span class="nl-title" data-f="nltitle"></span><span class="since mono" data-f="nls"></span></button>`;
     }
     const f = F(box);
     const st = Market.stats24(S, sym);
@@ -387,6 +397,16 @@ const UI = {
     if (d.rug) badges.push('<span class="tag warn">러그풀 위험</span>');
     if (MINE_COINS.includes(sym)) badges.push('<span class="tag">채굴 가능</span>');
     setH(f.badges, badges.join(' '));
+    const ln = S.news.find(n => (n.coins || []).includes(sym));
+    f.nl.hidden = !ln;
+    if (ln) {
+      setT(f.nlt, ln.tone > 0 ? '호재' : ln.tone < 0 ? '악재' : '중립');
+      setC(f.nlt, 'tag ' + (ln.tone > 0 ? 'up' : ln.tone < 0 ? 'down' : ''));
+      setT(f.nltitle, (ln.cat === 'yt' ? '[유튜브] ' : ln.story ? `[${ln.story.name} ${ln.story.step}/${ln.story.total}] ` : '') + ln.title);
+      const ch = ln.p0 && ln.p0[sym] ? c.p / ln.p0[sym] - 1 : 0;
+      setT(f.nls, `${ago(S, ln.t)} · 이후 ${fmtPct(ch)}`);
+      setC(f.nls, 'since mono ' + signCls(ch));
+    }
   },
 
   updateOrderForm() {
@@ -758,6 +778,8 @@ const UI = {
     if (n.big) extra += '<span class="tag warn">속보</span>';
     if (n.rumor) extra += '<span class="tag violet">루머</span>';
     if (n.planned) extra += '<span class="tag gold">귀띔 적중</span>';
+    if (n.story) extra += `<span class="tag story" title="같은 이슈의 다음 소식이 이어집니다">${esc(n.story.name)} ${n.story.step}/${n.story.total}${n.story.step === n.story.total ? ' · 결말' : ''}</span>`;
+    if (n.mkt) extra += '<span class="tag">시장 전체</span>';
     if (anLv >= 1 && n.power) extra += `<span class="tag gold" title="애널리스트 친구의 영향 강도 평가">강도 ${'●'.repeat(n.power)}${'○'.repeat(3 - n.power)}</span>`;
     if (n.cat === 'yt') {
       if (ytLv >= 1 && n.bait) extra += '<span class="tag warn">낚시 주의</span>';
@@ -768,7 +790,7 @@ const UI = {
       const words = n.title.replace(/[\[\]]/g, '').split(/[…!?,.]/)[0].slice(0, 18);
       return `<article class="news-item yt" data-key="${n.id}" data-act="ytOpen" data-arg="${n.id}">
         <div class="thumb" style="background:linear-gradient(135deg,hsl(${n.hue} 70% 38%),hsl(${(n.hue + 40) % 360} 75% 22%))"><span class="play"></span><span class="tt">${esc(words)}</span><span class="dur">${n.dur}</span></div>
-        <div><h4>${esc(n.title)}</h4><p>${esc(n.ch)} · 조회수 ${fmtNum(n.views)}회 · <time data-ago></time></p><div class="news-tags">${toneTag}${extra}${chips}</div></div>
+        <div><h4>${esc(n.title)}</h4><p>${esc(n.ch)} · 조회수 ${fmtNum(n.views)}회 · <time data-ago></time></p>${n.topic ? `<p class="ref">↳ 「${esc(n.topic)}」 뉴스 반응 영상</p>` : ''}<div class="news-tags">${toneTag}${extra}${chips}</div></div>
       </article>`;
     }
     return `<article class="news-item" data-key="${n.id}">
@@ -811,6 +833,18 @@ const UI = {
     setT(gf.v, String(Math.round(S.fg)));
     setT(gf.l, fgLabel(S.fg));
     Chart.gauge($('#fg-canvas'), S.fg);
+
+    setH($('#stories'), S.stories.length ? S.stories.map(st => {
+      const def = STORIES.find(d => d.id === st.sid);
+      const total = def.steps.length;
+      const nextIsEnd = !!def.steps[st.step].branch || st.step === total - 1;
+      return `<div class="story-item">
+        <div class="story-top"><b>${esc(def.name)}</b>${st.sym ? `<button class="tag" data-act="goCoin" data-arg="${st.sym}">${st.sym}</button>` : '<span class="tag">시장 전체</span>'}<span class="muted small">${st.step}/${total}</span></div>
+        <div class="bar"><i style="width:${st.step / total * 100}%"></i></div>
+        <p class="small"><span class="${signCls(st.lastTone)}">${st.lastTone > 0 ? '▲' : '▼'}</span> ${esc(st.last)}</p>
+        <small class="muted">${nextIsEnd ? '결말' : '다음 소식'}까지 약 ${ticksToText(st.next - S.t)}</small>
+      </div>`;
+    }).join('') : '<p class="muted small" style="margin:0">지금은 이어지는 이슈가 없습니다. 상장설 · ETF 심사 · 해킹 같은 이슈는 여러 번에 걸쳐 보도되고, 결말에 따라 시세가 크게 움직입니다.</p>');
 
     const tips = S.tips;
     setH($('#tips'), tips.length ? tips.map(tp => `<div class="tip"><b>${CONTACTS[tp.who].name}</b><span>${esc(tp.text)}</span><small>${tp.at > S.t ? `약 ${ticksToText(tp.at - S.t)} 뒤` : '이미 나왔을 수도'} · ${COIN[tp.sym].name}</small></div>`).join('')

@@ -24,9 +24,13 @@ const Game = {
         UI.renderTicker();
         if (UI.tab !== 'news') $('#news-dot').hidden = false;
         const mine = (p.coins || []).some(s => (S.hold[s]?.q || 0) > 0);
+        const storyEnd = p.story && p.story.step === p.story.total;
         if (p.big) {
           Sound.play('breaking', { gap: 400 });
           UI.toast(p.title, p.cat === 'yt' ? p.ch : p.src, p.tone > 0 ? 'up' : p.tone < 0 ? 'down' : '');
+        } else if (p.story && (storyEnd || mine)) {
+          Sound.play('news', { gap: 400 });
+          UI.toast(p.title, `${p.story.name} ${p.story.step}/${p.story.total}${storyEnd ? ' · 결말' : ' · 이어지는 보도'}`, p.tone > 0 ? 'up' : p.tone < 0 ? 'down' : '');
         } else if (p.cat === 'yt') {
           Sound.play('yt', { gap: 400 });
           if (mine) UI.toast('유튜브: ' + p.title, p.ch, '');
@@ -242,7 +246,12 @@ UI.acts = {
   tf(arg) { this.S.ui.tf = +arg; this.syncToggles(); Game.drawChart(); },
   ind(arg) { this.S.ui.ind[arg] = !this.S.ui.ind[arg]; this.syncToggles(); Game.drawChart(); },
   otab(arg) { this.S.ui.otab = arg; this.syncToggles(); this.updateOrderForm(); },
-  btab(arg) { this.S.ui.btab = arg; this.syncToggles(); this.updateBottom(); },
+  btab(arg, el) {
+    this.S.ui.btab = arg;
+    this.syncToggles();
+    this.updateBottom();
+    if (el && el.classList.contains('news-line')) $('#btabs').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  },
 
   pct(arg) {
     const S = this.S, sym = S.ui.sel;
