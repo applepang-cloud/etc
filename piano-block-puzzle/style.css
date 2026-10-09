@@ -297,7 +297,7 @@ h1 {
 .chip.bad { background: #a35ee0; box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.4), inset 0 -3px 0 rgba(0, 0, 0, 0.35); }
 .chip.gold { background: var(--gold); box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.45), inset 0 -3px 0 rgba(0, 0, 0, 0.3); }
 
-.mode-block { display: grid; gap: 10px; }
+.mode-block { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .play-mode { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
 .play-mode .mode-desc { margin: 0; }
 .mode-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -378,6 +378,85 @@ h1 {
 .free-icon i:nth-child(1) { height: 12px; background: #3cc1f0; }
 .free-icon i:nth-child(2) { height: 22px; }
 .free-icon i:nth-child(3) { height: 16px; background: #ef5fae; }
+
+/* 노래 제목으로 레벨 만들기 */
+.maker-form { display: flex; gap: 8px; }
+.maker-input {
+  flex: 1;
+  width: 0; /* 입력칸 기본 폭 때문에 메뉴가 옆으로 넘치지 않게 */
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px; /* iOS 확대 방지 */
+  -webkit-user-select: text;
+  user-select: text;
+}
+.maker-input::placeholder { color: var(--muted); }
+.maker-input:focus { outline: none; border-color: var(--gold); }
+.maker-input:disabled { opacity: 0.6; }
+.maker-go { flex: none; padding: 12px 18px; }
+.maker-go:disabled { opacity: 0.5; cursor: default; }
+.maker-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.maker-label { color: var(--muted); font-size: 13px; }
+.maker-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.maker-status.done { border-color: var(--note); }
+.maker-status.error { border-color: var(--danger); }
+.maker-spin {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--line);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: maker-spin 0.8s linear infinite;
+}
+.maker-status:not(.busy) .maker-spin { display: none; }
+.maker-msg { flex: 1; min-width: 0; }
+.maker-act {
+  flex: none;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.maker-status.done .maker-act { background: var(--gold); border-color: var(--gold); color: #2a2008; font-weight: 600; }
+.maker-status.error .maker-act { display: none; }
+@keyframes maker-spin { to { transform: rotate(360deg); } }
+
+.songs li.custom { display: flex; gap: 8px; }
+.songs li.custom .song { flex: 1; min-width: 0; }
+.song-del {
+  flex: none;
+  width: 52px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+}
+.song-del.armed { border-color: var(--danger); color: var(--danger); }
+.songs li.fresh .song { border-color: var(--gold); animation: fresh 1.4s ease-out; }
+@keyframes fresh { from { background: #3a3218; } }
+@media (prefers-reduced-motion: reduce) {
+  .maker-spin { animation-duration: 2.4s; }
+  .songs li.fresh .song { animation: none; }
+}
 
 .song-play {
   width: 0;

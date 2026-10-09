@@ -86,6 +86,29 @@
         <p class="mode-desc" id="play-desc"></p>
       </section>
 
+      <section class="mode-block" aria-labelledby="h-maker">
+        <div class="mode-head"><h2 id="h-maker">노래 제목으로 레벨 만들기</h2></div>
+        <p class="mode-desc">노래 제목을 넣으면 그 곡으로 새 레벨을 만들어요. 저작권이 끝난 민요·동요·클래식은 원곡 멜로디로, 그 밖의 곡은 제목 분위기에 맞춘 새 멜로디로 만들어요.</p>
+        <form class="maker-form" id="maker-form" autocomplete="off">
+          <input class="maker-input" id="maker-title" type="text" maxlength="40" enterkeyhint="go" placeholder="예: 아리랑, 캐논, 비 오는 날의 산책" aria-label="노래 제목">
+          <button type="submit" class="btn primary maker-go" id="maker-go">만들기</button>
+        </form>
+        <div class="maker-row">
+          <span class="maker-label" id="h-diff">난이도</span>
+          <div class="seg" role="radiogroup" aria-labelledby="h-diff">
+            <button type="button" role="radio" data-diff="1">쉬움</button>
+            <button type="button" role="radio" data-diff="2">보통</button>
+            <button type="button" role="radio" data-diff="3">어려움</button>
+          </div>
+        </div>
+        <div class="maker-status" id="maker-status" role="status" hidden>
+          <span class="maker-spin" aria-hidden="true"></span>
+          <span class="maker-msg" id="maker-msg"></span>
+          <button type="button" class="maker-act" id="maker-act"></button>
+        </div>
+        <ol class="songs" id="custom-list" aria-label="내가 만든 레벨" hidden></ol>
+      </section>
+
       <section class="mode-block" aria-labelledby="h-song">
         <div class="mode-head"><h2 id="h-song">곡 연주</h2></div>
         <ol class="songs" id="song-list"></ol>

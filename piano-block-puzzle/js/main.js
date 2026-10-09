@@ -1,4 +1,5 @@
-import { SONGS, BAND_SONGS, FREE_SONG } from './songs.js';
+import { SONGS, BAND_SONGS, FREE_SONG, buildSong } from './songs.js';
+import { makeLevel, normalizeTitle } from './maker.js';
 import { PianoAudio } from './audio.js';
 import { Game } from './game.js';
 import { Story } from './story.js';
@@ -18,6 +19,11 @@ const store = {
   set(key, value) {
     try {
       localStorage.setItem(key, JSON.stringify(value));
+    } catch {}
+  },
+  remove(key) {
+    try {
+      localStorage.removeItem(key);
     } catch {}
   },
 };
@@ -133,6 +139,14 @@ function songButton(song, mode) {
 
 function renderMenu() {
   $('#btn-story-continue').hidden = !story.hasSave();
+  const mine = $('#custom-list');
+  mine.innerHTML = '';
+  for (const song of customSongs) mine.appendChild(customButton(song));
+  mine.hidden = !customSongs.length;
+  freshId = null;
+  for (const b of document.querySelectorAll('[data-diff]')) {
+    b.setAttribute('aria-checked', String(Number(b.dataset.diff) === makerLevel));
+  }
   const list = $('#song-list');
   list.innerHTML = '';
   for (const song of SONGS) list.appendChild(songButton(song, playMode));
@@ -154,6 +168,158 @@ for (const b of document.querySelectorAll('[data-play]')) {
 }
 
 $('#btn-free').addEventListener('click', () => startGame(FREE_SONG, 'free'));
+
+// ---------- 노래 제목으로 레벨 만들기 ----------
+
+const CUSTOM_KEY = 'pb.custom.v1';
+const CUSTOM_MAX = 30;
+let customDefs = store.get(CUSTOM_KEY, []);
+if (!Array.isArray(customDefs)) customDefs = [];
+let customSongs = buildCustom();
+let freshId = null;
+
+function buildCustom() {
+  const out = [];
+  for (const def of customDefs) {
+    try {
+      out.push(buildSong(def));
+    } catch {}
+  }
+  return out;
+}
+
+const dropBest = (id) => ['stop', 'flow'].forEach((m) => store.remove(`pb.best.${id}.${m}`));
+
+function saveCustom(def) {
+  // 같은 제목으로 다시 만들면 예전 레벨을 바꾼다
+  const k = (t) => String(t || '').toLowerCase().replace(/\s+/g, '');
+  const same = (d) => k(d.title) === k(def.title) || k(d.asked) === k(def.asked);
+  const keep = [def, ...customDefs.filter((d) => !same(d))];
+  for (const d of customDefs) if (same(d) || keep.indexOf(d) >= CUSTOM_MAX) dropBest(d.id);
+  customDefs = keep.slice(0, CUSTOM_MAX);
+  store.set(CUSTOM_KEY, customDefs);
+  customSongs = buildCustom();
+}
+
+function removeCustom(id) {
+  customDefs = customDefs.filter((d) => d.id !== id);
+  store.set(CUSTOM_KEY, customDefs);
+  customSongs = buildCustom();
+  dropBest(id);
+  if (makerSong?.id === id) setMaker('idle');
+}
+
+function customButton(song) {
+  const li = songButton(song, playMode);
+  li.classList.add('custom');
+  if (song.id === freshId) li.classList.add('fresh');
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.className = 'song-del';
+  del.textContent = '삭제';
+  del.setAttribute('aria-label', `${song.title} 삭제`);
+  let timer = 0;
+  del.addEventListener('click', () => {
+    // 두 번 눌러야 지운다
+    if (del.classList.contains('armed')) {
+      clearTimeout(timer);
+      removeCustom(song.id);
+      renderMenu();
+      return;
+    }
+    del.classList.add('armed');
+    del.textContent = '삭제?';
+    timer = setTimeout(() => {
+      del.classList.remove('armed');
+      del.textContent = '삭제';
+    }, 2500);
+  });
+  li.appendChild(del);
+  return li;
+}
+
+const maker = {
+  form: $('#maker-form'),
+  input: $('#maker-title'),
+  go: $('#maker-go'),
+  status: $('#maker-status'),
+  msg: $('#maker-msg'),
+  act: $('#maker-act'),
+};
+let makerLevel = [1, 2, 3].includes(store.get('pb.maker.level', 1)) ? store.get('pb.maker.level', 1) : 1;
+let makerCtl = null;
+let makerSong = null;
+// claude.ai 안에서 열리면 Claude에게 멜로디를 부탁할 수 있다 (없으면 null → 자동 작곡)
+const samplePromise =
+  typeof window.claude?.use === 'function' ? Promise.resolve(window.claude.use('sample')).catch(() => null) : Promise.resolve(null);
+let sampleOff = false;
+
+function setMaker(state, text = '', song = null) {
+  maker.status.hidden = state === 'idle';
+  maker.status.className = `maker-status ${state}`;
+  maker.msg.textContent = text;
+  maker.act.textContent = state === 'busy' ? '취소' : '바로 플레이';
+  maker.go.disabled = state === 'busy';
+  maker.input.disabled = state === 'busy';
+  makerSong = song;
+}
+
+for (const b of document.querySelectorAll('[data-diff]')) {
+  b.addEventListener('click', () => {
+    makerLevel = Number(b.dataset.diff);
+    store.set('pb.maker.level', makerLevel);
+    renderMenu();
+  });
+}
+
+maker.act.addEventListener('click', () => {
+  if (makerCtl) {
+    makerCtl.abort();
+    makerCtl = null;
+    setMaker('idle');
+  } else if (makerSong) {
+    startGame(makerSong, playMode);
+  }
+});
+
+maker.form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (makerCtl) return;
+  const title = normalizeTitle(maker.input.value);
+  if (!title) {
+    maker.input.focus();
+    return;
+  }
+  const ctl = new AbortController();
+  makerCtl = ctl;
+  setMaker('busy', '준비 중…');
+  try {
+    const sample = sampleOff ? null : await samplePromise;
+    if (ctl.signal.aborted) return;
+    const res = await makeLevel(title, makerLevel, {
+      sample,
+      offline: sampleOff,
+      signal: ctl.signal,
+      onProgress: (text) => {
+        if (makerCtl === ctl) maker.msg.textContent = text;
+      },
+    });
+    if (ctl.signal.aborted) return;
+    makerCtl = null;
+    if (res.off) sampleOff = true;
+    saveCustom(res.def);
+    freshId = res.def.id;
+    renderMenu();
+    const song = customSongs.find((s) => s.id === res.def.id);
+    maker.input.value = '';
+    setMaker('done', `「${song.title}」 레벨을 만들었어요. ${res.note}`, song);
+  } catch (err) {
+    if (ctl.signal.aborted) return;
+    makerCtl = null;
+    console.error(err);
+    setMaker('error', '레벨을 만들지 못했어요. 다른 제목으로 해 보세요.');
+  }
+});
 
 const hintBtn = $('#btn-hint');
 function renderHint() {

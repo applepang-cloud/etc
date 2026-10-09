@@ -50,7 +50,7 @@ function buildPart(inst, tracks) {
   };
 }
 
-function buildSong(def) {
+export function buildSong(def) {
   const parts = PART_ORDER.filter((id) => def.parts[id]).map((id) => buildPart(id, def.parts[id]));
   const length = Math.max(...parts.map((p) => p.length));
   return { ...def, parts, length };
