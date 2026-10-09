@@ -45,6 +45,7 @@
   - 오른쪽 `♥ 신호`: 서윤의 눈짓. 태준이 손님과 건배하는 동안(`!` 경고 중에도) 받으면 마음 게이지가 찬다(8개면 가득). 태준이 보는 동안 받으면 들킨 횟수 +1, 3번이면 실패
   - 결과: 곡 끝까지 마음 게이지를 채우면 성공, 3번 들키면 실패, 못 채우면 「끝내 눈을 못 맞췄다」. 결과와 연주 정확도(80% 이상이면 실력 +1)에 따라 이후 대사가 달라진다. 키보드는 ←/F, →/J
 - 연주는 메뉴의 진행 방식(30초 정지/자동 이동)을 따르고, 결과 화면의 `스토리 계속`으로 돌아온다
+- 대사 음성: 캐릭터 대사(해설 제외)는 일레븐랩스 목소리로 읽어 준다. 도현·태준·채아는 보이스 디자인으로 만든 목소리, 서윤·한 교수·원장·사회자는 계정의 한국어 목소리. 속마음(괄호) 대사는 작게, `빨리` 중에는 재생하지 않는다. 상단 `음성 켬/끔`으로 끈다
 
 ## 곡
 
@@ -121,6 +122,8 @@ js/draw.js          블록·폭탄 그리기 도우미
 js/story.js         스토리 모드 엔진 (대사, 선택지, 연주 연동, 심사, 미니게임 2종)
 js/story-data.js    스토리 대본과 등장인물
 js/portraits.js     캐릭터 일러스트 (SVG, 표정 6종)
+js/voices.js        스토리 대사 음성(base64 mp3). tools/gen-voices.mjs 가 만든다
+js/voice-key.js     대사 → 음성 키 (누가 + 대사 해시)
 ```
 
 ## 소리
@@ -132,6 +135,7 @@ ELEVENLABS_API_KEY=... node piano-block-puzzle/tools/gen-sounds.mjs           # 
 node piano-block-puzzle/tools/gen-sounds.mjs sfx_boom                          # 그 소리만 다시 생성
 node piano-block-puzzle/tools/gen-sounds.mjs guitar                            # 그 악기만 다시 생성
 node piano-block-puzzle/tools/gen-sounds.mjs --use=piano_e3=2                  # 후보 중 2번째를 쓴다
+node piano-block-puzzle/tools/gen-voices.mjs                                   # 스토리 대사 음성 (고친 줄만 새로)
 node piano-block-puzzle/build-single.mjs                                       # 단일 HTML 다시 빌드
 ```
 

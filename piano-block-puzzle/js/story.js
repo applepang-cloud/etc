@@ -5,9 +5,12 @@ import { CAST, CHAPTER1, DUET } from './story-data.js';
 import { buildSong } from './songs.js';
 import { solfege } from './instruments.js';
 import { rrect } from './draw.js';
+import { VOICES } from './voices.js';
+import { voiceKey } from './voice-key.js';
 
 const SAVE_KEY = 'pb.story.v2'; // 설정이 바뀌면 버전을 올려 예전 저장을 쓰지 않는다
 const TYPE_MS = 28;
+const VOICE_KEY = 'pb.voice'; // 대사 음성 켬/끔
 
 const SFX = {
   elise: [[76, 0], [75, 0.16], [76, 0.32], [75, 0.48], [76, 0.64], [71, 0.8], [74, 0.96], [72, 1.12], [69, 1.28, 0.6]],
@@ -58,6 +61,7 @@ export class Story {
         <span class="vn-chapter"></span>
         <span class="vn-stat vn-aff" title="호감도">${heartIcon}<b>0</b></span>
         <span class="vn-stat vn-skill" title="실력"><i></i><b>실력 0</b></span>
+        <button type="button" class="vn-btn vn-voice" aria-pressed="true">음성</button>
         <button type="button" class="vn-btn vn-skip">빨리</button>
         <button type="button" class="vn-btn vn-exit">나가기</button>
       </div>
@@ -81,6 +85,7 @@ export class Story {
       skillBar: q('.vn-skill i'),
       skill: q('.vn-skill b'),
       skip: q('.vn-skip'),
+      voice: q('.vn-voice'),
       exit: q('.vn-exit'),
       box: q('.vn-box'),
       name: q('.vn-name'),
@@ -101,6 +106,43 @@ export class Story {
       if (this.skipping) this.tap?.();
     });
     this.el.exit.addEventListener('click', () => this.exit());
+    try {
+      this.voiceOn = localStorage.getItem(VOICE_KEY) !== 'off';
+    } catch {
+      this.voiceOn = true;
+    }
+    const showVoice = () => {
+      this.el.voice.setAttribute('aria-pressed', String(this.voiceOn));
+      this.el.voice.textContent = this.voiceOn ? '음성 켬' : '음성 끔';
+    };
+    showVoice();
+    this.el.voice.addEventListener('click', () => {
+      this.voiceOn = !this.voiceOn;
+      showVoice();
+      try {
+        localStorage.setItem(VOICE_KEY, this.voiceOn ? 'on' : 'off');
+      } catch {}
+      if (!this.voiceOn) this.stopVoice();
+    });
+  }
+
+  // 대사 음성 (일레븐랩스로 미리 만든 mp3). 속마음(괄호) 대사는 작게.
+  playVoice(who, text) {
+    this.stopVoice();
+    if (!this.voiceOn || this.skipping) return;
+    const data = VOICES[voiceKey(who, text)];
+    if (!data) return;
+    const a = new Audio(`data:audio/mpeg;base64,${data}`);
+    a.volume = /^\(.*\)$/s.test(text.trim()) ? 0.55 : 1;
+    a.play().catch(() => {});
+    this.voice = a;
+  }
+
+  stopVoice() {
+    if (this.voice) {
+      this.voice.pause();
+      this.voice = null;
+    }
   }
 
   hasSave() {
@@ -131,6 +173,7 @@ export class Story {
   exit() {
     this.run++;
     this.tap = null;
+    this.stopVoice();
     this.root.hidden = true;
     this.hooks.exit();
   }
@@ -180,6 +223,7 @@ export class Story {
         return true;
       }
     }
+    if (s.play || s.contest || s.minigame || s.pick) this.stopVoice();
     if (s.play) {
       const song = this.hooks.songs.find((x) => x.id === s.play);
       const stats = await this.play(song, 'practice', run);
@@ -338,6 +382,8 @@ export class Story {
     const box = this.el.text;
     box.textContent = '';
     this.el.box.classList.remove('done');
+    if (cast) this.playVoice(who, text);
+    else this.stopVoice();
     return new Promise((resolve) => {
       let i = 0;
       let timer = null;
