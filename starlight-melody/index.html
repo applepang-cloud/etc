@@ -49,7 +49,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
 .talk .who { position: absolute; top: -11px; left: 10px; background: var(--pink); color: #2a0d24; font-family: var(--pixel); font-size: 12px; padding: 1px 8px; border-radius: 3px; }
 .talk p { margin: 4px 0 0; line-height: 1.55; font-size: 15px; min-height: 3.1em; word-break: keep-all; }
 .scene[data-size="small"] .talk p { font-size: 14px; min-height: 0; }
-.talk .act { display: flex; justify-content: flex-end; gap: 8px; }
+.talk .act { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .act button { font-family: var(--pixel); font-size: 14px; background: var(--gold); color: #2b1b00; border: 0; border-radius: 4px; padding: 7px 14px; box-shadow: 0 3px 0 #b8892a; cursor: pointer; }
 .act button.ghost { background: transparent; color: var(--ink); box-shadow: none; border: 1px solid var(--slot-line); }
 .act button:active { transform: translateY(2px); box-shadow: 0 1px 0 #b8892a; }
@@ -143,7 +143,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
   </section>
 
   <section class="song" aria-label="곡 진행">
-    <span class="label">곡 완성도</span>
+    <span class="label" id="songLabel">별빛 멜로디</span>
     <div class="bars" id="bars"></div>
   </section>
 
@@ -269,224 +269,617 @@ root.drawHeroine = drawHeroine;
 
 </script>
 <script>
-const STAGES = [
+const SONGS = [
  {
-  "id": "s1",
-  "title": "첫 소절",
-  "root": 48,
-  "pad": [
-   60,
-   64,
-   67
+  "id": "starlight",
+  "title": "별빛 멜로디",
+  "bpm": 112,
+  "ending": [
+   "고마워. 네 덕분에 노래를 되찾았어.",
+   "주말 라이브, 맨 앞줄에 자리 맡아 둘게!"
   ],
-  "lanes": [
-   "G",
-   "E",
-   "C",
-   "K"
-  ],
-  "pattern": {
-   "G": "....xx..",
-   "E": "..x...x.",
-   "C": "x.......",
-   "K": "x...x..."
-  },
-  "givens": [
-   "E6",
-   "E2"
-  ],
-  "intro": [
-   "악보가 비에 젖어서 음표가 번져 버렸어. 별이 찍힌 칸은 내가 기억하는 음이야.",
-   "나머지는 같이 하나씩 채워 보자. 내가 알려 줄게!"
-  ],
-  "clear": "들려? 이게 첫 소절이야! 위쪽 숫자도 같은 규칙으로 세로줄을 알려 줘.",
-  "guide": [
+  "stages": [
    {
-    "say": "왼쪽 숫자를 봐. 솔 줄의 '2'는 이어진 두 칸을 칠하라는 뜻이야. 반짝이는 두 칸을 눌러 봐!",
-    "row": "G",
-    "cells": [
-     "G4",
-     "G5"
+    "id": "s1",
+    "title": "첫 소절",
+    "root": 48,
+    "pad": [
+     60,
+     64,
+     67
+    ],
+    "lanes": [
+     "G",
+     "E",
+     "C",
+     "K"
+    ],
+    "pattern": {
+     "G": "....xx..",
+     "E": "..x...x.",
+     "C": "x.......",
+     "K": "x...x..."
+    },
+    "givens": [
+     "E6",
+     "E2"
+    ],
+    "intro": [
+     "악보가 비에 젖어서 음표가 번져 버렸어. 별이 찍힌 칸은 내가 기억하는 음이야.",
+     "나머지는 같이 하나씩 채워 보자. 내가 알려 줄게!"
+    ],
+    "clear": "들려? 이게 첫 소절이야! 위쪽 숫자도 같은 규칙으로 세로줄을 알려 줘.",
+    "guide": [
+     {
+      "say": "왼쪽 숫자를 봐. 솔 줄의 '2'는 이어진 두 칸을 칠하라는 뜻이야. 반짝이는 두 칸을 눌러 봐!",
+      "row": "G",
+      "cells": [
+       "G4",
+       "G5"
+      ]
+     },
+     {
+      "say": "잘했어! 도 줄은 '1'이니까 딱 한 칸. 반짝이는 칸을 눌러 줘.",
+      "row": "C",
+      "cells": [
+       "C0"
+      ]
+     },
+     {
+      "say": "킥 줄의 '1 1'은 한 칸짜리가 떨어져서 두 번 있다는 뜻이야. 마지막 두 칸!",
+      "row": "K",
+      "cells": [
+       "K0",
+       "K4"
+      ]
+     }
     ]
    },
    {
-    "say": "잘했어! 도 줄은 '1'이니까 딱 한 칸. 반짝이는 칸을 눌러 줘.",
-    "row": "C",
-    "cells": [
-     "C0"
-    ]
+    "id": "s2",
+    "title": "두근두근",
+    "root": 45,
+    "pad": [
+     57,
+     60,
+     64
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "E",
+     "D",
+     "S",
+     "K"
+    ],
+    "pattern": {
+     "A": "xx......",
+     "G": "..x.....",
+     "E": "....xx..",
+     "D": "......x.",
+     "S": "..x...x.",
+     "K": "x...x.x."
+    },
+    "givens": [
+     "A0",
+     "S2"
+    ],
+    "intro": [
+     "두 번째 소절은 두근두근해지는 부분이야. 스네어가 들어와서 박자가 또렷해져!",
+     "이번엔 혼자 해 볼래? 숫자가 큰 줄부터 보면 쉬워. 막히면 힌트를 눌러!"
+    ],
+    "clear": "좋아, 심장이 같이 뛰기 시작했어!"
    },
    {
-    "say": "킥 줄의 '1 1'은 한 칸짜리가 떨어져서 두 번 있다는 뜻이야. 마지막 두 칸!",
-    "row": "K",
-    "cells": [
-     "K0",
-     "K4"
-    ]
+    "id": "s3",
+    "title": "그녀의 목소리",
+    "root": 41,
+    "pad": [
+     53,
+     57,
+     60
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "C",
+     "B",
+     "H",
+     "S",
+     "K"
+    ],
+    "pattern": {
+     "A": "..xx..x.",
+     "G": "....x...",
+     "C": "x......x",
+     "B": "x..x..x.",
+     "H": "x.x.x.x.",
+     "S": "..x...x.",
+     "K": "x..x.x.."
+    },
+    "givens": [
+     "C7",
+     "A2",
+     "B6"
+    ],
+    "intro": [
+     "여기서부터 베이스랑 하이햇이 들어와.",
+     "소리가 꽉 차기 시작하면 나도 모르게 웃게 돼."
+    ],
+    "clear": "이 부분 부를 때가 제일 좋아!"
+   },
+   {
+    "id": "s4",
+    "title": "고조",
+    "root": 43,
+    "pad": [
+     55,
+     59,
+     62
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "E",
+     "D",
+     "B",
+     "H",
+     "S",
+     "K"
+    ],
+    "pattern": {
+     "A": "..x.....",
+     "G": "xx..x...",
+     "E": ".....x..",
+     "D": "......x.",
+     "B": "x.x.x.x.",
+     "H": "xxxxxxxx",
+     "S": "..x...xx",
+     "K": "x..xx..."
+    },
+    "givens": [
+     "E5",
+     "A2"
+    ],
+    "intro": [
+     "클라이맥스 바로 앞이야. 하이햇이 쉬지 않고 달려!",
+     "칸이 많아졌으니까 숫자가 큰 줄부터 찾아봐."
+    ],
+    "clear": "다음이 마지막 소절이야… 떨린다."
+   },
+   {
+    "id": "s5",
+    "title": "별빛 멜로디",
+    "root": 48,
+    "pad": [
+     60,
+     64,
+     67
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "E",
+     "D",
+     "C",
+     "B",
+     "S",
+     "K"
+    ],
+    "pattern": {
+     "A": "..x.....",
+     "G": ".x.x....",
+     "E": "x...x...",
+     "D": ".....x..",
+     "C": "......x.",
+     "B": "x..x.xx.",
+     "S": "..x...xx",
+     "K": "x..x.xx."
+    },
+    "givens": [
+     "E4",
+     "G1",
+     "D5",
+     "A2"
+    ],
+    "intro": [
+     "마지막 소절. 곡 제목은 '별빛 멜로디'야.",
+     "다 채우면 처음부터 끝까지 같이 들어 보자!"
+    ],
+    "clear": "다 됐어…! 우리 곡이 완성됐어!"
    }
   ]
  },
  {
-  "id": "s2",
-  "title": "두근두근",
-  "root": 45,
-  "pad": [
-   57,
-   60,
-   64
+  "id": "rain",
+  "title": "비 갠 오후",
+  "bpm": 92,
+  "ending": [
+   "비 오는 날 만든 노래인데, 같이 완성하니까 따뜻해졌어.",
+   "고마워. 다음에 비 오면 이 노래 불러 줄게."
   ],
-  "lanes": [
-   "A",
-   "G",
-   "E",
-   "D",
-   "S",
-   "K"
-  ],
-  "pattern": {
-   "A": "xx......",
-   "G": "..x.....",
-   "E": "....xx..",
-   "D": "......x.",
-   "S": "..x...x.",
-   "K": "x...x.x."
-  },
-  "givens": [
-   "A0",
-   "S2"
-  ],
-  "intro": [
-   "두 번째 소절은 두근두근해지는 부분이야. 스네어가 들어와서 박자가 또렷해져!",
-   "이번엔 혼자 해 볼래? 숫자가 큰 줄부터 보면 쉬워. 막히면 힌트를 눌러!"
-  ],
-  "clear": "좋아, 심장이 같이 뛰기 시작했어!"
+  "stages": [
+   {
+    "id": "r1",
+    "title": "빗소리",
+    "root": 45,
+    "pad": [
+     57,
+     60,
+     64
+    ],
+    "lanes": [
+     "A",
+     "E",
+     "D",
+     "K"
+    ],
+    "pattern": {
+     "A": "......x.",
+     "E": "x...x...",
+     "D": "...x....",
+     "K": "x.....x."
+    },
+    "givens": [
+     "D3",
+     "A6"
+    ],
+    "intro": [
+     "이 곡은 비 오는 날 혼자 만들었던 노래야.",
+     "조금 느리고 잔잔해. 천천히 채워 줘."
+    ],
+    "clear": "빗방울이 톡, 톡… 이런 느낌이었어."
+   },
+   {
+    "id": "r2",
+    "title": "우산 아래",
+    "root": 41,
+    "pad": [
+     53,
+     57,
+     60
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "E",
+     "C",
+     "S",
+     "K"
+    ],
+    "pattern": {
+     "A": "..x.....",
+     "G": "....x...",
+     "E": "......x.",
+     "C": "x.......",
+     "S": "....x...",
+     "K": "x..x...."
+    },
+    "givens": [
+     "A2",
+     "E6",
+     "S4"
+    ],
+    "intro": [
+     "우산 아래에서 흥얼거리던 부분이야. 스네어가 살짝 들어가."
+    ],
+    "clear": "그날 기분이 조금씩 떠오르네."
+   },
+   {
+    "id": "r3",
+    "title": "웅덩이",
+    "root": 48,
+    "pad": [
+     60,
+     64,
+     67
+    ],
+    "lanes": [
+     "E",
+     "D",
+     "C",
+     "B",
+     "S",
+     "K"
+    ],
+    "pattern": {
+     "E": "xx....x.",
+     "D": "..x..x..",
+     "C": "...x....",
+     "B": "x...x.x.",
+     "S": "....x...",
+     "K": "x.....x."
+    },
+    "givens": [
+     "C3",
+     "E6",
+     "E0"
+    ],
+    "intro": [
+     "베이스가 들어오면 발걸음이 가벼워져.",
+     "같은 음이 연달아 나오는 줄을 찾아봐."
+    ],
+    "clear": "웅덩이를 폴짝 뛰어넘는 느낌!"
+   },
+   {
+    "id": "r4",
+    "title": "구름 사이",
+    "root": 43,
+    "pad": [
+     55,
+     59,
+     62
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "E",
+     "D",
+     "B",
+     "H",
+     "S",
+     "K"
+    ],
+    "pattern": {
+     "A": "....x...",
+     "G": "..x..x..",
+     "E": "......x.",
+     "D": "x......x",
+     "B": "x..x..x.",
+     "H": "x.x.x.x.",
+     "S": "....x...",
+     "K": "x.....xx"
+    },
+    "givens": [
+     "D7",
+     "G5",
+     "A4",
+     "B3"
+    ],
+    "intro": [
+     "구름 사이로 해가 나오는 부분. 하이햇이 반짝반짝해."
+    ],
+    "clear": "거의 다 왔어. 하늘이 개고 있어."
+   },
+   {
+    "id": "r5",
+    "title": "비 갠 오후",
+    "root": 45,
+    "pad": [
+     57,
+     60,
+     64
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "E",
+     "D",
+     "C",
+     "B",
+     "S",
+     "K"
+    ],
+    "pattern": {
+     "A": "......xx",
+     "G": ".x......",
+     "E": "x...x...",
+     "D": "..x.....",
+     "C": "...x....",
+     "B": "x...x...",
+     "S": "....x...",
+     "K": "x.x...x."
+    },
+    "givens": [
+     "C3",
+     "G1",
+     "D2",
+     "B4"
+    ],
+    "intro": [
+     "마지막 소절이야. 비가 그치고 무지개가 뜨는 장면!"
+    ],
+    "clear": "완성이야! 이 노래, 이제 슬프지 않아."
+   }
+  ]
  },
  {
-  "id": "s3",
-  "title": "그녀의 목소리",
-  "root": 41,
-  "pad": [
-   53,
-   57,
-   60
+  "id": "jump",
+  "title": "점프! 스테이지",
+  "bpm": 132,
+  "ending": [
+   "다들 아직도 뛰고 있어… 우리가 해냈어!",
+   "다음 라이브도 같이 만들자. 약속이야!"
   ],
-  "lanes": [
-   "A",
-   "G",
-   "C",
-   "B",
-   "H",
-   "S",
-   "K"
-  ],
-  "pattern": {
-   "A": "..xx..x.",
-   "G": "....x...",
-   "C": "x......x",
-   "B": "x..x..x.",
-   "H": "x.x.x.x.",
-   "S": "..x...x.",
-   "K": "x..x.x.."
-  },
-  "givens": [
-   "C7",
-   "A2",
-   "B6"
-  ],
-  "intro": [
-   "여기서부터 베이스랑 하이햇이 들어와.",
-   "소리가 꽉 차기 시작하면 나도 모르게 웃게 돼."
-  ],
-  "clear": "이 부분 부를 때가 제일 좋아!"
- },
- {
-  "id": "s4",
-  "title": "고조",
-  "root": 43,
-  "pad": [
-   55,
-   59,
-   62
-  ],
-  "lanes": [
-   "A",
-   "G",
-   "E",
-   "D",
-   "B",
-   "H",
-   "S",
-   "K"
-  ],
-  "pattern": {
-   "A": "..x.....",
-   "G": "xx..x...",
-   "E": ".....x..",
-   "D": "......x.",
-   "B": "x.x.x.x.",
-   "H": "xxxxxxxx",
-   "S": "..x...xx",
-   "K": "x..xx..."
-  },
-  "givens": [
-   "E5",
-   "A2"
-  ],
-  "intro": [
-   "클라이맥스 바로 앞이야. 하이햇이 쉬지 않고 달려!",
-   "칸이 많아졌으니까 숫자가 큰 줄부터 찾아봐."
-  ],
-  "clear": "다음이 마지막 소절이야… 떨린다."
- },
- {
-  "id": "s5",
-  "title": "별빛 멜로디",
-  "root": 48,
-  "pad": [
-   60,
-   64,
-   67
-  ],
-  "lanes": [
-   "A",
-   "G",
-   "E",
-   "D",
-   "C",
-   "B",
-   "S",
-   "K"
-  ],
-  "pattern": {
-   "A": "..x.....",
-   "G": ".x.x....",
-   "E": "x...x...",
-   "D": ".....x..",
-   "C": "......x.",
-   "B": "x..x.xx.",
-   "S": "..x...xx",
-   "K": "x..x.xx."
-  },
-  "givens": [
-   "E4",
-   "G1",
-   "D5",
-   "A2"
-  ],
-  "intro": [
-   "마지막 소절. 곡 제목은 '별빛 멜로디'야.",
-   "다 채우면 처음부터 끝까지 같이 들어 보자!"
-  ],
-  "clear": "다 됐어…! 우리 곡이 완성됐어!"
+  "stages": [
+   {
+    "id": "j1",
+    "title": "카운트다운",
+    "root": 41,
+    "pad": [
+     53,
+     57,
+     60
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "C",
+     "H",
+     "K"
+    ],
+    "pattern": {
+     "A": "..x.x.x.",
+     "G": ".....x..",
+     "C": "x.......",
+     "H": "xxxxxxxx",
+     "K": "x...x..."
+    },
+    "givens": [],
+    "intro": [
+     "앙코르 곡이야! 빠르고 신나는 노래.",
+     "이번엔 별 칸 없이 숫자만으로 풀어야 해. 할 수 있지?"
+    ],
+    "clear": "좋아, 무대 조명이 켜졌어!"
+   },
+   {
+    "id": "j2",
+    "title": "점프",
+    "root": 43,
+    "pad": [
+     55,
+     59,
+     62
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "D",
+     "B",
+     "S",
+     "K"
+    ],
+    "pattern": {
+     "A": "...x....",
+     "G": "x.x.x...",
+     "D": "......x.",
+     "B": "x.xx.xx.",
+     "S": "..x...x.",
+     "K": "x...x.x."
+    },
+    "givens": [],
+    "intro": [
+     "관객이 다 같이 뛰는 부분이야. 베이스가 통통 튀어!"
+    ],
+    "clear": "다들 점프하는 게 보여!"
+   },
+   {
+    "id": "j3",
+    "title": "함성",
+    "root": 40,
+    "pad": [
+     52,
+     55,
+     59
+    ],
+    "lanes": [
+     "G",
+     "E",
+     "D",
+     "B",
+     "H",
+     "S",
+     "K"
+    ],
+    "pattern": {
+     "G": "..x.....",
+     "E": "x...x.x.",
+     "D": ".....x..",
+     "B": "x..x.xx.",
+     "H": "xx.xxx.x",
+     "S": "..x...xx",
+     "K": "x..x.x.."
+    },
+    "givens": [
+     "G2"
+    ],
+    "intro": [
+     "함성이 터지는 구간. 하이햇이 쉴 틈이 없어."
+    ],
+    "clear": "목이 쉬어도 좋아, 계속 가자!"
+   },
+   {
+    "id": "j4",
+    "title": "하이라이트",
+    "root": 45,
+    "pad": [
+     57,
+     60,
+     64
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "E",
+     "D",
+     "C",
+     "B",
+     "S",
+     "K"
+    ],
+    "pattern": {
+     "A": "x.......",
+     "G": ".x......",
+     "E": "..x....x",
+     "D": "...x..x.",
+     "C": "....x...",
+     "B": "xx.xx.x.",
+     "S": "..x...x.",
+     "K": "x..xx..x"
+    },
+    "givens": [
+     "G1",
+     "A0",
+     "E2",
+     "E7",
+     "B6"
+    ],
+    "intro": [
+     "하이라이트! 도부터 라까지 음이 다 나와.",
+     "막히면 힌트 써도 괜찮아."
+    ],
+    "clear": "한 소절만 더!"
+   },
+   {
+    "id": "j5",
+    "title": "피날레",
+    "root": 48,
+    "pad": [
+     60,
+     64,
+     67
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "E",
+     "D",
+     "C",
+     "B",
+     "S",
+     "K"
+    ],
+    "pattern": {
+     "A": "..x.....",
+     "G": "x..x....",
+     "E": "....x...",
+     "D": "........",
+     "C": "......xx",
+     "B": "x.xx.xx.",
+     "S": "..x..xx.",
+     "K": "xx..x.x."
+    },
+    "givens": [
+     "C7",
+     "A2",
+     "G3"
+    ],
+    "intro": [
+     "피날레야. 마지막까지 같이 달려 줘!"
+    ],
+    "clear": "최고의 앙코르였어!"
+   }
+  ]
  }
 ];
+let SONG = SONGS[0], STAGES = SONG.stages;
 const LANES = {
   A: { name: '라', c: '#ff8fc8', midi: 81 }, G: { name: '솔', c: '#ffb35c', midi: 79 }, E: { name: '미', c: '#ffe066', midi: 76 },
   D: { name: '레', c: '#7fe3ad', midi: 74 }, C: { name: '도', c: '#6ccbff', midi: 72 },
   B: { name: '베이스', c: '#b597ff' }, H: { name: '하이햇', c: '#d9def2' }, S: { name: '스네어', c: '#9ef0ff' }, K: { name: '킥', c: '#ff7d7d' }
 };
 const MELODY = new Set(['A', 'G', 'E', 'D', 'C']);
-const W = 8, BPM = 112, STEP = 60 / BPM / 2;
+const W = 8; let STEP = 60 / SONG.bpm / 2;
 const OOPS = ['앗, 그 음은 아닌 것 같아!', '음이 살짝 엇나갔어~', '흠, 숫자를 다시 볼까?'];
 const $ = id => document.getElementById(id);
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -497,13 +890,21 @@ const store = {
   save(d) { try { localStorage.setItem('starlight-melody', JSON.stringify(d)); } catch (e) {} }
 };
 const saved = store.load() || {};
-const P = { unlocked: saved.unlocked || 0, stars: saved.stars || [0, 0, 0, 0, 0] };
+function migrate(d) {
+  const songs = (d && d.songs) || {};
+  if (d && d.stars && !songs.starlight) songs.starlight = { unlocked: d.unlocked || 0, stars: d.stars };
+  SONGS.forEach(sg => { songs[sg.id] = songs[sg.id] || { unlocked: 0, stars: sg.stages.map(() => 0) }; });
+  return { songs, last: (d && d.last) || 'starlight' };
+}
+const P = migrate(saved);
+const prog = () => P.songs[SONG.id];
+function selectSong(id) { SONG = SONGS.find(sg => sg.id === id) || SONGS[0]; STAGES = SONG.stages; STEP = 60 / SONG.bpm / 2; P.last = SONG.id; persist(); $('songLabel').textContent = SONG.title; }
 const persist = () => store.save(P);
 window.claude?.hot?.snapshot?.(() => ({ progress: P }));
 
 /* ---------- game state ---------- */
 const G = { mode: 'title', stage: 0, cells: null, sol: null, misses: 0, tool: 'fill', playing: false, muted: false, songBar: 0 };
-STAGES.forEach(s => { s.sol = s.lanes.map(l => [...s.pattern[l]].map(c => c === 'x')); });
+SONGS.forEach(sg => sg.stages.forEach(s => { s.sol = s.lanes.map(l => [...s.pattern[l]].map(c => c === 'x')); }));
 const clueOf = line => { const r = []; let n = 0; line.forEach(v => { if (v) n++; else if (n) { r.push(n); n = 0; } }); if (n) r.push(n); return r.length ? r : [0]; };
 
 /* ---------- heroine ---------- */
@@ -600,7 +1001,7 @@ function tick() {
   if (!G.playing || !ac) return;
   while (nextT < ac.currentTime + 0.12) {
     const song = G.mode === 'song', idx = song ? G.songBar : G.stage, st = STAGES[idx];
-    const full = song || P.stars[idx] > 0 && G.mode === 'clear';
+    const full = song || prog().stars[idx] > 0 && G.mode === 'clear';
     if (step === 0 && full) pad(nextT, st);
     let mel = false;
     st.lanes.forEach((l, y) => { const on = full ? st.sol[y][step] : G.cells && G.cells[y][step] === 'on'; if (on) { voice(l, nextT, st); if (MELODY.has(l)) mel = true; } });
@@ -689,10 +1090,10 @@ function checkClear() {
   const st = STAGES[G.stage];
   if (!st.sol.every((r, y) => r.every((v, x) => !v || G.cells[y][x] === 'on'))) return;
   const stars = G.misses === 0 ? 3 : G.misses <= 2 ? 2 : 1;
-  P.stars[G.stage] = Math.max(P.stars[G.stage], stars); P.unlocked = Math.max(P.unlocked, Math.min(STAGES.length - 1, G.stage + 1)); persist();
+  prog().stars[G.stage] = Math.max(prog().stars[G.stage], stars); prog().unlocked = Math.max(prog().unlocked, Math.min(STAGES.length - 1, G.stage + 1)); persist();
   G.mode = 'clear'; $('board').classList.add('locked'); sfx('clear'); expr.base = 'happy'; renderBars();
   toast(`${G.stage + 1}소절 완성! ` + '★'.repeat(stars) + '☆'.repeat(3 - stars));
-  const last = G.stage === STAGES.length - 1, all = P.stars.every(s => s > 0);
+  const last = G.stage === STAGES.length - 1, all = prog().stars.every(s => s > 0);
   say(st.clear, false, last || all ? [['처음부터 듣기', playSong]] : [['다음 소절 ▸', () => openStage(G.stage + 1)]]);
 }
 
@@ -700,13 +1101,13 @@ function checkClear() {
 function renderBars() {
   const wrap = $('bars'); wrap.innerHTML = '';
   STAGES.forEach((st, i) => {
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'bar'; b.disabled = i > P.unlocked; b.setAttribute('aria-label', `${i + 1}소절 ${st.title}` + (P.stars[i] ? ' 완성' : ''));
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'bar'; b.disabled = i > prog().unlocked; b.setAttribute('aria-label', `${i + 1}소절 ${st.title}` + (prog().stars[i] ? ' 완성' : ''));
     if (G.mode !== 'title' && G.mode !== 'song' && i === G.stage) b.setAttribute('aria-current', 'true');
     const cv = document.createElement('canvas'); cv.width = 8; cv.height = 6; const x = cv.getContext('2d');
-    if (P.stars[i]) { const order = ['A', 'G', 'E', 'D', 'C'];
+    if (prog().stars[i]) { const order = ['A', 'G', 'E', 'D', 'C'];
       st.lanes.forEach((l, y) => st.sol[y].forEach((v, sx) => { if (!v) return; x.fillStyle = LANES[l].c; if (MELODY.has(l)) x.fillRect(sx, order.indexOf(l), 1, 1); else x.fillRect(sx, 5, 1, 1); })); }
     else { x.fillStyle = '#3d3785'; for (let sx = 0; sx < 8; sx += 2) x.fillRect(sx, 3, 1, 1); }
-    const n = div('n'); n.innerHTML = `<span>${i + 1}</span><i>${'★'.repeat(P.stars[i])}</i>`;
+    const n = div('n'); n.innerHTML = `<span>${i + 1}</span><i>${'★'.repeat(prog().stars[i])}</i>`;
     b.append(cv, n); b.addEventListener('click', () => { if (G.mode === 'song') return; initAudio(); openStage(i); }); wrap.append(b);
   });
 }
@@ -739,21 +1140,24 @@ function openStage(i) {
   const st = STAGES[i]; $('stageLabel').textContent = `${i + 1}소절 · ${st.title}`; expr.base = 'idle';
   setScene('big'); showPlayUI(false); $('act').innerHTML = ''; renderBars();
   G.guide = null; talk(st.intro, () => { G.mode = 'play'; setScene('small'); buildBoard(i); showPlayUI(true); startLoop();
-    if (st.guide && !P.stars[i]) { G.guide = { steps: st.guide, i: 0 }; applyGuide(); } else say('채운 음은 계속 반복해서 들려. 숫자가 큰 줄부터 찾아봐!', true, []); });
+    if (st.guide && !prog().stars[i]) { G.guide = { steps: st.guide, i: 0 }; applyGuide(); } else say('채운 음은 계속 반복해서 들려. 숫자가 큰 줄부터 찾아봐!', true, []); });
 }
 function playSong() {
-  G.mode = 'song'; G.songBar = 0; expr.base = 'happy'; setScene('big'); showPlayUI(false); $('boardWrap').hidden = false; $('stageLabel').textContent = '별빛 멜로디 · 전곡';
+  G.mode = 'song'; G.songBar = 0; expr.base = 'happy'; setScene('big'); showPlayUI(false); $('boardWrap').hidden = false; $('stageLabel').textContent = SONG.title + ' · 전곡';
   buildBoard(0, true); updateMiss(); renderBars(); say('처음부터 끝까지, 우리 노래야. 들어 줘!', false, [['멈추기', () => { stopLoop(); onSongEnd(); }, true]]); startLoop();
 }
 function onSongEnd() {
   if (G.mode !== 'song') return; stopLoop(); markPlayingBar(-1); G.mode = 'ending';
-  talk(['고마워. 네 덕분에 노래를 되찾았어.', '주말 라이브, 맨 앞줄에 자리 맡아 둘게!'], () => say('언제든 다시 들으러 와!', true, [['다시 듣기', playSong], ['소절 고르기', () => openStage(P.unlocked), true]]), '다음 ▸');
+  talk(SONG.ending, () => say('언제든 다시 들으러 와!', true, [['다시 듣기', playSong], ['곡 고르기', title, true]]), '다음 ▸');
 }
 function title() {
   G.mode = 'title'; setScene('big'); showPlayUI(false); renderBars();
-  const anyDone = P.stars.some(s => s > 0);
-  say('와 줬구나! 나는 리아. 이번 주말 옥상 라이브에서 부를 곡이 있는데… 악보 복원을 도와줄래?', false,
-    anyDone ? [['이어 하기', () => openStage(P.unlocked)], ['처음부터', () => openStage(0), true]] : [['시작하기', () => openStage(0)]]);
+  const fresh = SONGS.every(sg => P.songs[sg.id].stars.every(n => !n));
+  stopLoop(); $('stageLabel').textContent = '옥상 라이브 D-3';
+  say(fresh ? '와 줬구나! 나는 리아. 이번 주말 옥상 라이브에서 부를 곡들 악보가 다 번져 버렸어. 처음이라면 별빛 멜로디부터 같이 해 줄래?'
+    : '어서 와! 오늘은 어떤 곡을 복원해 볼까?', false,
+    SONGS.map(sg => { const st = P.songs[sg.id].stars, done = st.filter(Boolean).length;
+      return [`${sg.title} ${done}/${st.length}`, () => { selectSong(sg.id); openStage(done ? Math.min(P.songs[sg.id].unlocked, st.length - 1) : 0); }, sg.id !== (fresh ? 'starlight' : P.last)]; }));
 }
 
 $('hintBtn').addEventListener('click', hint);
@@ -795,7 +1199,7 @@ $('muteBtn').addEventListener('click', () => { G.muted = !G.muted; $('muteBtn').
 document.addEventListener('visibilitychange', () => { if (document.hidden && G.playing && G.mode !== 'song') stopLoop(); });
 addEventListener('resize', () => { sizeHeroine(); fitBoard(); });
 
-function boot(data) { if (data && data.progress) Object.assign(P, data.progress); title(); sizeHeroine(); requestAnimationFrame(frame); }
+function boot(data) { if (data && data.progress) Object.assign(P, migrate(data.progress)); selectSong(P.last); title(); sizeHeroine(); requestAnimationFrame(frame); }
 hc.addEventListener('transitionend', sizeSky);
 window.claude?.hot?.ready ? window.claude.hot.ready(boot) : boot(window.claude?.hot?.data ?? {});
 </script>
