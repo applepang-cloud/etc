@@ -447,8 +447,17 @@ $('#btn-resume').addEventListener('click', () => {
 $('#btn-restart').addEventListener('click', () => startGame(current.song, current.mode));
 $('#btn-quit').addEventListener('click', openMenu);
 
+// 창이 숨겨지면(탭 전환, 앱 미리보기 창 숨김, 최소화) 모든 소리를 멈춘다.
+// 연주 중이면 일시정지 화면을 띄우고, 다시 듣기·전체 연주 같은 재생은 돌아오면 이어서 난다.
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) openPause();
+  if (document.hidden) {
+    openPause();
+    banter.hide();
+    story.pauseVoice();
+    audio.suspend();
+  } else if (game.state !== 'paused') {
+    audio.resume();
+  }
 });
 
 // ---------- 결과 ----------

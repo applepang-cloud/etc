@@ -138,6 +138,11 @@ export class Story {
     this.voice = a;
   }
 
+  // 창이 숨겨질 때: 지금 대사 음성을 멈춘다 (돌아와서 다음 대사부터 다시 난다)
+  pauseVoice() {
+    this.voice?.pause();
+  }
+
   stopVoice() {
     if (this.voice) {
       this.voice.pause();
