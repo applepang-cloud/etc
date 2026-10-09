@@ -1542,8 +1542,9 @@ function winterConcert() {
   const h = HEROINES.filter(k => S.met[k] && SIM[k].song2 && S.bars2[k] >= 5).sort((a, b) => S.aff[b] - S.aff[a])[0];
   const intro = ['#2월, 겨울 별빛 콘서트. 강당 창밖으로 눈이 내리고 있었다.', '#축제 때보다 작은 무대. 그래도 객석은 응원봉으로 가득했다.'];
   if (!h) return scene('me', intro.concat(['#올해는 객석에서 다른 팀의 무대를 봤다.', '#…우리 두 번째 곡이 완성됐다면, 저기 서 있었을 텐데.']), hub, '이번 주로 ▸');
-  scene('me', intro.concat([`#${wa(CAST[h].name)} 무대에 올랐다. 이번엔 우리 두 번째 곡.`]), () => {
-    selectSong(SIM[h].song2); setChar(h); UI.strip = true; UI.crowd = true; UI.live = true;
+  const fin = ((S.bars3 || {})[h] || 0) >= 5; // the year's last song, if you finished it together
+  scene('me', intro.concat([`#${wa(CAST[h].name)} 무대에 올랐다. 이번엔 우리 ${fin ? '1년의 마지막' : '두 번째'} 곡.`]), () => {
+    selectSong(fin ? 'finale_' + h : SIM[h].song2); setChar(h); UI.strip = true; UI.crowd = true; UI.live = true;
     G.live = { who: h, heat: 85, start: 85, gain: 0, decay: 0, penalty: 0, extra: 0, cheered: 3, armed: false, done: true, grade: 'S' }; // crowd only, no scoring
     G.afterSong = () => { liveEnd(); UI.bg = 'stage'; like(h, 10); scene('me', ['#노래가 끝나자, 눈 내리는 소리마저 박수처럼 들렸다.'], hub, '이번 주로 ▸'); };
     playSong();
@@ -1576,7 +1577,7 @@ function profile(h) { // her card in the hub: who she is and how far you have co
   const sg = SONGS.find(x => x.id === SIM[h].song), sg2 = SIM[h].song2 && SONGS.find(x => x.id === SIM[h].song2), b = BIRTHDAYS[h];
   const love = b && b.gifts.find(g => g[1] === 'good');
   setChar(h); expr.base = 'idle'; UI.bg = PLACE_BG[h]; showHub(false); UI.strip = false; bgm('theme_' + h);
-  say(`${CAST[h].name} · ${SIM[h].grade}\n만나는 곳: ${SIM[h].place}${b ? ` · 생일: ${b.date}` : ''}\n${love && S.bday && S.bday[h] ? `좋아하는 선물: ${love[0]}\n` : ''}${S.likedPlace && S.likedPlace[h] ? `좋아하는 데이트 장소: ${PLACE_NAME[S.likedPlace[h]]}\n` : ''}${hearts(S.aff[h])} ${level(S.aff[h])} · 대화 ${S.talks[h]}/${SIM[h].talks.length}\n♪ ${sg.title} ${S.bars[h]}/5${sg2 ? ` · ${sg2.title} ${S.bars2[h]}/5` : ''}`, true, [['← 돌아가기', hub, true]]);
+  say(`${CAST[h].name} · ${SIM[h].grade}\n만나는 곳: ${SIM[h].place}${b ? ` · 생일: ${b.date}` : ''}\n${love && S.bday && S.bday[h] ? `좋아하는 선물: ${love[0]}\n` : ''}${S.likedPlace && S.likedPlace[h] ? `좋아하는 데이트 장소: ${PLACE_NAME[S.likedPlace[h]]}\n` : ''}${hearts(S.aff[h])} ${level(S.aff[h])} · 대화 ${S.talks[h]}/${SIM[h].talks.length}\n♪ ${sg.title} ${S.bars[h]}/5${sg2 ? ` · ${sg2.title} ${S.bars2[h]}/5` : ''}${song3Open(h) ? `\n♪ ${SONGS.find(x => x.id === 'finale_' + h).title} ${(S.bars3 || {})[h] || 0}/5` : ''}`, true, [['← 돌아가기', hub, true]]);
 }
 const BUMP = ['#복도 모퉁이에서 누군가와 부딪칠 뻔했다.', '#매점 앞 줄에서 아는 얼굴을 발견했다.', '#하굣길 버스 정류장에서 우연히 마주쳤다.', '#계단을 내려가는데 누가 내 이름을 불렀다.'];
 function encounter(h) { // a chance meeting: free, short, a little affection
