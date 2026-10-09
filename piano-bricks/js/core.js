@@ -295,7 +295,8 @@
   }
 
   // Moves ball b by dist px. onHit(kind, obj, b) fires on each bounce
-  // (kind: 'wall' | 'key' | 'melody' | 'noise' | 'paddle').
+  // (kind: 'wall' | 'key' | 'melody' | 'noise' | 'paddle'), and with 'pass' when
+  // the ball enters a black-key note it flies through.
   // world.paddle = { x (centre), w }. Returns true once the ball has fallen off the bottom.
   function stepBall(b, dist, world, onHit) {
     const R = C.BALL_R;
@@ -320,16 +321,24 @@
 
       let best = circleRect(b.x, b.y, R, 0, C.ROLL_TOP, C.KEY_W, C.ROLL_H);
       let kind = best ? 'key' : null, obj = null;
+      let passing = null;
       if (b.y < C.ROLL_BOTTOM + R) {
         for (const n of world.melody) {
           const c = circleRect(b.x, b.y, R, blockX(world, n.start), blockY(world, n.row), n.len * C.CELL_W - 2, rh);
-          if (c && (!best || c.pen > best.pen)) { best = c; kind = 'melody'; obj = n; }
+          if (!c) continue;
+          // Black-key notes let the ball through (dense tunes would otherwise wall it in).
+          if (n.black) { passing = n; continue; }
+          if (!best || c.pen > best.pen) { best = c; kind = 'melody'; obj = n; }
         }
         for (const n of world.noise) {
           if (!n.alive) continue;
           const c = circleRect(b.x, b.y, R, blockX(world, n.col), blockY(world, n.row), C.CELL_W - 2, rh);
           if (c && (!best || c.pen > best.pen)) { best = c; kind = 'noise'; obj = n; }
         }
+      }
+      if (passing !== (b.passing || null)) {
+        if (passing && onHit) onHit('pass', passing, b);
+        b.passing = passing;
       }
       if (best) {
         b.x += best.nx * best.pen;
@@ -362,7 +371,7 @@
     let bounced = false, tail = 0;
     for (let total = 0; total < 1800; total += 4) {
       let hit = false;
-      const lost = stepBall(b, 4, world, () => { hit = true; });
+      const lost = stepBall(b, 4, world, (kind) => { if (kind !== 'pass') hit = true; });
       if (hit && !bounced) { pts.push({ x: b.x, y: b.y }); bounced = true; }
       if (bounced && (tail += 4) > 140) break;
       if (lost) break;

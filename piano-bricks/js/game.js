@@ -269,7 +269,7 @@
     } else if (kind === 'paddle') {
       G.pad.flash = 1;
       SND.paddle();
-    } else if (kind === 'melody') {
+    } else if (kind === 'melody' || kind === 'pass') {
       obj.flash = 1;
       playHitNote();
     } else if (kind === 'key') {
@@ -739,11 +739,16 @@
     }
     roundRect(x, y, w, h, 4);
     ctx.fillStyle = g;
+    // Black-key notes are see-through with a dashed edge: balls pass through them.
+    if (black) ctx.globalAlpha = alpha * 0.7;
     ctx.fill();
+    ctx.globalAlpha = alpha;
     ctx.shadowBlur = 0;
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = black ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = black ? 1.5 : 1;
+    if (black) ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = black ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.25)';
     ctx.stroke();
+    ctx.setLineDash([]);
     if (flash > 0) {
       ctx.fillStyle = 'rgba(255,220,110,' + flash * 0.55 + ')';
       ctx.fill();
@@ -1099,7 +1104,7 @@
     ctx.font = '600 15px ' + FONT_U;
     ctx.fillStyle = 'rgba(255,255,255,0.8)';
     ctx.fillText(fitText('공이 날아가는 동안 화면을 좌우로 밀어 발판으로 받으세요', w - 24), cx, y + 64);
-    ctx.fillText(fitText('흰·검은 블럭 = 원곡 멜로디, 깨지지 않아요', w - 24), cx, y + 90);
+    ctx.fillText(fitText('흰 블럭 = 원곡 멜로디(튕겨요) · 검은 블럭 = 통과해요', w - 24), cx, y + 90);
     ctx.fillText(fitText('컬러 블럭 = 방해 음, 적힌 숫자만큼 맞히면 깨져요', w - 24), cx, y + 116);
     const items = [['ball', '공 추가'], ['speed', '속도 UP'], ['paddle', '발판 UP (받아야 획득)']];
     ctx.font = '700 14px ' + FONT_U;
