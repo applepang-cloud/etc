@@ -51,6 +51,8 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
 .scene[data-size="small"] .talk p { font-size: 14px; min-height: 0; }
 .talk .act { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .act button { font-family: var(--pixel); font-size: 14px; background: var(--gold); color: #2b1b00; border: 0; border-radius: 4px; padding: 7px 14px; box-shadow: 0 3px 0 #b8892a; cursor: pointer; }
+.talk .act.grid { display: grid; grid-template-columns: 1fr 1fr; }
+.act button small { display: block; font-family: var(--body); font-size: 11px; opacity: .75; margin-top: 2px; }
 .act button.ghost { background: transparent; color: var(--ink); box-shadow: none; border: 1px solid var(--slot-line); }
 .act button:active { transform: translateY(2px); box-shadow: 0 1px 0 #b8892a; }
 
@@ -155,6 +157,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
   <div class="controls" id="controls" hidden>
     <button class="icon-btn primary" type="button" id="hintBtn">힌트</button>
     <button class="icon-btn" type="button" id="helpBtn">푸는 방법</button>
+    <button class="icon-btn" type="button" id="leadBtn" aria-label="멜로디 악기 바꾸기">악기: 칩튠</button>
     <button class="icon-btn" type="button" id="playBtn">⏸ 멈춤</button>
   </div>
   <p class="hint" id="hint" hidden>칸을 누르면 음표가 칠해져요. 틀린 칸은 ×만 표시되니 부담 없이 눌러 보세요.</p>
@@ -488,7 +491,8 @@ const SONGS = [
     ],
     "clear": "다 됐어…! 우리 곡이 완성됐어!"
    }
-  ]
+  ],
+  "lead": "chip"
  },
  {
   "id": "rain",
@@ -681,7 +685,8 @@ const SONGS = [
     ],
     "clear": "완성이야! 이 노래, 이제 슬프지 않아."
    }
-  ]
+  ],
+  "lead": "piano"
  },
  {
   "id": "jump",
@@ -869,6 +874,566 @@ const SONGS = [
     ],
     "clear": "최고의 앙코르였어!"
    }
+  ],
+  "lead": "synth"
+ },
+ {
+  "id": "lullaby",
+  "title": "오르골 자장가",
+  "bpm": 84,
+  "lead": "musicbox",
+  "ending": [
+   "이 오르골, 사실 할머니가 주신 거야.",
+   "언젠가 무대에서 이 자장가를 꼭 부를 거야."
+  ],
+  "stages": [
+   {
+    "id": "l1",
+    "title": "태엽",
+    "root": 48,
+    "pad": [
+     60,
+     64,
+     67
+    ],
+    "lanes": [
+     "G",
+     "E",
+     "C",
+     "Q"
+    ],
+    "pattern": {
+     "G": "..x.....",
+     "E": "x...x...",
+     "C": "......x.",
+     "Q": "x...x..."
+    },
+    "givens": [
+     "G2"
+    ],
+    "intro": [
+     "어릴 때 갖고 있던 오르골 소리를 떠올리며 만든 자장가야.",
+     "새로 나온 '코드' 줄은 화음을 한꺼번에 울려 줘. 피아노 반주 같은 거야."
+    ],
+    "clear": "태엽을 감으면 이 소리가 났어."
+   },
+   {
+    "id": "l2",
+    "title": "별 이불",
+    "root": 45,
+    "pad": [
+     57,
+     60,
+     64
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "E",
+     "Q",
+     "B"
+    ],
+    "pattern": {
+     "A": "x.......",
+     "G": "..x...x.",
+     "E": "....x...",
+     "Q": "x...x...",
+     "B": "x......."
+    },
+    "givens": [
+     "E4",
+     "A0",
+     "Q4"
+    ],
+    "intro": [
+     "베이스가 살짝 받쳐 주는 부분이야."
+    ],
+    "clear": "포근하다… 졸려지는 것 같아."
+   },
+   {
+    "id": "l3",
+    "title": "달빛",
+    "root": 41,
+    "pad": [
+     53,
+     57,
+     60
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "C",
+     "Q",
+     "B"
+    ],
+    "pattern": {
+     "A": "..xx....",
+     "G": "....x...",
+     "C": "x.......",
+     "Q": "x...x...",
+     "B": "x...x..."
+    },
+    "givens": [
+     "A2"
+    ],
+    "intro": [
+     "라 음이 두 번 이어지는 곳을 찾아봐."
+    ],
+    "clear": "창문으로 달빛이 들어오는 느낌이야."
+   },
+   {
+    "id": "l4",
+    "title": "꿈길",
+    "root": 43,
+    "pad": [
+     55,
+     59,
+     62
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "D",
+     "Q",
+     "B"
+    ],
+    "pattern": {
+     "A": "....x...",
+     "G": "..x...x.",
+     "D": "x.......",
+     "Q": "x.x.x...",
+     "B": "x...x.x."
+    },
+    "givens": [
+     "A4",
+     "Q2"
+    ],
+    "intro": [
+     "코드가 세 번 울리는 소절이야. 숫자를 잘 봐."
+    ],
+    "clear": "거의 잠들었어…"
+   },
+   {
+    "id": "l5",
+    "title": "잘 자",
+    "root": 48,
+    "pad": [
+     60,
+     64,
+     67
+    ],
+    "lanes": [
+     "G",
+     "E",
+     "D",
+     "C",
+     "Q",
+     "B"
+    ],
+    "pattern": {
+     "G": "....x...",
+     "E": "x.......",
+     "D": ".x......",
+     "C": "..x...x.",
+     "Q": "x...x...",
+     "B": "x.....x."
+    },
+    "givens": [
+     "D1",
+     "G4",
+     "C2"
+    ],
+    "intro": [
+     "마지막 소절. 오르골이 천천히 멈추는 장면이야."
+    ],
+    "clear": "잘 자. 좋은 꿈 꿔."
+   }
+  ]
+ },
+ {
+  "id": "festival",
+  "title": "축제의 밤",
+  "bpm": 120,
+  "lead": "flute",
+  "ending": [
+   "유카타 입고 무대에 서 보고 싶었거든.",
+   "내년 여름에도 같이 축제 가자!"
+  ],
+  "stages": [
+   {
+    "id": "f1",
+    "title": "등불",
+    "root": 45,
+    "pad": [
+     57,
+     60,
+     64
+    ],
+    "lanes": [
+     "A",
+     "E",
+     "T",
+     "K"
+    ],
+    "pattern": {
+     "A": "x...x...",
+     "E": "..x...xx",
+     "T": ".x.x.x.x",
+     "K": "x...x..."
+    },
+    "givens": [
+     "E2",
+     "T1"
+    ],
+    "intro": [
+     "여름 축제 노래야! 플루트로 연주해.",
+     "새로 들어온 '탬버린'은 찰랑찰랑, 박자 사이사이를 채워 줘."
+    ],
+    "clear": "등불이 하나둘 켜졌어!"
+   },
+   {
+    "id": "f2",
+    "title": "손뼉",
+    "root": 43,
+    "pad": [
+     55,
+     59,
+     62
+    ],
+    "lanes": [
+     "G",
+     "D",
+     "P",
+     "T",
+     "K"
+    ],
+    "pattern": {
+     "G": "xx...x..",
+     "D": "...x..x.",
+     "P": "..x...x.",
+     "T": ".x.x.x.x",
+     "K": "x...x..."
+    },
+    "givens": [
+     "P2",
+     "T1"
+    ],
+    "intro": [
+     "다 같이 손뼉 치는 부분! '박수' 줄이 새로 나와."
+    ],
+    "clear": "짝짝! 다들 따라 치고 있어."
+   },
+   {
+    "id": "f3",
+    "title": "노점",
+    "root": 41,
+    "pad": [
+     53,
+     57,
+     60
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "C",
+     "P",
+     "B",
+     "K"
+    ],
+    "pattern": {
+     "A": "..x..x..",
+     "G": "....x.x.",
+     "C": "x.......",
+     "P": "..x...x.",
+     "B": "x..x.x..",
+     "K": "x..x..x."
+    },
+    "givens": [
+     "C0",
+     "A2",
+     "P2"
+    ],
+    "intro": [
+     "베이스가 들어오면서 축제 거리가 북적여져."
+    ],
+    "clear": "솜사탕 냄새가 나는 것 같아."
+   },
+   {
+    "id": "f4",
+    "title": "불꽃",
+    "root": 43,
+    "pad": [
+     55,
+     59,
+     62
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "E",
+     "D",
+     "P",
+     "T",
+     "B",
+     "K"
+    ],
+    "pattern": {
+     "A": "....x...",
+     "G": "...x..x.",
+     "E": "..x.....",
+     "D": "x.......",
+     "P": "..x...x.",
+     "T": "xxxxxxxx",
+     "B": "x.x.x.x.",
+     "K": "x...x.x."
+    },
+    "givens": [
+     "D0",
+     "G3",
+     "A4",
+     "P2"
+    ],
+    "intro": [
+     "불꽃놀이 직전! 탬버린이 쉬지 않고 울려."
+    ],
+    "clear": "펑! 첫 불꽃이 터졌어!"
+   },
+   {
+    "id": "f5",
+    "title": "축제의 밤",
+    "root": 45,
+    "pad": [
+     57,
+     60,
+     64
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "E",
+     "C",
+     "P",
+     "T",
+     "B",
+     "K"
+    ],
+    "pattern": {
+     "A": "x.....x.",
+     "G": ".x......",
+     "E": "..x.....",
+     "C": "....x...",
+     "P": "..x..xx.",
+     "T": ".x.x.xxx",
+     "B": "x..x..x.",
+     "K": "x.x.x..."
+    },
+    "givens": [
+     "K0",
+     "C4",
+     "A0",
+     "E2"
+    ],
+    "intro": [
+     "마지막은 모든 악기가 다 같이!"
+    ],
+    "clear": "최고의 축제였어!"
+   }
+  ]
+ },
+ {
+  "id": "neon",
+  "title": "네온 드라이브",
+  "bpm": 104,
+  "lead": "guitar",
+  "ending": [
+   "이 곡은 언젠가 진짜 차를 타고 들어 보고 싶어.",
+   "그때는 네가 운전해 줘. 나는 노래할게!"
+  ],
+  "stages": [
+   {
+    "id": "n1",
+    "title": "시동",
+    "root": 41,
+    "pad": [
+     53,
+     57,
+     60
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "C",
+     "Q",
+     "K"
+    ],
+    "pattern": {
+     "A": "x...x...",
+     "G": "...x....",
+     "C": "......x.",
+     "Q": ".x..x.x.",
+     "K": "x...x..."
+    },
+    "givens": [
+     "K0",
+     "A4",
+     "C6"
+    ],
+    "intro": [
+     "밤거리를 달리는 시티팝이야. 기타 소리, 멋지지?",
+     "'코드' 줄이 엇박자로 들어가. 그게 이 곡의 맛이야."
+    ],
+    "clear": "엔진 소리가 들려!"
+   },
+   {
+    "id": "n2",
+    "title": "고속도로",
+    "root": 43,
+    "pad": [
+     55,
+     59,
+     62
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "D",
+     "Q",
+     "B",
+     "K"
+    ],
+    "pattern": {
+     "A": "......x.",
+     "G": "x...x...",
+     "D": "...x....",
+     "Q": "..x..x..",
+     "B": "x..x..x.",
+     "K": "x...x..."
+    },
+    "givens": [
+     "D3",
+     "A6",
+     "Q5",
+     "Q2",
+     "B3"
+    ],
+    "intro": [
+     "베이스가 통통 튀면서 속도가 붙어."
+    ],
+    "clear": "창문 밖으로 불빛이 휙휙 지나가."
+   },
+   {
+    "id": "n3",
+    "title": "네온사인",
+    "root": 40,
+    "pad": [
+     52,
+     55,
+     59
+    ],
+    "lanes": [
+     "G",
+     "E",
+     "D",
+     "Q",
+     "B",
+     "P",
+     "K"
+    ],
+    "pattern": {
+     "G": "...x....",
+     "E": "x.x..x..",
+     "D": "......x.",
+     "Q": "x...x...",
+     "B": "xx..x.x.",
+     "P": "..x...x.",
+     "K": "x..x.x.."
+    },
+    "givens": [
+     "Q4",
+     "D6",
+     "G3",
+     "P2"
+    ],
+    "intro": [
+     "박수가 들어오는 구간. 리듬이 꽉 차."
+    ],
+    "clear": "간판 불빛이 반짝반짝해!"
+   },
+   {
+    "id": "n4",
+    "title": "한밤의 라디오",
+    "root": 45,
+    "pad": [
+     57,
+     60,
+     64
+    ],
+    "lanes": [
+     "A",
+     "G",
+     "E",
+     "C",
+     "Q",
+     "B",
+     "P",
+     "K"
+    ],
+    "pattern": {
+     "A": "....x...",
+     "G": "...x..x.",
+     "E": "..x....x",
+     "C": "x.......",
+     "Q": ".xx..xx.",
+     "B": "x.xx.xx.",
+     "P": "..x...x.",
+     "K": "x..xx..."
+    },
+    "givens": [
+     "E7",
+     "A4",
+     "G3"
+    ],
+    "intro": [
+     "가장 복잡한 소절이야. 막히면 힌트 써도 돼."
+    ],
+    "clear": "라디오에서 우리 노래가 나오면 좋겠다."
+   },
+   {
+    "id": "n5",
+    "title": "네온 드라이브",
+    "root": 48,
+    "pad": [
+     60,
+     64,
+     67
+    ],
+    "lanes": [
+     "G",
+     "E",
+     "D",
+     "C",
+     "Q",
+     "P",
+     "K"
+    ],
+    "pattern": {
+     "G": "x.....x.",
+     "E": "..x.....",
+     "D": "...x....",
+     "C": "....x...",
+     "Q": "x...x.x.",
+     "P": "..x...xx",
+     "K": "x..xx..."
+    },
+    "givens": [
+     "E2",
+     "D3"
+    ],
+    "intro": [
+     "마지막 소절! 목적지가 보여."
+    ],
+    "clear": "도착! 밤이 이렇게 예쁜 줄 몰랐어."
+   }
   ]
  }
 ];
@@ -876,8 +1441,11 @@ let SONG = SONGS[0], STAGES = SONG.stages;
 const LANES = {
   A: { name: '라', c: '#ff8fc8', midi: 81 }, G: { name: '솔', c: '#ffb35c', midi: 79 }, E: { name: '미', c: '#ffe066', midi: 76 },
   D: { name: '레', c: '#7fe3ad', midi: 74 }, C: { name: '도', c: '#6ccbff', midi: 72 },
-  B: { name: '베이스', c: '#b597ff' }, H: { name: '하이햇', c: '#d9def2' }, S: { name: '스네어', c: '#9ef0ff' }, K: { name: '킥', c: '#ff7d7d' }
+  B: { name: '베이스', c: '#b597ff' }, Q: { name: '코드', c: '#8fb3ff' }, H: { name: '하이햇', c: '#d9def2' }, T: { name: '탬버린', c: '#c9f27a' },
+  P: { name: '박수', c: '#ffc4a3' }, S: { name: '스네어', c: '#9ef0ff' }, K: { name: '킥', c: '#ff7d7d' }
 };
+const LEADS = { chip: '칩튠', piano: '피아노', musicbox: '오르골', flute: '플루트', guitar: '기타', synth: '신스 리드' };
+const leadKind = () => G.lead || SONG.lead || 'chip';
 const MELODY = new Set(['A', 'G', 'E', 'D', 'C']);
 const W = 8; let STEP = 60 / SONG.bpm / 2;
 const OOPS = ['앗, 그 음은 아닌 것 같아!', '음이 살짝 엇나갔어~', '흠, 숫자를 다시 볼까?'];
@@ -898,7 +1466,7 @@ function migrate(d) {
 }
 const P = migrate(saved);
 const prog = () => P.songs[SONG.id];
-function selectSong(id) { SONG = SONGS.find(sg => sg.id === id) || SONGS[0]; STAGES = SONG.stages; STEP = 60 / SONG.bpm / 2; P.last = SONG.id; persist(); $('songLabel').textContent = SONG.title; }
+function selectSong(id) { SONG = SONGS.find(sg => sg.id === id) || SONGS[0]; STAGES = SONG.stages; STEP = 60 / SONG.bpm / 2; G.lead = null; updateLead(); P.last = SONG.id; persist(); $('songLabel').textContent = SONG.title; }
 const persist = () => store.save(P);
 window.claude?.hot?.snapshot?.(() => ({ progress: P }));
 
@@ -965,9 +1533,16 @@ const hz = m => 440 * Math.pow(2, (m - 69) / 12);
 function env(g, t, peak, a, len) { g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + len); }
 function voice(lane, t, stage, vel = 1) {
   if (!ac) return; const out = ac.createGain(); out.connect(master);
-  if (MELODY.has(lane)) {
-    const o = ac.createOscillator(), f = ac.createBiquadFilter(); o.type = 'square'; o.frequency.value = hz(LANES[lane].midi); f.type = 'lowpass'; f.frequency.value = 3200;
-    o.connect(f); f.connect(out); env(out, t, 0.13 * vel, 0.006, STEP * 1.6); o.start(t); o.stop(t + STEP * 1.7);
+  if (MELODY.has(lane)) { lead(leadKind(), LANES[lane].midi, t, vel, out);
+  } else if (lane === 'Q') {
+    stage.pad.forEach((m, i) => { const o = ac.createOscillator(), o2 = ac.createOscillator(), g = ac.createGain(); o.type = 'triangle'; o2.type = 'sine'; o.frequency.value = hz(m); o2.frequency.value = hz(m + 12);
+      o.connect(g); o2.connect(g); g.connect(out); env(g, t + i * 0.008, 0.07 * vel, 0.004, 0.42); [o, o2].forEach(x => { x.start(t); x.stop(t + 0.45); }); });
+  } else if (lane === 'P') {
+    const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1300; f.Q.value = 1.2; f.connect(out);
+    [0, 0.011, 0.022].forEach((d, i) => { const n = ac.createBufferSource(), g = ac.createGain(); n.buffer = noise; n.connect(g); g.connect(f); env(g, t + d, (i === 2 ? 0.55 : 0.35) * vel, 0.001, i === 2 ? 0.16 : 0.012); n.start(t + d, Math.random() * 0.3); n.stop(t + d + 0.2); });
+  } else if (lane === 'T') {
+    const f = ac.createBiquadFilter(), f2 = ac.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 6000; f2.type = 'peaking'; f2.frequency.value = 9500; f2.gain.value = 9; f.connect(f2); f2.connect(out);
+    [0, 0.03, 0.055].forEach((d, i) => { const n = ac.createBufferSource(), g = ac.createGain(); n.buffer = noise; n.connect(g); g.connect(f); env(g, t + d, [0.2, 0.09, 0.05][i] * vel, 0.001, 0.09); n.start(t + d, Math.random() * 0.3); n.stop(t + d + 0.12); });
   } else if (lane === 'B') {
     const o = ac.createOscillator(), f = ac.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.value = hz(stage.root); f.type = 'lowpass'; f.frequency.value = 900; f.Q.value = 5;
     o.connect(f); f.connect(out); env(out, t, 0.32 * vel, 0.008, STEP * 0.95); o.start(t); o.stop(t + STEP);
@@ -979,6 +1554,40 @@ function voice(lane, t, stage, vel = 1) {
       const o = ac.createOscillator(), og = ac.createGain(); o.type = 'triangle'; o.frequency.value = 190; o.connect(og); og.connect(master); env(og, t, 0.22 * vel, 0.002, 0.08); o.start(t); o.stop(t + 0.1);
     } else { f.type = 'highpass'; f.frequency.value = 7600; env(out, t, 0.14 * vel, 0.001, 0.05); }
     n.start(t); n.stop(t + 0.2);
+  }
+}
+const ksCache = {};
+function pluck(midi) { // Karplus-Strong string, cached per pitch
+  if (ksCache[midi]) return ksCache[midi];
+  const sr = ac.sampleRate, len = Math.floor(sr * 1.4), buf = ac.createBuffer(1, len, sr), d = buf.getChannelData(0), N = Math.round(sr / hz(midi));
+  for (let i = 0; i < N; i++) d[i] = Math.random() * 2 - 1;
+  for (let i = N; i < len; i++) d[i] = 0.497 * (d[i - N] + d[i - N - 1 < 0 ? 0 : i - N - 1]);
+  return (ksCache[midi] = buf);
+}
+function lead(kind, midi, t, vel, out) {
+  const f0 = hz(midi), osc = (type, f) => { const o = ac.createOscillator(); o.type = type; o.frequency.value = f; return o; }, end = (o, dur) => { o.start(t); o.stop(t + dur); };
+  if (kind === 'piano') {
+    const g = ac.createGain(), lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(4200, t); lp.frequency.exponentialRampToValueAtTime(900, t + 0.8); g.connect(lp); lp.connect(out);
+    const a = osc('triangle', f0), b = osc('sine', f0 * 2), bg = ac.createGain(); bg.gain.value = 0.35; a.connect(g); b.connect(bg); bg.connect(g);
+    env(g, t, 0.24 * vel, 0.004, 1.3); end(a, 1.35); end(b, 1.35);
+  } else if (kind === 'musicbox') {
+    const g = ac.createGain(), a = osc('sine', f0 * 2), b = osc('sine', f0 * 6), bg = ac.createGain(); a.connect(g); b.connect(bg); bg.connect(g); g.connect(out);
+    env(bg, t, 0.35, 0.001, 0.25); env(g, t, 0.2 * vel, 0.002, 1.6); end(a, 1.65); end(b, 0.3);
+  } else if (kind === 'flute') {
+    const g = ac.createGain(), a = osc('sine', f0), h = osc('sine', f0 * 2), hg = ac.createGain(), lfo = osc('sine', 5.2), lg = ac.createGain();
+    hg.gain.value = 0.12; lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(f0 * 0.012, t + 0.18); lfo.connect(lg); lg.connect(a.frequency);
+    a.connect(g); h.connect(hg); hg.connect(g); g.connect(out);
+    const n = ac.createBufferSource(), bp = ac.createBiquadFilter(), ng = ac.createGain(); n.buffer = noise; bp.type = 'bandpass'; bp.frequency.value = f0 * 2; bp.Q.value = 2; n.connect(bp); bp.connect(ng); ng.connect(out); env(ng, t, 0.03 * vel, 0.02, 0.15);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.2 * vel, t + 0.05); g.gain.setValueAtTime(0.2 * vel, t + STEP * 1.2); g.gain.exponentialRampToValueAtTime(0.0001, t + STEP * 1.8);
+    [a, h, lfo].forEach(o => end(o, STEP * 1.9)); n.start(t); n.stop(t + 0.2);
+  } else if (kind === 'guitar') {
+    const n = ac.createBufferSource(), g = ac.createGain(), lp = ac.createBiquadFilter(); n.buffer = pluck(midi - 12); lp.type = 'lowpass'; lp.frequency.value = 3800;
+    n.connect(lp); lp.connect(g); g.connect(out); g.gain.setValueAtTime(0.55 * vel, t); g.gain.setTargetAtTime(0.0001, t + STEP * 1.6, 0.08); n.start(t); n.stop(t + 1.4);
+  } else if (kind === 'synth') {
+    const g = ac.createGain(), lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 6; lp.frequency.setValueAtTime(5200, t); lp.frequency.exponentialRampToValueAtTime(1400, t + 0.25); g.connect(lp); lp.connect(out);
+    [-8, 8].forEach(c => { const o = osc('sawtooth', f0); o.detune.value = c; o.connect(g); end(o, STEP * 1.7); }); env(g, t, 0.09 * vel, 0.005, STEP * 1.6);
+  } else {
+    const o = osc('square', f0), lp = ac.createBiquadFilter(), g = ac.createGain(); lp.type = 'lowpass'; lp.frequency.value = 3200; o.connect(lp); lp.connect(g); g.connect(out); env(g, t, 0.13 * vel, 0.006, STEP * 1.6); end(o, STEP * 1.7);
   }
 }
 function pad(t, stage) {
@@ -1119,7 +1728,7 @@ function say(text, quick, actions) {
   const p = $('line'); clearInterval(typeTimer);
   if (reduceMotion || quick) p.textContent = text;
   else { let i = 0; p.textContent = ''; typeTimer = setInterval(() => { i += 1; p.textContent = text.slice(0, i); if (i >= text.length) clearInterval(typeTimer); }, 28); }
-  if (actions) { const a = $('act'); a.innerHTML = ''; actions.forEach(([label, fn, ghost]) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; if (ghost) b.className = 'ghost'; b.addEventListener('click', () => { initAudio(); fn(); }); a.append(b); }); }
+  if (actions) { const a = $('act'); a.innerHTML = ''; a.classList.toggle('grid', actions.length > 3); actions.forEach(([label, fn, ghost]) => { const b = document.createElement('button'); b.type = 'button'; const [main, sub] = label.split('\n'); b.textContent = main; if (sub) { const sm = document.createElement('small'); sm.textContent = sub; b.append(sm); } if (ghost) b.className = 'ghost'; b.addEventListener('click', () => { initAudio(); fn(); }); a.append(b); }); }
 }
 function talk(lines, done, lastLabel = '시작 ▸') { let i = 0; const next = () => { if (i >= lines.length) return done(); const last = i === lines.length - 1; say(lines[i++], false, [[last ? lastLabel : '다음 ▸', next]]); }; next(); }
 function setScene(size) { $('scene').dataset.size = size; sizeHeroine(); }
@@ -1157,7 +1766,7 @@ function title() {
   say(fresh ? '와 줬구나! 나는 리아. 이번 주말 옥상 라이브에서 부를 곡들 악보가 다 번져 버렸어. 처음이라면 별빛 멜로디부터 같이 해 줄래?'
     : '어서 와! 오늘은 어떤 곡을 복원해 볼까?', false,
     SONGS.map(sg => { const st = P.songs[sg.id].stars, done = st.filter(Boolean).length;
-      return [`${sg.title} ${done}/${st.length}`, () => { selectSong(sg.id); openStage(done ? Math.min(P.songs[sg.id].unlocked, st.length - 1) : 0); }, sg.id !== (fresh ? 'starlight' : P.last)]; }));
+      return [`${sg.title}\n${LEADS[sg.lead]} · ${done}/${st.length}소절`, () => { selectSong(sg.id); openStage(done ? Math.min(P.songs[sg.id].unlocked, st.length - 1) : 0); }, sg.id !== (fresh ? 'starlight' : P.last)]; }));
 }
 
 $('hintBtn').addEventListener('click', hint);
@@ -1195,6 +1804,9 @@ function hint() {
   cellEl(best.x, best.y).classList.add('glow'); say('여기 같아! 반짝이는 칸을 눌러 봐.', true);
 }
 $('playBtn').addEventListener('click', () => G.playing ? stopLoop() : startLoop());
+$('leadBtn').addEventListener('click', () => { const keys = Object.keys(LEADS), cur = leadKind(); G.lead = keys[(keys.indexOf(cur) + 1) % keys.length]; updateLead(); initAudio();
+  if (ac) lead(leadKind(), 76, ac.currentTime + 0.01, 0.9, master); toast('멜로디 악기: ' + LEADS[leadKind()]); });
+function updateLead() { $('leadBtn').textContent = '악기: ' + LEADS[leadKind()]; }
 $('muteBtn').addEventListener('click', () => { G.muted = !G.muted; $('muteBtn').textContent = G.muted ? '소리 끔' : '소리 켬'; $('muteBtn').setAttribute('aria-pressed', G.muted); if (master) master.gain.value = G.muted ? 0 : 0.55; });
 document.addEventListener('visibilitychange', () => { if (document.hidden && G.playing && G.mode !== 'song') stopLoop(); });
 addEventListener('resize', () => { sizeHeroine(); fitBoard(); });
