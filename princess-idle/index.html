@@ -21,6 +21,7 @@
       <div class="coin coin-gold"><dt>골드</dt><dd id="hud-gold">0</dd></div>
       <div class="coin"><dt>명성</dt><dd id="hud-fame">0</dd></div>
       <div class="coin coin-star"><dt>왕관 별</dt><dd id="hud-stars">0</dd></div>
+      <div class="coin coin-gem"><dt>보석</dt><dd id="hud-gems">0</dd></div>
     </dl>
     <div class="top-actions">
       <span class="speed" id="hud-speed" hidden></span>
@@ -41,6 +42,19 @@
         <h1 class="pr-name" id="pr-name">공주</h1>
         <p class="pr-age" id="pr-age">10세</p>
       </div>
+      <section class="points" aria-labelledby="points-title">
+        <div class="points-head">
+          <h2 class="points-title" id="points-title">성장 포인트 <b class="num" id="pt-count">0</b></h2>
+          <span class="auto-badge" id="auto-badge" hidden></span>
+        </div>
+        <div class="pt-grid" id="pt-grid"></div>
+        <div class="auto-row">
+          <label for="auto-target">자동 선택</label>
+          <select id="auto-target"></select>
+        </div>
+        <div class="auto-buy" id="auto-buy"></div>
+        <p class="points-hint" id="points-hint"></p>
+      </section>
       <div class="almanac">
         <p class="date" id="pr-date"></p>
         <ol class="month-track" id="month-track" aria-label="이번 달 진행"></ol>

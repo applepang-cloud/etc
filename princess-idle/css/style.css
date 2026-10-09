@@ -32,6 +32,8 @@
   --tier-A: #B42F67;
   --tier-B: #4656A6;
   --tier-C: #6F7B6E;
+  --gem: #1E7F9A;
+  --gem-soft: #DDF1F6;
   --shadow: rgba(52, 25, 47, 0.12);
   --scrim: rgba(52, 25, 47, 0.42);
   --sky-top: #FBD9E6;
@@ -77,6 +79,8 @@
     --tier-A: #F07DA6;
     --tier-B: #9AA8F0;
     --tier-C: #A9B5A7;
+    --gem: #7FD3E8;
+    --gem-soft: #173640;
     --shadow: rgba(0, 0, 0, 0.35);
     --scrim: rgba(8, 3, 10, 0.6);
     --sky-top: #231A45;
@@ -118,6 +122,8 @@
   --tier-A: #F07DA6;
   --tier-B: #9AA8F0;
   --tier-C: #A9B5A7;
+  --gem: #7FD3E8;
+  --gem-soft: #173640;
   --shadow: rgba(0, 0, 0, 0.35);
   --scrim: rgba(8, 3, 10, 0.6);
   --sky-top: #231A45;
@@ -194,6 +200,7 @@ p { margin: 0; }
 .coin dd { margin: 0; font-weight: 700; font-size: 16px; }
 .coin-gold dd { color: var(--gold); }
 .coin-star dd { color: var(--tier-S); }
+.coin-gem dd { color: var(--gem); }
 .coin.flash { animation: flash 0.6s ease-out; }
 @keyframes flash { from { background: var(--gold-soft); } to { background: var(--card); } }
 .top-actions { display: flex; align-items: center; gap: 6px; }
@@ -231,8 +238,6 @@ p { margin: 0; }
 
 /* ── 무대 (공주) ───────────────────────────────────────── */
 .stage {
-  position: sticky;
-  top: calc(env(safe-area-inset-top, 0px) + 12px);
   display: grid;
   gap: 14px;
   background: var(--card);
@@ -242,7 +247,7 @@ p { margin: 0; }
 }
 @media (max-width: 860px) {
   .stage { position: static; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-radius: 140px 140px var(--radius) var(--radius); }
-  .stage .window, .stage .nameplate { grid-column: 1 / -1; }
+  .stage .window, .stage .nameplate, .stage .points { grid-column: 1 / -1; }
 }
 @media (max-width: 520px) {
   .stage { grid-template-columns: minmax(0, 1fr); }
@@ -315,6 +320,55 @@ p { margin: 0; }
 .month-track .seg { height: 6px; border-radius: 3px; background: var(--card-sunk); overflow: hidden; }
 .month-track .seg i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 3px; }
 .month-track .past .seg i { width: 100%; opacity: 0.35; }
+
+/* 성장 포인트 */
+.points { display: grid; gap: 10px; padding: 12px; border-radius: var(--radius); background: var(--card-sunk); min-width: 0; }
+.points-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.points-title { font-size: 15px; display: flex; align-items: baseline; gap: 8px; }
+.points-title b { font-size: 22px; color: var(--accent); display: inline-block; }
+.points-title b.bump { animation: bump 0.5s ease-out; }
+@keyframes bump { 40% { transform: scale(1.35); } }
+.auto-badge {
+  font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--accent-ink); background: var(--accent); border-radius: 999px; padding: 2px 10px;
+  animation: glow 1.6s ease-in-out infinite;
+}
+@keyframes glow { 50% { opacity: 0.7; } }
+.pt-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.pt {
+  display: grid; justify-items: center; gap: 0;
+  padding: 8px 4px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  transition: border-color 0.15s, transform 0.1s;
+}
+.pt:hover:not(:disabled) { border-color: var(--accent); }
+.pt:active:not(:disabled) { transform: translateY(1px); }
+.pt:disabled { cursor: default; opacity: 0.6; }
+.pt.target { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); opacity: 1; }
+.pt-name { font-family: var(--font-display); font-weight: 700; font-size: 15px; }
+.pt-val { font-size: 12px; color: var(--ink-soft); }
+.auto-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--ink-soft); }
+.auto-row select { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 4px 8px; font-size: 13px; }
+.auto-buy { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.auto-buy .btn { display: grid; justify-items: center; gap: 0; padding: 6px 4px; font-size: 12px; line-height: 1.35; }
+.auto-buy .btn b { font-size: 13px; }
+.btn-ad { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); }
+.btn-gem { background: var(--gem-soft); border-color: var(--gem); color: var(--ink); }
+.btn-gem b { color: var(--gem); }
+.points-hint { font-size: 11px; color: var(--ink-faint); line-height: 1.45; }
+
+/* 광고 자리 */
+.ad-slot {
+  position: relative; display: grid; place-items: center; gap: 4px; text-align: center;
+  aspect-ratio: 16 / 9; max-width: 100%; border-radius: 12px;
+  background: repeating-linear-gradient(135deg, var(--card-sunk) 0 12px, var(--card) 12px 24px);
+  border: 1px dashed var(--line); color: var(--ink-soft); padding: 16px;
+}
+.ad-slot p { font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--ink); }
+.ad-slot small { font-size: 12px; }
+.ad-label { position: absolute; top: 8px; left: 8px; font-size: 11px; font-weight: 700; background: var(--ink); color: var(--paper); border-radius: 4px; padding: 0 6px; }
+.ad-status { font-size: 14px; color: var(--ink-soft); }
+.ad-status b { color: var(--accent); }
 
 .doing { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .doing-text { min-width: 0; }

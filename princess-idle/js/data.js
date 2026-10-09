@@ -25,7 +25,24 @@
   // ── 경제·컨디션 ─────────────────────────────────────────
   const START_GOLD = 300;
   const START_POINTS = 3;          // 첫 화면에서 직접 나눠 주는 시작 보너스
-  const POINT_VALUE = 10;         // 1포인트 = 능력치 +10
+  const POINT_VALUE = 10;         // 시작 보너스 1포인트 = 능력치 +10
+
+  // 성장 포인트: 키우는 동안 쌓이고, 공주 화면에서 6개 능력치에 직접(또는 자동으로) 쓴다
+  const POINT_STATS = ['int', 'con', 'cha', 'mor', 'sen', 'fai'];   // 지력·체력·매력·인성·감성·영성
+  const POINT_GAIN = 2;           // 성장 포인트 1개 = 능력치 +2
+  const POINT_EVERY = 10;         // 10일(한 순)마다 1포인트
+  const POINT_LEVELUP = 1;        // 숙련도가 오를 때
+  const POINT_BIRTHDAY = 3;       // 생일
+
+  // 보석: 세대를 넘어 남는 귀한 재화. 자동 선택에 쓴다
+  const START_GEMS = 10;
+  const GEM_REWARDS = { birthday: 2, festivalWin: 1, treasure: 1, dragon: 20, ending: { S: 30, A: 15, B: 8, C: 3 } };
+  const AUTO_OFFERS = [
+    { id: 'gem10', minutes: 10, gems: 5 },
+    { id: 'gem60', minutes: 60, gems: 20 },
+  ];
+  const AD_AUTO_SECONDS = 60;     // 광고 한 번 = 자동 1분
+  const AD_WATCH_SECONDS = 5;     // 광고 자리 재생 시간
   const ALLOWANCE = 40;           // 매달 1일 왕실 양육비
   const STAT_MAX = 999;
   const SICK_DAYS = 7;
@@ -50,13 +67,13 @@
     { id: 'con', name: '체력', group: 'body', base: 25 },
     { id: 'str', name: '근력', group: 'body', base: 12 },
     { id: 'cmb', name: '무예', group: 'body', base: 5 },
-    { id: 'int', name: '지능', group: 'mind', base: 18 },
+    { id: 'int', name: '지력', group: 'mind', base: 18 },
     { id: 'mag', name: '마력', group: 'mind', base: 3 },
     { id: 'ele', name: '기품', group: 'grace', base: 12 },
     { id: 'cha', name: '매력', group: 'grace', base: 18 },
-    { id: 'sen', name: '감수성', group: 'grace', base: 15 },
-    { id: 'mor', name: '도덕', group: 'spirit', base: 20 },
-    { id: 'fai', name: '신앙', group: 'spirit', base: 12 },
+    { id: 'sen', name: '감성', group: 'grace', base: 15 },
+    { id: 'mor', name: '인성', group: 'spirit', base: 20 },
+    { id: 'fai', name: '영성', group: 'spirit', base: 12 },
   ];
 
   // ── 활동 ───────────────────────────────────────────────
@@ -233,15 +250,15 @@
 
   const ENDINGS = [
     { id: 'queen', name: '여왕', tier: 'S',
-      hint: '기품·지능·매력·도덕, 그리고 명성까지 모두 갖춘 자에게',
+      hint: '기품·지력·매력·인성, 그리고 명성까지 모두 갖춘 자에게',
       text: '왕국 역사상 가장 현명하고 아름다운 여왕이 탄생했다. 백성들은 그녀의 이름을 노래로 불렀다.',
       check: (s, r) => s.ele >= 600 && s.int >= 550 && s.cha >= 500 && s.mor >= 450 && r.fame >= 120 },
     { id: 'saint', name: '성녀', tier: 'S',
-      hint: '깊은 신앙과 흔들림 없는 도덕',
+      hint: '깊은 영성과 흔들림 없는 인성',
       text: '그녀의 손길이 닿은 곳에 기적이 일어났다. 대성당은 그녀를 성녀로 추대했고, 그녀가 지나간 길에는 꽃이 피었다고 한다.',
       check: (s) => s.fai >= 700 && s.mor >= 650 && s.sen >= 400 },
     { id: 'archmage', name: '대마도사', tier: 'S',
-      hint: '마력과 지능의 극한',
+      hint: '마력과 지력의 극한',
       text: '탑의 꼭대기에서 별의 운행을 읽는 대마도사. 대륙의 모든 마법사가 그녀의 제자가 되기를 꿈꾼다.',
       check: (s) => s.mag >= 750 && s.int >= 600 },
     { id: 'hero', name: '용사', tier: 'S',
@@ -258,36 +275,36 @@
       text: '무도회에서 그녀를 본 이웃 나라 왕세자는 첫눈에 반했다. 두 나라는 그녀 덕분에 오랜 평화를 맞았다.',
       check: (s) => s.cha >= 550 && s.ele >= 450 && s.sen >= 300 },
     { id: 'chancellor', name: '재상', tier: 'A',
-      hint: '날카로운 지능에 도덕과 기품을 더해',
+      hint: '날카로운 지력에 인성과 기품을 더해',
       text: '어린 나이에 왕의 오른팔이 된 재상. 그녀의 정책으로 왕국의 곳간이 가득 찼다.',
       check: (s) => s.int >= 600 && s.mor >= 350 && s.ele >= 300 },
     { id: 'courtmage', name: '궁정 마법사', tier: 'A',
-      hint: '마력과 지능',
+      hint: '마력과 지력',
       text: '왕궁의 궁정 마법사로 임명되었다. 축제 날이면 그녀의 불꽃 마법이 밤하늘을 수놓는다.',
       check: (s) => s.mag >= 450 && s.int >= 300 },
     { id: 'knightcaptain', name: '기사단장', tier: 'A',
-      hint: '무예·체력·도덕',
+      hint: '무예·체력·인성',
       text: '백은 기사단의 단장이 되었다. 그녀의 정의로운 검은 언제나 약한 사람 편에 선다.',
       check: (s) => s.cmb >= 450 && s.con >= 350 && s.mor >= 300 },
     { id: 'primadonna', name: '프리마돈나', tier: 'A',
-      hint: '매력과 감수성',
+      hint: '매력과 감성',
       text: '왕립 극장의 프리마돈나. 그녀의 노래가 끝나면 객석은 늘 눈물과 박수로 가득했다.',
       check: (s) => s.cha >= 450 && s.sen >= 450 },
     { id: 'painter', name: '궁정 화가', tier: 'A',
-      hint: '넘쳐흐르는 감수성',
+      hint: '넘쳐흐르는 감성',
       text: '궁정 화가가 되어 왕가의 초상을 그린다. 그녀의 그림 속 사람들은 금방이라도 말을 걸어올 것 같다.',
       check: (s) => s.sen >= 550 && s.int >= 200 },
     { id: 'abbess', name: '수도원장', tier: 'A',
-      hint: '신앙과 도덕',
+      hint: '영성과 인성',
       text: '고요한 수도원의 원장이 되었다. 길 잃은 이들이 그녀를 찾아 문을 두드린다.',
       check: (s) => s.fai >= 500 && s.mor >= 450 },
 
     { id: 'witch', name: '숲의 마녀', tier: 'B',
-      hint: '강한 마력, 그리고 흐려진 도덕',
+      hint: '강한 마력, 그리고 흐려진 인성',
       text: '숲속 오두막에 사는 마녀. 사람들은 그녀를 두려워하면서도 밤이면 몰래 약을 사러 찾아온다.',
       check: (s) => s.mag >= 300 && s.mor <= 80 },
     { id: 'scholar', name: '학자', tier: 'B',
-      hint: '지능',
+      hint: '지력',
       text: '왕립 아카데미의 학자가 되었다. 도서관 불은 오늘도 그녀의 자리에서 가장 늦게 꺼진다.',
       check: (s) => s.int >= 380 },
     { id: 'knight', name: '기사', tier: 'B',
@@ -299,7 +316,7 @@
       text: '떠돌이 마법사가 되어 마을의 골칫거리를 하나씩 해결해 준다.',
       check: (s) => s.mag >= 300 },
     { id: 'nun', name: '수녀', tier: 'B',
-      hint: '신앙',
+      hint: '영성',
       text: '성당의 수녀가 되어 아이들에게 글과 기도를 가르친다.',
       check: (s) => s.fai >= 320 },
     { id: 'dancer', name: '광장의 무희', tier: 'B',
@@ -320,11 +337,11 @@
       check: (s, r) => r.gold >= 20000 },
 
     { id: 'teacher', name: '마을 선생님', tier: 'C',
-      hint: '지능',
+      hint: '지력',
       text: '마을 학교의 선생님이 되었다. 아이들은 그녀를 무척 따른다.',
       check: (s) => s.int >= 200 },
     { id: 'florist', name: '꽃집 주인', tier: 'C',
-      hint: '감수성 또는 매력',
+      hint: '감성 또는 매력',
       text: '작은 꽃집을 열었다. 가게 앞에는 언제나 계절 꽃 향기가 가득하다.',
       check: (s) => s.sen >= 200 || s.cha >= 220 },
     { id: 'bride', name: '마을의 신부', tier: 'C',
@@ -396,7 +413,9 @@
   return {
     DAY_MS, DAYS_PER_MONTH, SLOT_DAYS, MONTHS_PER_YEAR, DAYS_PER_YEAR,
     START_AGE, END_AGE, TOTAL_DAYS, START_YEAR, START_MONTH, SLOT_NAMES,
-    START_GOLD, START_POINTS, POINT_VALUE, ALLOWANCE, STAT_MAX, SICK_DAYS, SICK_COST, EVENT_CHANCE,
+    START_GOLD, START_POINTS, POINT_VALUE, ALLOWANCE,
+    POINT_STATS, POINT_GAIN, POINT_EVERY, POINT_LEVELUP, POINT_BIRTHDAY,
+    START_GEMS, GEM_REWARDS, AUTO_OFFERS, AD_AUTO_SECONDS, AD_WATCH_SECONDS, STAT_MAX, SICK_DAYS, SICK_COST, EVENT_CHANCE,
     FESTIVAL_MONTH, FESTIVAL_DAY, BASE_OFFLINE_HOURS,
     birthdayGift, rivalScore,
     STAT_GROUPS, STATS, CATEGORIES, ACTIVITIES,

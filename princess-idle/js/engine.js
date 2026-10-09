@@ -180,6 +180,9 @@
       history: [],
       autoRest: { enabled: true, at: 80, until: 25 },
       autoBuy: false,
+      gems: D.START_GEMS,
+      autoMs: 0,                  // 자동 선택이 남은 실제 시간(ms)
+      autoTarget: 'balanced',     // 'balanced'(가장 낮은 능력치) 또는 능력치 id
     };
   }
 
@@ -220,6 +223,7 @@
       goldEarned: 0,
       warnSlot: -1,
       bonusPoints: D.START_POINTS,
+      points: 0,
       looks: {
         hair: pick(state, D.HAIR_COLORS),
         skin: pick(state, D.SKIN_TONES),
@@ -251,7 +255,7 @@
     let total = 0;
     for (const id in alloc) {
       const n = alloc[id];
-      if (!STAT[id] || !Number.isInteger(n) || n < 0) return { ok: false, reason: 'invalid' };
+      if (!D.POINT_STATS.includes(id) || !Number.isInteger(n) || n < 0) return { ok: false, reason: 'invalid' };
       total += n;
     }
     if (total > run.bonusPoints) return { ok: false, reason: 'too_many' };
@@ -358,7 +362,8 @@
       run.mastery[act.id] = (run.mastery[act.id] || 0) + xpMul(state);
       const lvlAfter = masteryLevel(run.mastery[act.id]);
       if (lvlAfter > lvlBefore) {
-        emit('level', act.name + ' 숙련도가 Lv.' + lvlAfter + '이 되었다.');
+        run.points += D.POINT_LEVELUP;
+        emit('level', act.name + ' 숙련도가 Lv.' + lvlAfter + '이 되었다. 성장 포인트 +' + D.POINT_LEVELUP);
       }
     }
   }
@@ -372,7 +377,8 @@
         const loot = 2000;
         run.gold += loot;
         run.goldEarned += loot;
-        emit('legend', fill('{N이} 잠에서 깬 붉은 용을 쓰러뜨렸다! 명성 +100, 보물 ' + loot + 'G', run.name));
+        state.meta.gems += D.GEM_REWARDS.dragon;
+        emit('legend', fill('{N이} 잠에서 깬 붉은 용을 쓰러뜨렸다! 명성 +100, 보물 ' + loot + 'G, 보석 ' + D.GEM_REWARDS.dragon + '개', run.name));
       } else {
         run.stress += 20;
         emit('danger', fill('붉은 용이 깨어났다! {N은} 간신히 도망쳤다…', run.name));
@@ -383,7 +389,8 @@
       const g = Math.round(randInt(state, act.loot[0], act.loot[1]) * 8 * incomeMul(state));
       run.gold += g;
       run.goldEarned += g;
-      emit('treasure', act.name + '에서 보물 상자를 발견했다! +' + g + 'G');
+      state.meta.gems += D.GEM_REWARDS.treasure;
+      emit('treasure', act.name + '에서 보물 상자를 발견했다! +' + g + 'G, 보석 ' + D.GEM_REWARDS.treasure + '개');
     }
   }
 
@@ -449,10 +456,16 @@
     run.gold += prize;
     run.goldEarned += prize;
     run.fame += fame;
+    const wins = results.filter((r) => r.place === 1).length;
+    const gems = wins * D.GEM_REWARDS.festivalWin;
+    state.meta.gems += gems;
     const summary = results
       .map((r) => r.name + ' ' + (r.place === 1 ? '우승' : r.place === 2 ? '준우승' : '참가'))
       .join(' · ');
-    emit('festival', '수확제 결과 — ' + summary + (prize ? ' (상금 ' + Math.round(prize) + 'G)' : ''), { results });
+    const rewards = [];
+    if (prize) rewards.push('상금 ' + Math.round(prize) + 'G');
+    if (gems) rewards.push('보석 ' + gems + '개');
+    emit('festival', '수확제 결과 — ' + summary + (rewards.length ? ' (' + rewards.join(', ') + ')' : ''), { results });
   }
 
   /**
@@ -509,6 +522,7 @@
 
     run.stress = clamp(run.stress, 0, 100);
     run.totalDays += 1;
+    if (run.totalDays % D.POINT_EVERY === 0) run.points += 1;
 
     if (run.totalDays % D.DAYS_PER_YEAR === 0) {
       const age = ageOf(run);
@@ -517,7 +531,9 @@
       } else {
         const gift = D.birthdayGift(age);
         run.gold += gift;
-        emit('birthday', fill('{N이} ' + age + '살이 되었다! 왕실에서 생일 축하금 ' + gift + 'G가 도착했다.', run.name));
+        run.points += D.POINT_BIRTHDAY;
+        state.meta.gems += D.GEM_REWARDS.birthday;
+        emit('birthday', fill('{N이} ' + age + '살이 되었다! 생일 축하금 ' + gift + 'G, 성장 포인트 +' + D.POINT_BIRTHDAY + ', 보석 ' + D.GEM_REWARDS.birthday + '개', run.name));
       }
     }
     return day;
@@ -564,7 +580,9 @@
       total: Math.round(D.STATS.reduce((sum, s) => sum + run.stats[s.id], 0)),
     });
     if (meta.history.length > HISTORY_LIMIT) meta.history.length = HISTORY_LIMIT;
-    run.ended = { ending: ending.id, stars };
+    const gems = D.GEM_REWARDS.ending[ending.tier] || 0;
+    meta.gems += gems;
+    run.ended = { ending: ending.id, stars, gems };
     run.current = { id: 'rest', reason: 'ended' };
     emit('ending', fill('{N이} 성인식을 맞았다. 그녀의 길은… 「' + ending.name + '」', run.name));
   }
@@ -583,6 +601,71 @@
     if (unmet.length) return { ok: false, reason: 'locked', unmet };
     state.run.schedule[slot] = actId;
     return { ok: true };
+  }
+
+  // ── 성장 포인트 ────────────────────────────────────────
+  function spendPoints(state, statId, n) {
+    const run = state.run;
+    const count = n === undefined ? 1 : n;
+    if (!run || run.ended) return { ok: false, reason: 'ended' };
+    if (!D.POINT_STATS.includes(statId) || !Number.isInteger(count) || count < 1) return { ok: false, reason: 'invalid' };
+    if (run.points < count) return { ok: false, reason: 'points' };
+    if (run.stats[statId] >= D.STAT_MAX) return { ok: false, reason: 'max' };
+    run.points -= count;
+    addStat(run, statId, count * D.POINT_GAIN);
+    return { ok: true, left: run.points };
+  }
+
+  // 자동 선택이 고를 능력치: 정해 둔 능력치, 아니면(또는 그게 최대면) 가장 낮은 것
+  function autoPick(state) {
+    const s = state.run.stats;
+    const target = state.meta.autoTarget;
+    if (D.POINT_STATS.includes(target) && s[target] < D.STAT_MAX) return target;
+    let best = null;
+    for (const id of D.POINT_STATS) {
+      if (s[id] >= D.STAT_MAX) continue;
+      if (best === null || s[id] < s[best]) best = id;
+    }
+    return best;
+  }
+
+  // 모아 둔 포인트를 자동으로 모두 쓴다. 반환: { 능력치 id: 쓴 개수 }
+  function autoSpend(state) {
+    const spent = {};
+    const run = state.run;
+    while (run && !run.ended && run.points > 0) {
+      const id = autoPick(state);
+      if (!id) break;
+      spendPoints(state, id, 1);
+      spent[id] = (spent[id] || 0) + 1;
+    }
+    return spent;
+  }
+
+  function setAutoTarget(state, target) {
+    if (target !== 'balanced' && !D.POINT_STATS.includes(target)) return false;
+    state.meta.autoTarget = target;
+    return true;
+  }
+
+  function buyAuto(state, offerId) {
+    const offer = D.AUTO_OFFERS.find((o) => o.id === offerId);
+    if (!offer) return { ok: false, reason: 'invalid' };
+    if (state.meta.gems < offer.gems) return { ok: false, reason: 'gems' };
+    state.meta.gems -= offer.gems;
+    state.meta.autoMs += offer.minutes * 60000;
+    return { ok: true, autoMs: state.meta.autoMs };
+  }
+
+  function grantAdReward(state) {
+    state.meta.autoMs += D.AD_AUTO_SECONDS * 1000;
+    return state.meta.autoMs;
+  }
+
+  // 실제로 흐른 시간만큼 자동 시간을 깎는다
+  function useAutoTime(state, ms) {
+    state.meta.autoMs = Math.max(0, state.meta.autoMs - Math.max(0, ms));
+    return state.meta.autoMs;
   }
 
   function upgradeCost(up, level) { return Math.round(up.base * Math.pow(up.growth, level)); }
@@ -713,6 +796,7 @@
       run.looks = run.looks || { hair: D.HAIR_COLORS[0], skin: D.SKIN_TONES[0] };
       run.current = run.current || { id: 'rest', reason: 'start' };
       run.bonusPoints = run.bonusPoints || 0;
+      run.points = run.points || 0;
       state.run = run;
     }
     return state;
@@ -726,6 +810,7 @@
     statMul, incomeMul, feeMul, restMul, stressMul, speedOf, offlineCapMs,
     unmetReqs, isUnlocked, preview,
     createState, newRun, renameRun, spendStartPoints, stepDay, simulate,
+    spendPoints, autoPick, autoSpend, setAutoTarget, buyAuto, grantAdReward, useAutoTime,
     evaluateEnding, starBreakdown, startNextGeneration,
     setSchedule, upgradeCost, buyUpgrade, buyLegacy, setAutoRest, isUpgradeRelevant, autoBuy,
     legacyLevel, upgradeLevel,

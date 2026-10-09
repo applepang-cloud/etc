@@ -13,6 +13,7 @@
   const UI_KEY = 'princess-idle:ui:v1';
   const TABS = ['schedule', 'stats', 'shop', 'legacy', 'endings', 'log'];
   const STAT_NAME = Object.fromEntries(D.STATS.map((s) => [s.id, s.name]));
+  const POINT_DEFS = D.POINT_STATS.map((id) => D.STATS.find((s) => s.id === id));
   const TOAST_KINDS = new Set(['birthday', 'festival', 'sick', 'legend', 'danger', 'treasure', 'event', 'level', 'shop']);
   const MOOD_NAME = { happy: '최고예요', calm: '평온해요', tired: '지쳤어요', exhausted: '한계예요', rest: '쉬는 중', sick: '아파요' };
 
@@ -28,6 +29,7 @@
   let endingsStamp = '';
   let statFloors = {};
   let bubble = { key: '', until: 0 };
+  let lastPoints = 0;
   const ui = { tab: 'schedule', slot: 0, filter: 'all' };
   const refs = {};
   const modalQueue = [];
@@ -287,7 +289,7 @@
     const refresh = () => {
       const remain = total - used();
       setText(left, String(remain));
-      for (const s of D.STATS) {
+      for (const s of POINT_DEFS) {
         const r = rows[s.id];
         const n = alloc[s.id] || 0;
         setText(r.val, int(run.stats[s.id] + n * D.POINT_VALUE));
@@ -299,7 +301,7 @@
       onChange(remain);
     };
     const grid = el('div', { class: 'alloc-grid' });
-    for (const s of D.STATS) {
+    for (const s of POINT_DEFS) {
       const val = el('span', { class: 'alloc-val num' });
       const add = el('span', { class: 'alloc-add' });
       const minus = el('button', {
@@ -391,14 +393,16 @@
       el('ul', { class: 'ledger', 'aria-label': '받은 왕관 별' }, stars.parts.map((p) =>
         el('li', null, [el('span', { text: p.label }), el('span', { class: 'num', text: '★ ' + p.stars })]),
       ).concat(el('li', { class: 'total' }, [el('span', { text: '합계' }), el('span', { class: 'num', text: '★ ' + stars.total })]))),
+      run.ended.gems ? el('p', { class: 'lede', text: '보석 ' + run.ended.gems + '개도 받았어요. 보석은 다음 세대에도 그대로 남아요.' }) : null,
       el('p', { class: 'lede', text: '왕관 별은 유산 탭에서 다음 세대를 위한 축복으로 바꿀 수 있어요.' }),
       el('div', { class: 'modal-actions' }, [el('button', { type: 'button', class: 'btn btn-primary', text: '다음 세대 키우기', onclick: next })]),
     );
   }
 
-  function reportModal(rep, awayMs, capped) {
+  function reportModal(rep, awayMs, capped, autoSpent) {
     return (m) => {
       const run = state.run;
+      const spentText = autoSpent ? Object.keys(autoSpent).map((id) => STAT_NAME[id] + ' +' + autoSpent[id] * D.POINT_GAIN).join(', ') : '';
       const rows = D.STATS.filter((s) => Math.abs(rep.statDiff[s.id]) >= 0.5)
         .map((s) => el('span', null, [s.name, el('b', { class: rep.statDiff[s.id] > 0 ? 'plus' : 'minus', text: signed(rep.statDiff[s.id], 0) })]));
       rows.push(el('span', null, ['골드', el('b', { class: 'goldtext', text: signed(rep.goldDiff, 0) })]));
@@ -409,10 +413,49 @@
         el('h2', { id: 'modal-title', text: E.fill('{N이} ' + rep.days + '일을 보냈어요', run.name) }),
         el('p', { class: 'lede', text: '자리를 비운 ' + duration(awayMs) + ' 동안의 기록이에요.' + (capped ? ' 오프라인 진행은 최대 ' + duration(E.offlineCapMs(state)) + '까지만 흘러요.' : '') }),
         el('div', { class: 'report-grid' }, rows),
+        spentText ? el('p', { class: 'lede', text: '자동 선택으로 성장 포인트를 썼어요: ' + spentText }) : null,
+        run.points > 0 ? el('p', { class: 'lede', text: '쌓인 성장 포인트 ' + run.points + '개가 기다리고 있어요. 공주 화면에서 올릴 능력치를 골라 주세요.' }) : null,
         notes.length ? el('ul', { class: 'report-list' }, notes.map((n) => el('li', { text: shortDate(n.day) + ' ' + n.text }))) : null,
         el('div', { class: 'modal-actions' }, [el('button', { type: 'button', class: 'btn btn-primary', text: '확인', onclick: closeModal })]),
       );
     };
+  }
+
+  // 보상형 광고 자리. 실제 광고 SDK를 붙일 때는 이 함수의 재생 부분만 바꾸면 된다.
+  function adModal(m) {
+    let left = D.AD_WATCH_SECONDS;
+    const count = el('b', { class: 'num', text: String(left) });
+    const status = el('p', { class: 'ad-status', 'aria-live': 'polite' }, [count, '초 뒤에 보상을 받을 수 있어요']);
+    const claim = el('button', { type: 'button', class: 'btn btn-primary', text: '보상 받기', disabled: true });
+    const timer = setInterval(() => {
+      if (!claim.isConnected) { clearInterval(timer); return; }
+      left -= 1;
+      if (left > 0) { setText(count, String(left)); return; }
+      clearInterval(timer);
+      claim.disabled = false;
+      status.textContent = '광고가 끝났어요. 보상을 받으세요.';
+    }, 1000);
+    claim.addEventListener('click', () => {
+      clearInterval(timer);
+      E.grantAdReward(state);
+      save();
+      closeModal();
+      toast('자동 선택 ' + D.AD_AUTO_SECONDS / 60 + '분이 추가됐어요.', 'event');
+    });
+    put(m,
+      el('p', { class: 'eyebrow', text: '광고 보고 자동 받기' }),
+      el('h2', { id: 'modal-title', text: '광고를 보면 ' + D.AD_AUTO_SECONDS / 60 + '분 동안 포인트를 자동으로 올려요' }),
+      el('div', { class: 'ad-slot' }, [
+        el('span', { class: 'ad-label', text: 'AD' }),
+        el('p', { text: '광고 자리' }),
+        el('small', { text: '광고 SDK를 연결하면 여기에서 보상형 광고가 재생돼요.' }),
+      ]),
+      status,
+      el('div', { class: 'modal-actions' }, [
+        el('button', { type: 'button', class: 'btn', text: '그만 보기', onclick: () => { clearInterval(timer); closeModal(); } }),
+        claim,
+      ]),
+    );
   }
 
   function settingsModal(m) {
@@ -481,7 +524,8 @@
 
   // ── 화면 구성 ─────────────────────────────────────────
   function cacheRefs() {
-    for (const id of ['hud-gold', 'hud-fame', 'hud-stars', 'hud-speed', 'btn-pause', 'btn-settings', 'window', 'portrait', 'bubble',
+    for (const id of ['hud-gold', 'hud-fame', 'hud-stars', 'hud-gems', 'pt-count', 'auto-badge', 'pt-grid', 'auto-target',
+      'auto-buy', 'points-hint', 'hud-speed', 'btn-pause', 'btn-settings', 'window', 'portrait', 'bubble',
       'floaters', 'pr-gen', 'pr-name', 'pr-age', 'pr-date', 'month-track', 'doing-seal', 'doing-name', 'doing-sub',
       'stress-val', 'stress-bar', 'mood', 'countdown', 'toasts', 'scrim', 'modal']) {
       refs[id.replace(/-(\w)/g, (_, c) => c.toUpperCase())] = document.getElementById(id);
@@ -516,6 +560,7 @@
       if (document.visibilityState === 'hidden') save();
     });
     window.addEventListener('pagehide', save);
+    buildPoints();
     const track = refs.monthTrack;
     track.textContent = '';
     refs.segs = D.SLOT_NAMES.map((name) => {
@@ -524,6 +569,109 @@
       track.append(li);
       return { li, fill };
     });
+  }
+
+  // ── 성장 포인트 패널 (공주 화면) ──────────────────────────
+  function buildPoints() {
+    refs.ptButtons = {};
+    refs.ptGrid.textContent = '';
+    for (const s of POINT_DEFS) {
+      const val = el('span', { class: 'pt-val num' });
+      const btn = el('button', {
+        type: 'button', class: 'pt', 'aria-label': s.name + ' 올리기',
+        onclick: () => {
+          const res = E.spendPoints(state, s.id, 1);
+          if (!res.ok) return;
+          statFloors[s.id] = Math.floor(state.run.stats[s.id]);
+          floater(s.name + ' +' + D.POINT_GAIN);
+          forcePanel = true;
+          render();
+        },
+      }, [el('span', { class: 'pt-name', text: s.name }), val]);
+      refs.ptGrid.append(btn);
+      refs.ptButtons[s.id] = { btn, val };
+    }
+
+    const sel = refs.autoTarget;
+    sel.textContent = '';
+    sel.append(el('option', { value: 'balanced', text: '골고루 (낮은 것부터)' }));
+    for (const s of POINT_DEFS) sel.append(el('option', { value: s.id, text: s.name + '만' }));
+    sel.addEventListener('change', () => { E.setAutoTarget(state, sel.value); save(); render(); });
+
+    refs.autoBuy.textContent = '';
+    const ad = el('button', {
+      type: 'button', class: 'btn btn-ad',
+      onclick: () => queueModal(adModal),
+    }, [el('span', { text: '광고 보고' }), el('b', { text: D.AD_AUTO_SECONDS / 60 + '분 자동' })]);
+    refs.autoBuy.append(ad);
+    refs.offerButtons = D.AUTO_OFFERS.map((o) => {
+      const btn = el('button', {
+        type: 'button', class: 'btn btn-gem',
+        onclick: () => {
+          const res = E.buyAuto(state, o.id);
+          if (res.ok) {
+            toast('보석 ' + o.gems + '개로 자동 ' + autoLabel(o.minutes) + '을(를) 켰어요.', 'event');
+            save();
+            render();
+          }
+        },
+      }, [el('span', { text: '보석 ' + o.gems + '개' }), el('b', { text: autoLabel(o.minutes) + ' 자동' })]);
+      refs.autoBuy.append(btn);
+      return { btn, offer: o };
+    });
+    setText(refs.pointsHint, D.POINT_EVERY + '일마다 1포인트 · 숙련도 레벨업 +' + D.POINT_LEVELUP + ' · 생일 +' + D.POINT_BIRTHDAY +
+      ' · 1포인트 = 능력치 +' + D.POINT_GAIN + '. 자동 시간은 게임이 흐르는 동안에만 줄어요.');
+  }
+  function autoLabel(minutes) { return minutes >= 60 ? minutes / 60 + '시간' : minutes + '분'; }
+  function clock(ms) {
+    const sec = Math.ceil(ms / 1000);
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const ss = String(sec % 60).padStart(2, '0');
+    return h ? h + ':' + String(m).padStart(2, '0') + ':' + ss : m + ':' + ss;
+  }
+
+  function renderPoints() {
+    const run = state.run;
+    const pts = run.points;
+    setText(refs.ptCount, int(pts));
+    if (pts > lastPoints) {
+      refs.ptCount.classList.remove('bump');
+      void refs.ptCount.offsetWidth;
+      refs.ptCount.classList.add('bump');
+    }
+    lastPoints = pts;
+    const autoOn = state.meta.autoMs > 0;
+    const pick = autoOn ? E.autoPick(state) : null;
+    for (const id in refs.ptButtons) {
+      const r = refs.ptButtons[id];
+      setText(r.val, int(run.stats[id]));
+      const off = pts <= 0 || !!run.ended || run.stats[id] >= D.STAT_MAX;
+      if (r.btn.disabled !== off) r.btn.disabled = off;
+      r.btn.classList.toggle('target', autoOn && pick === id);
+    }
+    if (document.activeElement !== refs.autoTarget && refs.autoTarget.value !== state.meta.autoTarget) {
+      refs.autoTarget.value = state.meta.autoTarget;
+    }
+    refs.autoBadge.hidden = !autoOn;
+    setText(refs.autoBadge, autoOn ? '자동 ' + clock(state.meta.autoMs) : '');
+    for (const o of refs.offerButtons) {
+      const off = state.meta.gems < o.offer.gems;
+      if (o.btn.disabled !== off) o.btn.disabled = off;
+    }
+  }
+
+  // 자동 시간이 남아 있으면 쌓인 포인트를 알아서 쓴다
+  function runAuto() {
+    if (state.meta.autoMs <= 0 || state.run.points <= 0 || state.run.ended) return null;
+    const spent = E.autoSpend(state);
+    let shown = 0;
+    for (const id in spent) {
+      statFloors[id] = Math.floor(state.run.stats[id]);
+      if (shown < 3 && document.visibilityState === 'visible') floater(STAT_NAME[id] + ' +' + spent[id] * D.POINT_GAIN, shown);
+      shown++;
+    }
+    return spent;
   }
 
   function selectTab(t) {
@@ -540,6 +688,7 @@
   }
 
   function buildAll() {
+    lastPoints = state.run.points;
     portraitKey = '';
     logStamp = '';
     endingsStamp = '';
@@ -947,6 +1096,7 @@
     setText(refs.hudGold, int(run.gold));
     setText(refs.hudFame, int(run.fame));
     setText(refs.hudStars, int(state.meta.stars));
+    setText(refs.hudGems, int(state.meta.gems));
     const speed = E.speedOf(state);
     refs.hudSpeed.hidden = speed === 1;
     setText(refs.hudSpeed, '속도 ×' + speed.toFixed(2).replace(/0$/, ''));
@@ -1063,12 +1213,14 @@
     const now = Date.now();
     renderHud();
     renderStage(now);
+    renderPoints();
     renderPanel(false);
   }
 
-  function floater(text) {
+  function floater(text, index) {
     const f = el('span', { class: 'floater', text });
     f.style.left = (35 + Math.random() * 30).toFixed(1) + '%';
+    f.style.top = (52 - (index || 0) * 10) + '%';
     refs.floaters.append(f);
     setTimeout(() => f.remove(), 1900);
   }
@@ -1080,7 +1232,7 @@
       const prev = statFloors[s.id];
       statFloors[s.id] = f;
       if (prev !== undefined && f > prev && shown < 2 && document.visibilityState === 'visible') {
-        floater(s.name + ' +' + (f - prev));
+        floater(s.name + ' +' + (f - prev), shown);
         shown++;
       }
     }
@@ -1098,14 +1250,16 @@
     const run = state && state.run;
     if (run && !run.ended && !state.paused && !modal) {
       acc += dt * E.speedOf(state);
+      const autoWas = state.meta.autoMs > 0;
       if (dt > 4000) {
         // 탭이 백그라운드에 있다가 돌아온 경우: 밀린 날을 한꺼번에 진행
         const days = Math.floor(acc / D.DAY_MS);
         acc -= days * D.DAY_MS;
         if (days > 0) {
           const rep = E.simulate(state, days);
+          const spent = autoWas ? E.autoSpend(state) : null;
           for (const s of D.STATS) statFloors[s.id] = Math.floor(state.run.stats[s.id]);
-          if (rep.days >= 5 && !rep.ended) queueModal(reportModal(rep, dt, false));
+          if (rep.days >= 5 && !rep.ended) queueModal(reportModal(rep, dt, false, spent));
         }
       } else {
         let guard = 0;
@@ -1113,7 +1267,13 @@
           acc -= D.DAY_MS;
           E.stepDay(state, onEntry);
           afterDay();
+          runAuto();
         }
+        runAuto();
+      }
+      if (autoWas) {
+        E.useAutoTime(state, dt);
+        if (state.meta.autoMs <= 0) toast('자동 선택 시간이 끝났어요.', 'event');
       }
       if (state.run.ended) {
         acc = 0;
@@ -1136,7 +1296,12 @@
     const days = Math.floor((used * E.speedOf(state)) / D.DAY_MS);
     if (days <= 0) return;
     const rep = E.simulate(state, days);
-    if (rep.days >= 3) queueModal(reportModal(rep, away, away > cap));
+    let spent = null;
+    if (state.meta.autoMs > 0) {
+      spent = E.autoSpend(state);
+      E.useAutoTime(state, used);
+    }
+    if (rep.days >= 3) queueModal(reportModal(rep, away, away > cap, spent));
   }
 
   // ── 시작 ─────────────────────────────────────────────

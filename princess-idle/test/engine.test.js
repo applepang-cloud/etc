@@ -207,7 +207,7 @@ test('시작 보너스: 남은 포인트보다 많이, 잘못된 값으로, 시�
 
 test('다음 세대도 시작 보너스를 새로 받는다', () => {
   const state = fresh(18);
-  E.spendStartPoints(state, { mag: 3 });
+  E.spendStartPoints(state, { fai: 3 });
   E.simulate(state, D.TOTAL_DAYS);
   E.startNextGeneration(state, '아델');
   assert.equal(state.run.bonusPoints, D.START_POINTS);
@@ -221,4 +221,87 @@ test('시작 전 이름 바꾸기는 능력치를 다시 굴리지 않고 첫 �
   assert.deepEqual(state.run.stats, stats);
   assert.match(state.log.find((e) => e.welcome).text, /^에스텔이 /);
   assert.equal(E.renameRun(state, '   '), false);
+});
+
+test('성장 포인트: 10일마다 1개, 숙련도 레벨업과 생일에 더 쌓인다', () => {
+  const state = fresh(20);
+  state.run.gold = 1e6;
+  state.run.schedule = ['study', 'study', 'study'];
+  E.setAutoRest(state, { enabled: false });
+  let levelUps = 0;
+  for (let i = 0; i < 10; i++) E.stepDay(state, (e) => { if (e.kind === 'level') levelUps++; });
+  assert.equal(levelUps, 1, '10일째에 학문 Lv.1');
+  assert.equal(state.run.points, 1 + D.POINT_LEVELUP);
+  const s2 = fresh(21);
+  E.simulate(s2, D.DAYS_PER_YEAR);
+  assert.ok(s2.run.points >= D.DAYS_PER_YEAR / D.POINT_EVERY + D.POINT_BIRTHDAY);
+});
+
+test('성장 포인트는 지력·체력·매력·인성·감성·영성에만, 1개당 +2', () => {
+  const state = fresh(22);
+  state.run.points = 3;
+  const before = state.run.stats.mor;
+  assert.ok(E.spendPoints(state, 'mor').ok);
+  assert.equal(state.run.stats.mor, before + D.POINT_GAIN);
+  assert.equal(E.spendPoints(state, 'mag').reason, 'invalid', '마력은 포인트로 못 올린다');
+  assert.equal(E.spendPoints(state, 'int', 5).reason, 'points');
+  assert.equal(state.run.points, 2);
+  assert.deepEqual(D.POINT_STATS.map((id) => E.STAT[id].name), ['지력', '체력', '매력', '인성', '감성', '영성']);
+});
+
+test('자동 선택: 골고루면 가장 낮은 능력치, 정해 두면 그 능력치에 쓴다', () => {
+  const state = fresh(23);
+  for (const id of D.POINT_STATS) state.run.stats[id] = 50;
+  state.run.stats.sen = 10;
+  state.run.points = 4;
+  const spent = E.autoSpend(state);
+  assert.deepEqual(spent, { sen: 4 });
+  assert.equal(state.run.points, 0);
+  assert.ok(E.setAutoTarget(state, 'cha'));
+  assert.equal(E.setAutoTarget(state, 'mag'), false);
+  state.run.points = 2;
+  assert.deepEqual(E.autoSpend(state), { cha: 2 });
+  state.run.stats.cha = D.STAT_MAX;
+  assert.notEqual(E.autoPick(state), 'cha', '최대치면 다른 능력치로 넘어간다');
+});
+
+test('보석으로 자동 시간을 사고, 광고는 1분을 더한다', () => {
+  const state = fresh(24);
+  assert.equal(state.meta.gems, D.START_GEMS);
+  const offer = D.AUTO_OFFERS[0];
+  assert.ok(E.buyAuto(state, offer.id).ok);
+  assert.equal(state.meta.gems, D.START_GEMS - offer.gems);
+  assert.equal(state.meta.autoMs, offer.minutes * 60000);
+  state.meta.gems = 0;
+  assert.equal(E.buyAuto(state, offer.id).reason, 'gems');
+  E.grantAdReward(state);
+  assert.equal(state.meta.autoMs, offer.minutes * 60000 + D.AD_AUTO_SECONDS * 1000);
+  E.useAutoTime(state, 1e12);
+  assert.equal(state.meta.autoMs, 0);
+});
+
+test('보석은 생일·엔딩에서 얻고 다음 세대에도 남는다', () => {
+  const state = fresh(25);
+  E.simulate(state, D.TOTAL_DAYS);
+  const tier = E.END[state.run.ended.ending].tier;
+  assert.equal(state.run.ended.gems, D.GEM_REWARDS.ending[tier]);
+  assert.ok(state.meta.gems >= D.START_GEMS + 7 * D.GEM_REWARDS.birthday + D.GEM_REWARDS.ending[tier]);
+  const gems = state.meta.gems;
+  E.startNextGeneration(state, '로제');
+  assert.equal(state.meta.gems, gems);
+  assert.equal(state.run.points, 0);
+});
+
+test('예전 저장 데이터에는 보석·포인트 기본값이 채워진다', () => {
+  const state = fresh(26);
+  const raw = JSON.parse(E.serialize(state));
+  delete raw.meta.gems;
+  delete raw.meta.autoMs;
+  delete raw.meta.autoTarget;
+  delete raw.run.points;
+  const loaded = E.deserialize(raw);
+  assert.equal(loaded.meta.gems, D.START_GEMS);
+  assert.equal(loaded.meta.autoMs, 0);
+  assert.equal(loaded.meta.autoTarget, 'balanced');
+  assert.equal(loaded.run.points, 0);
 });
