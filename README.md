@@ -45,6 +45,8 @@ HTML5 파일 하나([`piano-bricks/index.html`](piano-bricks/index.html))에 화
 ### 수록곡 (모두 저작권 만료 곡)
 작은 별(3스테이지) · 비행기(3) · 징글벨(5) · 환희의 송가(5)
 
+**PC 전용 곡:** `piano-bricks/local-songs/*.json`에 넣은 곡은 http://localhost:8788 로 열었을 때 곡 목록에 「PC 전용」으로 함께 나와요. 저작권이 살아 있는 곡을 넣는 곳이라 GitHub에는 올라가지 않습니다 (`.gitignore`). 파일 형식은 Codex 받아 적기 결과(`bpm`, `notes`, `chords`)에 `id`·`title`·`en`·`level`·`stages`를 더한 것.
+
 ### 새 곡 만들기 (곡 선택 → `+ 새 곡 만들기`)
 - **노래 찾기 (Codex)**: 아무 노래나 제목·가수·기억나는 가사로 찾으면 Codex가 웹에서 곡을 찾아 후보(최대 6곡)를 보여 주고,
   고른 곡의 대표 구간 멜로디·코드·템포를 웹에서 확인해 받아 적어 맵을 만듭니다.

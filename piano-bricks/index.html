@@ -2255,6 +2255,34 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     });
   }
 
+  // Songs kept only on this PC (piano-bricks/local-songs, served by codex-bridge.mjs): they join
+  // the song list after the built-in songs and are never saved into the page or the repo.
+  async function loadLocalSongs() {
+    let list;
+    try {
+      const r = await fetch('http://127.0.0.1:8788/local-songs', { signal: AbortSignal.timeout(2000) });
+      list = await r.json();
+    } catch (e) {
+      return; // bridge not running: nothing to add
+    }
+    if (!Array.isArray(list) || !list.length) return;
+    const add = [];
+    list.forEach((item) => {
+      try {
+        if (!item || !item.id || PB.SONGS.some((s) => s.id === item.id)) return;
+        const song = PB.maker.buildSong(PB.maker.fromClaude(item.data), { level: item.level || 1, stages: item.stages || 6 });
+        Object.assign(song, { id: item.id, title: item.title || song.title, en: item.en || song.en, custom: false, local: true });
+        core.songRows(song);
+        add.push(song);
+      } catch (e) { /* skip a broken song */ }
+    });
+    if (!add.length) return;
+    // Before the 내가 만든 곡 while no stage is running (song indices shift), otherwise at the end.
+    const at = G.mode === 'title' || G.mode === 'menu' ? PB.SONGS.findIndex((s) => s.custom) : -1;
+    PB.SONGS.splice(at < 0 ? PB.SONGS.length : at, 0, ...add);
+    if (G.mode === 'menu') renderMenu();
+  }
+
   function saveCustomSongs() {
     const songs = PB.SONGS.filter((s) => s.custom);
     try {
@@ -3821,7 +3849,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
       names.appendChild(el('h3', null, song.title));
       const info = song.custom
         ? [song.en, SOURCE_LABEL[song.source] || '직접 만든 곡', LEVEL_LABEL[song.level || 0], song.stages.length + '스테이지']
-        : [song.en, song.stages.length + '스테이지'];
+        : [song.en, song.local ? 'PC 전용' : null, song.stages.length + '스테이지'];
       names.appendChild(el('p', null, info.filter(Boolean).join(' · ')));
       head.appendChild(names);
       head.appendChild(el('div', 'song-stars', '★ ' + got + '/' + song.stages.length * 3));
@@ -4159,6 +4187,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     ctx = canvas.getContext('2d');
     loadStore();
     loadCustomSongs();
+    loadLocalSongs();
     SND.setMuted(store.muted);
     syncSoundButton();
     if (!SND.INSTRUMENTS.some((i) => i.id === store.instrument)) store.instrument = 'piano';

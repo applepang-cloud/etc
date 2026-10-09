@@ -14,7 +14,10 @@ import { tmpdir, homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const GAME = join(dirname(fileURLToPath(import.meta.url)), 'index.html');
+const HERE = dirname(fileURLToPath(import.meta.url));
+const GAME = join(HERE, 'index.html');
+// Songs kept only on this PC (local-songs/*.json, not in git): shown in the game's song list.
+const LOCAL_SONGS = join(HERE, 'local-songs');
 
 const PORT = Number(process.env.PB_BRIDGE_PORT) || 8788;
 const TIMEOUT_MS = 6 * 60 * 1000;
@@ -189,6 +192,15 @@ const server = createServer(async (req, res) => {
     } catch (e) {
       return send(res, 500, { error: 'index.html을 읽지 못했어요.' });
     }
+  }
+  if (req.method === 'GET' && url.pathname === '/local-songs') {
+    const list = [];
+    try {
+      for (const f of readdirSync(LOCAL_SONGS).filter((n) => n.endsWith('.json')).sort()) {
+        try { list.push(JSON.parse(readFileSync(join(LOCAL_SONGS, f), 'utf8'))); } catch { /* skip a broken file */ }
+      }
+    } catch { /* no folder: no local songs */ }
+    return send(res, 200, list, cors);
   }
   if (req.method === 'GET' && url.pathname === '/favicon.ico') {
     res.writeHead(204);
