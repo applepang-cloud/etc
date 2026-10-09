@@ -46,7 +46,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
 
 .talk { position: relative; align-self: stretch; display: flex; flex-direction: column; gap: 6px; min-width: 0; background: rgba(21, 18, 58, .95); border: 2px solid var(--ink); border-radius: 4px; box-shadow: 3px 3px 0 #0b0920; padding: 10px 12px; width: 100%; }
 .scene[data-size="small"] .talk { align-self: end; padding: 8px 10px; }
-.talk .who { position: absolute; top: -11px; left: 10px; background: var(--pink); color: #2a0d24; font-family: var(--pixel); font-size: 12px; padding: 1px 8px; border-radius: 3px; }
+.talk .who { position: absolute; top: -11px; left: 10px; background: var(--tag, var(--pink)); color: #2a0d24; font-family: var(--pixel); font-size: 12px; padding: 1px 8px; border-radius: 3px; }
 .talk p { margin: 4px 0 0; line-height: 1.55; font-size: 15px; min-height: 3.1em; word-break: keep-all; }
 .scene[data-size="small"] .talk p { font-size: 14px; min-height: 0; }
 .talk .act { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
@@ -138,7 +138,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
     <div class="spot" aria-hidden="true"></div>
     <canvas id="heroine" width="96" height="108" role="img" aria-label="헤드폰을 쓴 분홍 트윈테일 소녀 리아"></canvas>
     <div class="talk">
-      <span class="who">리아</span>
+      <span class="who" id="who">리아</span>
       <p id="line" aria-live="polite"></p>
       <div class="act" id="act"></div>
     </div>
@@ -180,10 +180,10 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gold);
 </div>
 
 <script>
-// Procedural pixel-art portrait v2 (96x108). drawHeroine(opt) -> {w, h, px: array of '#rrggbb' | null}
+// Procedural pixel-art portraits (96x108). drawHeroine({char, eye, mouth, sweat}) -> {w, h, px: array of '#rrggbb' | null}
 (function (root) {
 const W = 96, H = 108, CX = 48;
-const C = {
+const BASE = {
   hairL: '#3c1840', skinL: '#b8656c', clothL: '#4a3a86',
   skin: '#ffe9de', skinS: '#fbc8b8', skinS2: '#eea596', skinH: '#fff6f0', nose: '#f0a898',
   h0: '#ffd0e8', h1: '#ffa6d2', h2: '#f27fbf', h3: '#c95aa6', h4: '#a98af0', h5: '#8a6be0', hH: '#fff0f8',
@@ -193,8 +193,18 @@ const C = {
   lash: '#3a1a46', lash2: '#6e3a78', scl: '#fdfaff', sclS: '#dcd2f2', irA: '#2a2f86', irB: '#3e62d6', irC: '#4f9be8', irD: '#7fd4f6', irE: '#b8f4ff', pupil: '#191548', hi: '#ffffff',
   blush: '#ffb0c0', blush2: '#ff94ac', mouth: '#a8364f', mouthIn: '#d9506a', tongue: '#ff8c9c', sweat: '#a6ecff'
 };
+const CHARS = {
+  ria: { colors: {}, lid: 0, tails: true, cat: true, ahoge: true, bangs: 'soft', long: false, idle: 'idle' },
+  yuna: { lid: 1.8, tails: false, cat: false, ahoge: false, bangs: 'hime', long: true, idle: 'flat',
+    shirt: true, colors: { hairL: '#120f30', h0: '#6c7bd6', h1: '#4b53b2', h2: '#383e8e', h3: '#272b68', h4: '#5a48b0', h5: '#3e2f86', hH: '#b4c0ff',
+      skin: '#fff1ec', skinS: '#f6d0c6', skinS2: '#e9ada2', skinH: '#fff9f6',
+      irA: '#6e2d14', irB: '#b6561a', irC: '#e08a2a', irD: '#ffbb52', irE: '#ffe4a0', pupil: '#2a1208',
+      cl0: '#f6f2ff', cl1: '#34305e', cl2: '#25224a', navy: '#4a4584', navyS: '#38346a', clothL: '#14122e', pink: '#9a7cff', pinkS: '#6f55d6',
+      ph: '#2c2754', phS: '#1d1a3c', blush: '#ffcad3', blush2: '#ffb4c2' } }
+};
+let C = BASE, CH = CHARS.ria;
 const ell = (x, y, cx, cy, rx, ry) => ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1;
-const R = { tailB: 1, back: 2, body: 3, collar: 4, frill: 5, neck: 6, face: 7, bangs: 8, ahoge: 9, band: 10, cup: 11, ear: 12, tie: 13, ribbon: 14, brooch: 15 };
+const R = { tailB: 1, back: 2, body: 3, collar: 4, frill: 5, neck: 6, face: 7, bangs: 8, ahoge: 9, band: 10, cup: 11, ear: 12, tie: 13, ribbon: 14, brooch: 15, front: 16 };
 // ---- shapes ----
 const face = (x, y) => { if (y < 48) return ell(x, y, CX, 48, 20.5, 22); if (y > 76) return false; const t = (y - 48) / 28.5; return Math.abs(x - CX) <= 20.5 * Math.pow(Math.max(0, 1 - Math.pow(t, 3.2)), 0.62); };
 const skull = (x, y) => ell(x, y, CX, 45, 26, 25.5);
@@ -205,25 +215,30 @@ function strand(x, y, s) { const [rx, tx, ty, w, bend] = s, top = 22; if (y < to
 const CLUMPS = [[29, 52, 0.30], [37.5, 56, 0.26], [47, 53, 0.24], [56.5, 57, 0.26], [65, 52, 0.30]];
 const bangLine = x => Math.max(40, ...CLUMPS.map(([cx, ty, k]) => ty - k * (x - cx) ** 2));
 const sideLock = (x, y) => [[-1, 23.5], [1, 72.5]].some(([s, rx]) => { if (y < 40 || y > 84) return false; const t = (y - 40) / 44; const cx = rx + s * (Math.sin(t * Math.PI) * 1.5 - t * 1.5); return Math.abs(x - cx) <= 4.2 * Math.pow(1 - t, 0.7) + 0.4; });
-const bangs = (x, y) => (skull(x, y) && (y < 37 || y < bangLine(x))) || sideLock(x, y);
-const ahoge = (x, y) => { if (y < 6 || y > 22) return false; const t = (y - 6) / 16; const cx = 50 + Math.sin(t * 3.4 + 0.4) * 7 * (1 - t * 0.5); return Math.abs(x - cx) <= 0.9 + t * 1.8; };
-const back = (x, y) => ell(x, y, CX, 46, 29, 28.5) || (y >= 46 && y <= 86 && Math.abs(x - CX) <= 27.5 - Math.max(0, y - 58) * 0.35);
+const HIME = [[27, 53, 0.9], [33, 54, 0.9], [39, 53.5, 0.9], [45, 54.5, 0.9], [51, 53.5, 0.9], [57, 54, 0.9], [63, 53.5, 0.9], [69, 53, 0.9]];
+const himeLine = x => (Math.abs(x - 37) < 0.8 || Math.abs(x - 59) < 0.8) ? 49 : (x < 30 || x > 66) ? 54 : 53;
+const himeLock = (x, y) => [[-1, 24], [1, 72]].some(([s, rx]) => y >= 40 && y <= 90 && Math.abs(x - rx) <= 4.6 - (y > 88 ? 1 : 0));
+const bangs = (x, y) => CH.bangs === 'hime' ? (skull(x, y) && (y < 37 || y < himeLine(x))) || himeLock(x, y) : (skull(x, y) && (y < 37 || y < bangLine(x))) || sideLock(x, y);
+const ahoge = (x, y) => { if (!CH.ahoge || y < 6 || y > 22) return false; const t = (y - 6) / 16; const cx = 50 + Math.sin(t * 3.4 + 0.4) * 7 * (1 - t * 0.5); return Math.abs(x - cx) <= 0.9 + t * 1.8; };
+const back = (x, y) => ell(x, y, CX, 46, 29, 28.5) || (CH.long ? (y >= 46 && y <= 107 && Math.abs(x - CX) <= 29 + Math.min(4, Math.max(0, y - 70) * 0.12) - (y > 104 ? (x % 3) : 0)) : (y >= 46 && y <= 86 && Math.abs(x - CX) <= 27.5 - Math.max(0, y - 58) * 0.35));
 function tailInfo(x, y) { const top = 28, bot = 106; if (y < top || y > bot) return null; const t = (y - top) / (bot - top);
   for (const side of [-1, 1]) { const cx = CX + side * (31 + 7 * Math.sin(t * Math.PI * 0.85) - t * 3); const hw = 8.2 * Math.pow(1 - t, 0.6) + 1 + 1.2 * Math.sin(t * 9) * (1 - t);
     if (Math.abs(x - cx) <= hw) return { side, t, rel: (x - cx) / hw * side }; } return null; }
-const tails = (x, y) => !!tailInfo(x, y);
-const tie = (x, y) => [-1, 1].some(s => { const dx = x - (CX + s * 31.5), dy = y - 30, a = Math.atan2(dy, dx) + s * 0.3, r = Math.hypot(dx, dy); return r <= 2.6 + 2.2 * Math.max(0, Math.cos(5 * a - Math.PI / 2)) ** 1.5; });
+const tails = (x, y) => CH.tails && !!tailInfo(x, y);
+const frontLock = (x, y) => CH.long && y >= 74 && y <= 107 && [-1, 1].some(s => { const t = (y - 74) / 33, cx = CX + s * (26 + t * 4); return Math.abs(x - cx) <= 4.5 - t * 1.5 + (y > 105 ? -1 : 0); });
+const noteClip = (x, y) => { const cx = 66, cy = 40; return ell(x, y, cx, cy + 3, 2.4, 1.9) || (x >= cx + 1.4 && x <= cx + 2.6 && y >= cy - 5 && y <= cy + 3) || (y >= cy - 5 && y <= cy - 3.5 && x >= cx + 1.4 && x <= cx + 5 - (y - cy + 5) * 0.8); };
+const tie = (x, y) => !CH.tails ? noteClip(x, y) : [-1, 1].some(s => { const dx = x - (CX + s * 31.5), dy = y - 30, a = Math.atan2(dy, dx) + s * 0.3, r = Math.hypot(dx, dy); return r <= 2.6 + 2.2 * Math.max(0, Math.cos(5 * a - Math.PI / 2)) ** 1.5; });
 const neck = (x, y) => y >= 70 && y <= 86 && Math.abs(x - CX) <= 5 + Math.max(0, y - 80) * 0.6;
 const body = (x, y) => y >= 82 && Math.abs(x - CX) <= Math.min(36, 10 + (y - 82) * 3.2);
 const collar = (x, y) => body(x, y) && y <= 98 && Math.abs(x - CX) <= 12 + (y - 82) * 2.3 && !(y < 95 && Math.abs(x - CX) <= Math.max(0, 9.5 - (y - 82) * 0.75));
 const frill = (x, y) => body(x, y) && y >= 97 && y <= 101 && (Math.abs(x - CX) > 8) && ((y - 97) < 2 + Math.round(Math.sin(x * 1.1)));
 const ribbon = (x, y) => ell(x, y, CX - 5, 92, 5, 3.4) || ell(x, y, CX + 5, 92, 5, 3.4) || [-1, 1].some(s => Math.abs(x - (CX + s * (3 + (y - 94) * 0.6))) <= 1.4 && y >= 94 && y <= 103);
 const brooch = (x, y) => { const dx = x - CX, dy = y - 92; const a = Math.atan2(dy, dx), r = Math.hypot(dx, dy); return r <= 2.6 + 1.3 * Math.cos(5 * a + Math.PI / 2); };
-const band = (x, y) => { const d = Math.hypot(x - CX, (y - 46) * 1.03); return d >= 28 && d <= 31 && y < 40; };
-const cup = (x, y) => [-1, 1].some(s => ell(x, y, CX + s * 28.5, 48, 5.2, 8.2));
-const ear = (x, y) => [-1, 1].some(s => { const bx = CX + s * 19, by = 21; const u = (x - bx) * s, v = by - y; return v >= -1 && v <= 11 && Math.abs(u - v * 0.35) <= 5.2 * (1 - v / 11.5); });
-const LAYERS = [[R.tailB, tails], [R.back, back], [R.body, body], [R.collar, collar], [R.frill, frill], [R.ribbon, ribbon], [R.brooch, brooch], [R.neck, neck], [R.face, face], [R.ear, ear], [R.bangs, bangs], [R.ahoge, ahoge], [R.band, band], [R.cup, cup], [R.tie, tie]];
-const LINE = { 1: 'hairL', 2: 'hairL', 3: 'clothL', 4: 'clothL', 5: 'clothL', 6: 'skinL', 7: 'skinL', 8: 'hairL', 9: 'hairL', 10: 'clothL', 11: 'clothL', 12: 'clothL', 13: 'hairL', 14: 'clothL', 15: 'hairL' };
+const band = (x, y) => { const d = Math.hypot(x - CX, (y - 46) * 1.03); return CH.cat ? d >= 28 && d <= 31 && y < 40 : d >= 25.3 && d <= 27.4 && y < 34; };
+const cup = (x, y) => CH.cat && [-1, 1].some(s => ell(x, y, CX + s * 28.5, 48, 5.2, 8.2));
+const ear = (x, y) => CH.cat && [-1, 1].some(s => { const bx = CX + s * 19, by = 21; const u = (x - bx) * s, v = by - y; return v >= -1 && v <= 11 && Math.abs(u - v * 0.35) <= 5.2 * (1 - v / 11.5); });
+const LAYERS = [[R.tailB, tails], [R.back, back], [R.body, body], [R.collar, collar], [R.frill, frill], [R.ribbon, ribbon], [R.brooch, brooch], [R.neck, neck], [R.face, face], [R.ear, ear], [R.bangs, bangs], [R.ahoge, ahoge], [R.band, band], [R.cup, cup], [R.tie, tie], [R.front, frontLock]];
+const LINE = { 1: 'hairL', 2: 'hairL', 3: 'clothL', 4: 'clothL', 5: 'clothL', 6: 'skinL', 7: 'skinL', 8: 'hairL', 9: 'hairL', 10: 'clothL', 11: 'clothL', 12: 'clothL', 13: 'hairL', 14: 'clothL', 15: 'hairL', 16: 'hairL' };
 // hair colour ramp by height: pink on top, lavender toward tips
 let DX = 0;
 function hairCol(y, shade) { const lav = y > 89 || (y > 86 && (y + DX) % 2 === 0);
@@ -237,8 +252,8 @@ function eyes(px, eye) {
     if (eye === 'open') {
       for (let y = ey - 10; y <= ey + 9; y++) for (let x = Math.floor(ex - 9); x <= Math.ceil(ex + 9); x++) {
         const fx = x + 0.5, fy = y + 0.5, u = (fx - ex) * s, v = fy - ey; // u>0 = inner side
-        const inOpen = ell(u, v, 0, 0.8, 7.4, 8.4) && v > -7.4;
-        const lidTop = -7.4 + Math.abs(u) * 0.08;
+        const lidTop = -7.4 + CH.lid + Math.abs(u) * (0.08 + CH.lid * 0.04);
+        const inOpen = ell(u, v, 0, 0.8, 7.4, 8.4) && v > lidTop;
         if (!inOpen) {
           const outer = ell(u, v, 0, 0.6, 8.8, 10.2);
           if (outer && v < -2.5 + (u < -5 ? 2.5 : 0)) set(x, y, v < -8.6 || u < -3 ? 'lash' : 'lash2'); // curved upper lash
@@ -273,12 +288,14 @@ function eyes(px, eye) {
 }
 const MOUTH = {
   idle: ['L....L', '.LLLL.'],
+  flat: ['.LLLL.'],
   smile: ['LLLLLLL', '.LmmmL.', '.LmttL.', '..LLL..'],
   sing: ['.LLL.', 'LmmmL', 'LmttL', 'LmttL', '.LLL.'],
   oops: ['L.L.L.L', '.L.L.L.'],
 };
 function drawHeroine(opt) {
-  opt = opt || {}; const eye = opt.eye || 'open', mouth = opt.mouth || 'idle';
+  opt = opt || {}; CH = CHARS[opt.char] || CHARS.ria; C = Object.assign({}, BASE, CH.colors);
+  const eye = opt.eye || 'open', mouth = opt.mouth === 'idle' ? CH.idle : (opt.mouth || CH.idle);
   const reg = new Array(W * H).fill(0);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) for (const [id, f] of LAYERS) if (f(x + 0.5, y + 0.5)) reg[y * W + x] = id;
   const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? 0 : reg[y * W + x];
@@ -290,7 +307,7 @@ function drawHeroine(opt) {
     if (!id) { const n = N4.map(([a, b]) => at(x + a, y + b)).filter(Boolean); if (n.length) px[y * W + x] = C[LINE[Math.max(...n)]] || C.hairL; continue; }
     const behind = N4.some(([a, b]) => { const n = at(x + a, y + b); return n && n !== id && ord(n) < ord(id); });
     let c;
-    const hair = id === R.bangs || id === R.back || id === R.tailB || id === R.ahoge;
+    const hair = id === R.bangs || id === R.back || id === R.tailB || id === R.ahoge || id === R.front;
     if (hair) {
       let sh = 1;
       if (id === R.back) sh = Math.abs(x - CX) > 22 || y > 70 ? 3 : 2;
@@ -298,6 +315,7 @@ function drawHeroine(opt) {
       if (id === R.bangs) { const tip = at(x, y + 1) !== R.bangs || at(x, y + 2) !== R.bangs || at(x, y + 3) !== R.bangs; sh = tip ? 2 : ((x - CX) * 0.8 + (y - 30) * 0.9 > 14 ? 1 : 0); if (at(x + 1, y) !== R.bangs && at(x + 1, y) === R.face) sh = 2;
         const d = Math.hypot(x + 0.5 - CX, (y + 0.5 - 45) * 1.12); if (d > 17 && d < 20.2 && y < 38 && y > 20 && (Math.floor(x / 3) % 3) !== 1) { px[y * W + x] = C.hH; continue; } }
       if (id === R.ahoge) sh = 1;
+      if (id === R.front) { const s = x > CX ? 1 : -1, cx = CX + s * (26 + (y - 74) / 33 * 4); sh = (x - cx) * s > 1.5 ? 3 : (x - cx) * s < -2 ? 1 : 2; if (Math.abs(x - cx + s * 1) < 0.6 && y > 78 && y < 90) { px[y * W + x] = C.hH; continue; } }
       c = hairCol(y, sh); if (behind && id !== R.ahoge) c = id === R.bangs && at(x, y + 1) !== R.face ? hairCol(y, 2) : C.h3;
     } else if (id === R.face || id === R.neck) {
       c = C.skin;
@@ -312,6 +330,7 @@ function drawHeroine(opt) {
         [R.band]: ['ph', 'phS'], [R.cup]: ['cup', 'cupS'], [R.ear]: ['ph', 'phS'], [R.tie]: ['gold', 'goldS'] }[id];
       c = C[M[0]];
       if (id === R.body && (x > CX + 18 || y > 104)) c = C[M[1]];
+      if (CH.shirt && id === R.body && Math.abs(x - CX) <= 5 + (y - 82) * 0.5) c = C.cl0;
       if (id === R.collar && (y === 96 || y === 97)) c = C.cl0;
       if (id === R.collar && x > CX + 14) c = C.navyS;
       if (id === R.ribbon && (y > 94 || x > CX + 6)) c = C.pinkS;
@@ -556,15 +575,16 @@ const SONGS = [
     "clear": "다 됐어…! 우리 곡이 완성됐어!"
    }
   ],
-  "lead": "chip"
+  "lead": "chip",
+  "singer": "ria"
  },
  {
   "id": "rain",
   "title": "비 갠 오후",
   "bpm": 92,
   "ending": [
-   "비 오는 날 만든 노래인데, 같이 완성하니까 따뜻해졌어.",
-   "고마워. 다음에 비 오면 이 노래 불러 줄게."
+   "비 오는 날 만든 노래인데, 같이 완성하니까 덜 쓸쓸하네.",
+   "…다음에 비 오면 또 와. 기다릴게."
   ],
   "stages": [
    {
@@ -593,10 +613,10 @@ const SONGS = [
      "A6"
     ],
     "intro": [
-     "이 곡은 비 오는 날 혼자 만들었던 노래야.",
-     "조금 느리고 잔잔해. 천천히 채워 줘."
+     "…리아가 말한 도우미가 너구나. 난 유나, 밴드 키보드 담당이야.",
+     "이 곡은 비 오는 날 혼자 만든 거야. 천천히 해. 서두를 필요 없어."
     ],
-    "clear": "빗방울이 톡, 톡… 이런 느낌이었어."
+    "clear": "…빗소리 같네. 나쁘지 않아."
    },
    {
     "id": "r2",
@@ -629,9 +649,9 @@ const SONGS = [
      "S4"
     ],
     "intro": [
-     "우산 아래에서 흥얼거리던 부분이야. 스네어가 살짝 들어가."
+     "우산 아래에서 흥얼거리던 부분. 스네어가 조금 들어가."
     ],
-    "clear": "그날 기분이 조금씩 떠오르네."
+    "clear": "그날 기분이 조금 떠올라."
    },
    {
     "id": "r3",
@@ -665,9 +685,9 @@ const SONGS = [
     ],
     "intro": [
      "베이스가 들어오면 발걸음이 가벼워져.",
-     "같은 음이 연달아 나오는 줄을 찾아봐."
+     "같은 음이 이어지는 줄부터 찾아."
     ],
-    "clear": "웅덩이를 폴짝 뛰어넘는 느낌!"
+    "clear": "…웅덩이를 뛰어넘는 느낌. 좋아."
    },
    {
     "id": "r4",
@@ -705,9 +725,9 @@ const SONGS = [
      "B3"
     ],
     "intro": [
-     "구름 사이로 해가 나오는 부분. 하이햇이 반짝반짝해."
+     "구름 사이로 해가 나오는 부분이야. 하이햇이 반짝여."
     ],
-    "clear": "거의 다 왔어. 하늘이 개고 있어."
+    "clear": "거의 다 왔어."
    },
    {
     "id": "r5",
@@ -745,12 +765,13 @@ const SONGS = [
      "B4"
     ],
     "intro": [
-     "마지막 소절이야. 비가 그치고 무지개가 뜨는 장면!"
+     "마지막 소절. 비가 그치는 장면이야."
     ],
-    "clear": "완성이야! 이 노래, 이제 슬프지 않아."
+    "clear": "완성이네. …고마워."
    }
   ],
-  "lead": "piano"
+  "lead": "piano",
+  "singer": "yuna"
  },
  {
   "id": "jump",
@@ -939,7 +960,8 @@ const SONGS = [
     "clear": "최고의 앙코르였어!"
    }
   ],
-  "lead": "synth"
+  "lead": "synth",
+  "singer": "ria"
  },
  {
   "id": "lullaby",
@@ -1112,7 +1134,8 @@ const SONGS = [
     ],
     "clear": "잘 자. 좋은 꿈 꿔."
    }
-  ]
+  ],
+  "singer": "ria"
  },
  {
   "id": "festival",
@@ -1302,7 +1325,8 @@ const SONGS = [
     ],
     "clear": "최고의 축제였어!"
    }
-  ]
+  ],
+  "singer": "ria"
  },
  {
   "id": "neon",
@@ -1310,8 +1334,8 @@ const SONGS = [
   "bpm": 104,
   "lead": "guitar",
   "ending": [
-   "이 곡은 언젠가 진짜 차를 타고 들어 보고 싶어.",
-   "그때는 네가 운전해 줘. 나는 노래할게!"
+   "이 곡은 언젠가 진짜 차 타고 들어 보고 싶어.",
+   "…그때는 네가 운전해. 노래는 리아가 할 테니까."
   ],
   "stages": [
    {
@@ -1343,10 +1367,10 @@ const SONGS = [
      "C6"
     ],
     "intro": [
-     "밤거리를 달리는 시티팝이야. 기타 소리, 멋지지?",
-     "'코드' 줄이 엇박자로 들어가. 그게 이 곡의 맛이야."
+     "밤거리를 달리는 시티팝이야. 기타는 내가 직접 골랐어.",
+     "'코드' 줄은 엇박으로 들어가. 그게 이 곡의 포인트야."
     ],
-    "clear": "엔진 소리가 들려!"
+    "clear": "엔진 걸렸네."
    },
    {
     "id": "n2",
@@ -1381,9 +1405,9 @@ const SONGS = [
      "B3"
     ],
     "intro": [
-     "베이스가 통통 튀면서 속도가 붙어."
+     "베이스가 튀면서 속도가 붙어."
     ],
-    "clear": "창문 밖으로 불빛이 휙휙 지나가."
+    "clear": "창밖 불빛이 휙휙 지나가."
    },
    {
     "id": "n3",
@@ -1421,7 +1445,7 @@ const SONGS = [
     "intro": [
      "박수가 들어오는 구간. 리듬이 꽉 차."
     ],
-    "clear": "간판 불빛이 반짝반짝해!"
+    "clear": "…좋은 리듬이야."
    },
    {
     "id": "n4",
@@ -1458,9 +1482,9 @@ const SONGS = [
      "G3"
     ],
     "intro": [
-     "가장 복잡한 소절이야. 막히면 힌트 써도 돼."
+     "제일 복잡한 소절. 막히면 힌트 써. 부끄러운 거 아니야."
     ],
-    "clear": "라디오에서 우리 노래가 나오면 좋겠다."
+    "clear": "라디오에서 나오면… 리아가 엄청 좋아하겠지."
    },
    {
     "id": "n5",
@@ -1494,11 +1518,12 @@ const SONGS = [
      "D3"
     ],
     "intro": [
-     "마지막 소절! 목적지가 보여."
+     "마지막 소절. 목적지가 보여."
     ],
-    "clear": "도착! 밤이 이렇게 예쁜 줄 몰랐어."
+    "clear": "도착. 밤이 이렇게 예쁜 줄 몰랐어."
    }
-  ]
+  ],
+  "singer": "yuna"
  }
 ];
 let SONG = SONGS[0], STAGES = SONG.stages;
@@ -1512,7 +1537,15 @@ const LEADS = { chip: '칩튠', piano: '피아노', musicbox: '오르골', flute
 const leadKind = () => G.lead || SONG.lead || 'chip';
 const MELODY = new Set(['A', 'G', 'E', 'D', 'C']);
 const W = 8; let STEP = 60 / SONG.bpm / 2;
-const OOPS = ['앗, 그 음은 아닌 것 같아!', '음이 살짝 엇나갔어~', '흠, 숫자를 다시 볼까?'];
+const CAST = {
+  ria: { name: '리아', tag: '#ff8fc8', alt: '고양이 귀 헤드폰을 쓴 분홍 트윈테일 소녀 리아',
+    oops: ['앗, 그 음은 아닌 것 같아!', '음이 살짝 엇나갔어~', '흠, 숫자를 다시 볼까?'], hint: '여기 같아! 반짝이는 칸을 눌러 봐.', glow: '반짝이는 칸을 눌러 줘!',
+    start: '채운 음은 계속 반복해서 들려. 숫자가 큰 줄부터 찾아봐!', song: '처음부터 끝까지, 우리 노래야. 들어 줘!', again: '언제든 다시 들으러 와!' },
+  yuna: { name: '유나', tag: '#97a4ff', alt: '금색 음표 머리핀을 한 남색 긴 생머리 소녀 유나',
+    oops: ['…그 음 아니야.', '음, 다시 봐.', '괜찮아. 천천히.'], hint: '여기. 반짝이는 칸 눌러.', glow: '반짝이는 칸부터.',
+    start: '채운 음은 반복해서 들려. 큰 숫자부터 봐.', song: '처음부터 끝까지 들어 봐. …우리 곡이야.', again: '또 듣고 싶으면 와.' }
+};
+const OOPS = () => CAST[G.char].oops;
 const $ = id => document.getElementById(id);
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -1530,12 +1563,12 @@ function migrate(d) {
 }
 const P = migrate(saved);
 const prog = () => P.songs[SONG.id];
-function selectSong(id) { SONG = SONGS.find(sg => sg.id === id) || SONGS[0]; STAGES = SONG.stages; STEP = 60 / SONG.bpm / 2; G.lead = null; updateLead(); P.last = SONG.id; persist(); $('songLabel').textContent = SONG.title; }
+function selectSong(id) { SONG = SONGS.find(sg => sg.id === id) || SONGS[0]; STAGES = SONG.stages; STEP = 60 / SONG.bpm / 2; G.lead = null; updateLead(); setChar(SONG.singer || 'ria'); P.last = SONG.id; persist(); $('songLabel').textContent = SONG.title; }
 const persist = () => store.save(P);
 window.claude?.hot?.snapshot?.(() => ({ progress: P }));
 
 /* ---------- game state ---------- */
-const G = { mode: 'title', stage: 0, cells: null, sol: null, misses: 0, tool: 'fill', playing: false, muted: false, songBar: 0 };
+const G = { char: 'ria', mode: 'title', stage: 0, cells: null, sol: null, misses: 0, tool: 'fill', playing: false, muted: false, songBar: 0 };
 SONGS.forEach(sg => sg.stages.forEach(s => { s.sol = s.lanes.map(l => [...s.pattern[l]].map(c => c === 'x')); }));
 const clueOf = line => { const r = []; let n = 0; line.forEach(v => { if (v) n++; else if (n) { r.push(n); n = 0; } }); if (n) r.push(n); return r.length ? r : [0]; };
 
@@ -1543,10 +1576,14 @@ const clueOf = line => { const r = []; let n = 0; line.forEach(v => { if (v) n++
 const hc = $('heroine'), hx = hc.getContext('2d');
 const faceCache = {};
 const expr = { base: 'idle', temp: null, tempUntil: 0, sing: 0, blink: 0, nextBlink: performance.now() + 2500 };
+function setChar(c) {
+  if (G.char === c) return; G.char = c; lastFace = ''; const cs = CAST[c];
+  $('who').textContent = cs.name; $('scene').style.setProperty('--tag', cs.tag); $('scene').setAttribute('aria-label', cs.name); hc.setAttribute('aria-label', cs.alt);
+}
 function face(key) {
-  if (faceCache[key]) return faceCache[key];
-  const o = { idle: {}, happy: { eye: 'happy', mouth: 'smile' }, sing: { mouth: 'sing' }, oops: { eye: 'oops', mouth: 'oops', sweat: true }, blink: { eye: 'closed' }, singHappy: { eye: 'happy', mouth: 'sing' } }[key];
-  const d = drawHeroine(o), img = hx.createImageData(d.w, d.h);
+  key = G.char + ':' + key; if (faceCache[key]) return faceCache[key];
+  const o = { idle: {}, happy: { eye: 'happy', mouth: 'smile' }, sing: { mouth: 'sing' }, oops: { eye: 'oops', mouth: 'oops', sweat: true }, blink: { eye: 'closed' }, singHappy: { eye: 'happy', mouth: 'sing' } };
+  const d = drawHeroine(Object.assign({ char: G.char }, o[key.split(':')[1]])), img = hx.createImageData(d.w, d.h);
   d.px.forEach((c, i) => { if (!c) return; img.data[i * 4] = parseInt(c.slice(1, 3), 16); img.data[i * 4 + 1] = parseInt(c.slice(3, 5), 16); img.data[i * 4 + 2] = parseInt(c.slice(5, 7), 16); img.data[i * 4 + 3] = 255; });
   return (faceCache[key] = img);
 }
@@ -1732,9 +1769,9 @@ function checkLine(kind, i) {
 function act(x, y, action) {
   const st = STAGES[G.stage], s = G.cells[y][x];
   if (action === 'fill' && !s) {
-    if (G.guide && !G.guide.steps[G.guide.i].cells.includes(st.lanes[y] + x)) { say('반짝이는 칸을 눌러 줘!', true); return false; }
+    if (G.guide && !G.guide.steps[G.guide.i].cells.includes(st.lanes[y] + x)) { say(CAST[G.char].glow, true); return false; }
     if (st.sol[y][x]) { setCell(x, y, 'on'); if (ac) voice(st.lanes[y], ac.currentTime + 0.005, st, 0.9); if (MELODY.has(st.lanes[y])) { expr.sing = performance.now() + 220; spawnNote(LANES[st.lanes[y]].c); } checkLine('row', y); checkLine('col', x); guideProgress(); checkClear(); return true; }
-    setCell(x, y, 'err'); G.misses++; updateMiss(); sfx('err'); expr.temp = 'oops'; expr.tempUntil = performance.now() + 1300; say(OOPS[G.misses % OOPS.length], true); return false;
+    setCell(x, y, 'err'); G.misses++; updateMiss(); sfx('err'); expr.temp = 'oops'; expr.tempUntil = performance.now() + 1300; say(OOPS()[G.misses % OOPS().length], true); return false;
   }
   if (action === 'mark' && !s) { setCell(x, y, 'x'); sfx('mark'); return true; }
   if (action === 'unmark' && s === 'x') { setCell(x, y, ''); return true; }
@@ -1813,24 +1850,24 @@ function openStage(i) {
   const st = STAGES[i]; $('stageLabel').textContent = `${i + 1}소절 · ${st.title}`; expr.base = 'idle';
   setScene('big'); showPlayUI(false); $('act').innerHTML = ''; renderBars();
   G.guide = null; talk(st.intro, () => { G.mode = 'play'; setScene('small'); buildBoard(i); showPlayUI(true); startLoop();
-    if (st.guide && !prog().stars[i]) { G.guide = { steps: st.guide, i: 0 }; applyGuide(); } else say('채운 음은 계속 반복해서 들려. 숫자가 큰 줄부터 찾아봐!', true, []); });
+    if (st.guide && !prog().stars[i]) { G.guide = { steps: st.guide, i: 0 }; applyGuide(); } else say(CAST[G.char].start, true, []); });
 }
 function playSong() {
   G.mode = 'song'; G.songBar = 0; expr.base = 'happy'; setScene('big'); showPlayUI(false); $('boardWrap').hidden = false; $('stageLabel').textContent = SONG.title + ' · 전곡';
-  buildBoard(0, true); updateMiss(); renderBars(); say('처음부터 끝까지, 우리 노래야. 들어 줘!', false, [['멈추기', () => { stopLoop(); onSongEnd(); }, true]]); startLoop();
+  buildBoard(0, true); updateMiss(); renderBars(); say(CAST[G.char].song, false, [['멈추기', () => { stopLoop(); onSongEnd(); }, true]]); startLoop();
 }
 function onSongEnd() {
   if (G.mode !== 'song') return; stopLoop(); markPlayingBar(-1); G.mode = 'ending';
-  talk(SONG.ending, () => say('언제든 다시 들으러 와!', true, [['다시 듣기', playSong], ['곡 고르기', title, true]]), '다음 ▸');
+  talk(SONG.ending, () => say(CAST[G.char].again, true, [['다시 듣기', playSong], ['곡 고르기', title, true]]), '다음 ▸');
 }
 function title() {
-  G.mode = 'title'; setScene('big'); showPlayUI(false); renderBars();
+  G.mode = 'title'; setChar('ria'); expr.base = 'idle'; setScene('big'); showPlayUI(false); renderBars();
   const fresh = SONGS.every(sg => P.songs[sg.id].stars.every(n => !n));
   stopLoop(); $('stageLabel').textContent = '옥상 라이브 D-3';
-  say(fresh ? '와 줬구나! 나는 리아. 이번 주말 옥상 라이브에서 부를 곡들 악보가 다 번져 버렸어. 처음이라면 별빛 멜로디부터 같이 해 줄래?'
+  say(fresh ? '와 줬구나! 나는 리아. 이번 주말 옥상 라이브에서 부를 곡들 악보가 다 번져 버렸어. 키보드 담당 유나 곡도 있어! 처음이라면 별빛 멜로디부터 같이 해 줄래?'
     : '어서 와! 오늘은 어떤 곡을 복원해 볼까?', false,
     SONGS.map(sg => { const st = P.songs[sg.id].stars, done = st.filter(Boolean).length;
-      return [`${sg.title}\n${LEADS[sg.lead]} · ${done}/${st.length}소절`, () => { selectSong(sg.id); openStage(done ? Math.min(P.songs[sg.id].unlocked, st.length - 1) : 0); }, sg.id !== (fresh ? 'starlight' : P.last)]; }));
+      return [`${sg.title}\n${CAST[sg.singer].name} · ${LEADS[sg.lead]} · ${done}/${st.length}`, () => { selectSong(sg.id); openStage(done ? Math.min(P.songs[sg.id].unlocked, st.length - 1) : 0); }, sg.id !== (fresh ? 'starlight' : P.last)]; }));
 }
 
 $('hintBtn').addEventListener('click', hint);
@@ -1865,7 +1902,7 @@ function hint() {
     if (!best || score < best.score) best = { x, y, score };
   }
   if (!best) return; document.querySelectorAll('.cell.glow').forEach(e => e.classList.remove('glow'));
-  cellEl(best.x, best.y).classList.add('glow'); say('여기 같아! 반짝이는 칸을 눌러 봐.', true);
+  cellEl(best.x, best.y).classList.add('glow'); say(CAST[G.char].hint, true);
 }
 $('playBtn').addEventListener('click', () => G.playing ? stopLoop() : startLoop());
 $('leadBtn').addEventListener('click', () => { const keys = Object.keys(LEADS), cur = leadKind(); G.lead = keys[(keys.indexOf(cur) + 1) % keys.length]; updateLead(); initAudio();
