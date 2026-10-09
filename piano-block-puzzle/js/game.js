@@ -22,6 +22,8 @@ const SCHEDULE_AHEAD = 0.1; // 오디오 예약 선행 시간(초)
 const RULER_H = 18;
 const MAX_ROWS = 40;
 const MAX_CELL = 64; // 칸 폭 상한 (넓은 화면에서 블록이 너무 커지지 않게)
+const STORE_MAX = 9; // 보관함에 쌓을 수 있는 블록 수
+const STORE_SLOT = 3; // 드래그 출처: 0~2 = 트레이 칸, 3 = 보관함
 const OFFSCREEN_COLS = 3; // 자동 이동 중 화면 오른쪽 밖으로 걸쳐 놓을 수 있는 칸 수
 const FREE_LIVE_STEPS = 256; // 자유 작곡 자동 이동의 최대 길이(칸)
 
@@ -150,6 +152,9 @@ export class Game {
       p.top = Math.round(this.rollTop + (rollH - p.rows.length * p.cellH) / 2);
     }
     this.trayTop = this.rollBottom;
+    // 하단: 블록 3칸 + 오른쪽 보관함
+    this.storeW = Math.round(Math.min(110, Math.max(72, W * 0.22)));
+    this.slotW = (W - this.storeW) / 3;
     this.hooks.layout?.({ trayTop: this.trayTop, H });
   }
 
@@ -230,6 +235,8 @@ export class Game {
     this.shake = 0;
     this.drag = null;
     this.tray = null;
+    this.store = [];
+    this.storeBump = -1;
     this.listening = false;
 
     this.audio.ensure();
@@ -427,7 +434,8 @@ export class Game {
     const range = this.placeRange();
     if (!range) return [];
     const part = this.part;
-    const ids = this.tray.map((p) => (p ? (p.hintId ||= ++this.pieceSeq) : 0)).join(',');
+    const slots = [0, 1, 2, STORE_SLOT];
+    const ids = slots.map((i) => this.pieceAt(i)).map((p) => (p ? (p.hintId ||= ++this.pieceSeq) : 0)).join(',');
     const key = `${ids}|${part.occupied.size}|${range[0]}|${range[1]}`;
     if (this.hintCache?.key === key) return this.hintCache.list;
 
@@ -435,8 +443,8 @@ export class Game {
     const from = this.phase.live ? range[0] + Math.ceil(1.2 / this.stepSec) : range[0];
     const list = [];
     const used = new Set();
-    for (let slot = 0; slot < 3; slot++) {
-      const p = this.tray[slot];
+    for (const slot of slots) {
+      const p = this.pieceAt(slot);
       if (!p || p.bomb) continue;
       let best = null;
       for (let c0 = from; c0 + p.w - 1 <= range[1]; c0++) {
@@ -496,7 +504,7 @@ export class Game {
     const pulse = 0.08 * Math.sin(this.now * 4);
     for (const h of hints) {
       if (d && d.slot !== h.slot) continue;
-      const p = this.tray[h.slot];
+      const p = this.pieceAt(h.slot);
       if (!p) continue;
       for (const [dr, dc] of p.cells) {
         const x = this.xOf(h.c0 + dc);
@@ -932,6 +940,12 @@ export class Game {
     const ch = part.cellH;
     d.px = d.x - (p.w * cw) / 2;
     d.py = d.y - d.lift(ch) - p.h * ch;
+    // 손가락이 보관함 위면 보드에 놓지 않고 보관
+    d.overStore = d.slot !== STORE_SLOT && this.overStore(d.x, d.y);
+    if (d.overStore) {
+      d.snap = null;
+      return;
+    }
     const bottom = part.top + part.rows.length * ch;
     if (d.py + p.h * ch < part.top - ch * 0.5 || d.py > bottom - ch * 0.5) {
       d.snap = null;
@@ -966,9 +980,47 @@ export class Game {
       if (!this.free) this.scorePlacement(good, bad, piece, r0, c0);
     }
 
+    this.consume(slot);
+    if (!this.free && this.phase?.type === 'place' && this.sceneComplete()) this.endPlace('clear');
+  }
+
+  // 0~2 = 트레이 칸, 3 = 보관함 맨 위
+  pieceAt(slot) {
+    if (slot === STORE_SLOT) return this.store[this.store.length - 1] || null;
+    return this.tray?.[slot] || null;
+  }
+
+  consume(slot) {
+    if (slot === STORE_SLOT) {
+      this.store.pop();
+      return;
+    }
     this.tray[slot] = null;
     if (this.tray.every((t) => !t)) this.tray = this.newTray(this.wrongInRange() ? 0.45 : 0.1);
-    if (!this.free && this.phase?.type === 'place' && this.sceneComplete()) this.endPlace('clear');
+  }
+
+  overStore(x, y) {
+    return y >= this.trayTop && x >= this.W - this.storeW;
+  }
+
+  // 안 쓰는 블록을 보관함에 쌓는다. 트레이에서는 쓴 것으로 친다.
+  stash(slot, piece) {
+    if (this.store.length >= STORE_MAX) {
+      this.popups.push({
+        text: '보관함이 가득 찼어요',
+        x: this.W - this.storeW / 2 - 30,
+        y: this.trayTop - 8,
+        age: 0,
+        life: 1.1,
+        size: 14,
+        color: '#ff7b6e',
+      });
+      return;
+    }
+    this.store.push(piece);
+    this.storeBump = this.now;
+    this.audio.tick(this.now, false);
+    this.consume(slot);
   }
 
   // 블록을 놓을 때 덮은 줄의 건반(드럼/보컬) 소리
@@ -1100,8 +1152,8 @@ export class Game {
     if (this.drag || !this.placeRange() || !this.tray) return;
     const { x, y } = this.point(e);
     if (y < this.trayTop) return;
-    const slot = Math.min(2, Math.floor(x / (this.W / 3)));
-    const piece = this.tray[slot];
+    const slot = x >= this.W - this.storeW ? STORE_SLOT : Math.min(2, Math.floor(x / this.slotW));
+    const piece = this.pieceAt(slot);
     if (!piece) return;
     e.preventDefault();
     try {
@@ -1127,8 +1179,12 @@ export class Game {
     if (!d || e.pointerId !== d.id) return;
     if (!cancelled && this.placeRange()) this.computeSnap();
     this.drag = null;
-    if (cancelled || !d.snap || this.tray?.[d.slot] !== d.piece) return;
-    this.place(d.slot, d.piece, d.snap.r0, d.snap.c0);
+    if (cancelled || this.pieceAt(d.slot) !== d.piece) return;
+    if (d.slot !== STORE_SLOT && this.overStore(d.x, d.y)) {
+      this.stash(d.slot, d.piece);
+      return;
+    }
+    if (d.snap) this.place(d.slot, d.piece, d.snap.r0, d.snap.c0);
   }
 
   // ---------- 그리기 ----------
@@ -1561,6 +1617,8 @@ export class Game {
     g.fillRect(0, trayTop, W, trayH);
     g.fillStyle = 'rgba(0,0,0,0.45)';
     g.fillRect(0, trayTop, W, 2);
+    this.drawStore();
+    const areaW = W - this.storeW;
 
     if (!this.placeRange() || !this.tray) {
       const ph = this.phase;
@@ -1573,19 +1631,19 @@ export class Game {
         g.font = `16px ${FONT}`;
         g.textAlign = 'center';
         g.textBaseline = 'middle';
-        g.fillText(text, W / 2, trayTop + trayH / 2);
+        g.fillText(text, areaW / 2, trayTop + trayH / 2);
       }
       return;
     }
 
     const aspect = this.part.cellH / this.cellW;
-    let sw = Math.min(this.cellW * 0.8, (W / 3 - 16) / 5);
+    let sw = Math.min(this.cellW * 0.8, (this.slotW - 16) / 5);
     let sh = sw * aspect;
     if (sh * 3 > trayH - 16) {
       sh = (trayH - 16) / 3;
       sw = sh / aspect;
     }
-    const slotW = W / 3;
+    const slotW = this.slotW;
     const cy = trayTop + trayH / 2;
     for (let i = 0; i < 3; i++) {
       if (i > 0) {
@@ -1601,6 +1659,88 @@ export class Game {
         else drawBlock(g, ox + c * sw, oy + r * sh, sw, sh, p.color);
       });
     }
+  }
+
+  // 보관함: 맨 위 블록과 쌓인 수량
+  drawStore() {
+    const g = this.g;
+    const { W, H, trayTop } = this;
+    const trayH = H - trayTop;
+    const x0 = W - this.storeW;
+    g.fillStyle = 'rgba(0,0,0,0.22)';
+    g.fillRect(x0, trayTop + 2, this.storeW, trayH - 2);
+    const bx = x0 + 7;
+    const by = trayTop + 9;
+    const bw = this.storeW - 14;
+    const bh = trayH - 18;
+    const full = this.store.length >= STORE_MAX;
+    const over = this.drag?.overStore;
+
+    rrect(g, bx, by, bw, bh, 10);
+    g.fillStyle = over ? (full ? 'rgba(242,96,79,0.28)' : 'rgba(255,226,122,0.22)') : 'rgba(255,255,255,0.05)';
+    g.fill();
+    g.setLineDash([5, 4]);
+    g.lineWidth = 1.5;
+    g.strokeStyle = over ? (full ? '#f2604f' : '#ffe27a') : 'rgba(255,255,255,0.32)';
+    g.stroke();
+    g.setLineDash([]);
+
+    g.textAlign = 'center';
+    g.font = `11px ${FONT}`;
+    g.fillStyle = 'rgba(255,255,255,0.65)';
+    g.textBaseline = 'bottom';
+    g.fillText('보관함', bx + bw / 2, by + bh - 5);
+
+    // 보관함에서 꺼내 끄는 중이면 그 아래 블록을 보여준다
+    const dragging = this.drag?.slot === STORE_SLOT;
+    const count = this.store.length - (dragging ? 1 : 0);
+    const shown = this.store[count - 1];
+    const cx = bx + bw / 2;
+    const cy = by + (bh - 14) / 2 + 2;
+    if (!shown) {
+      g.fillStyle = 'rgba(255,255,255,0.4)';
+      g.textBaseline = 'middle';
+      g.fillText('끌어다', cx, cy - 8);
+      g.fillText('보관', cx, cy + 8);
+      return;
+    }
+    const aspect = this.part.cellH / this.cellW;
+    let sw = Math.min(this.cellW * 0.7, (bw - 18) / Math.max(3, shown.w));
+    let sh = sw * aspect;
+    const availH = bh - 34;
+    if (sh * Math.max(2, shown.h) > availH) {
+      sh = availH / Math.max(2, shown.h);
+      sw = sh / aspect;
+    }
+    const age = this.now - this.storeBump;
+    const k = age >= 0 && age < 0.18 ? 1.2 - (age / 0.18) * 0.2 : 1;
+    sw *= k;
+    sh *= k;
+    const pw = shown.w * sw;
+    const ph = shown.h * sh;
+    // 여러 개면 뒤에 카드가 겹쳐 보이게
+    for (let i = Math.min(count - 1, 2); i >= 1; i--) {
+      rrect(g, cx - pw / 2 - 5 + i * 3, cy - ph / 2 - 5 - i * 3, pw + 10, ph + 10, 6);
+      g.fillStyle = 'rgba(255,255,255,0.1)';
+      g.fill();
+    }
+    const ox = cx - pw / 2;
+    const oy = cy - ph / 2;
+    shown.cells.forEach(([r, c], j) => {
+      if (shown.bomb) drawBomb(g, ox + c * sw, oy + r * sh, sw, sh, j === 0, this.now);
+      else drawBlock(g, ox + c * sw, oy + r * sh, sw, sh, shown.color);
+    });
+    // 쌓인 수량
+    const rx = bx + bw - 12;
+    const ry = by + 12;
+    g.beginPath();
+    g.arc(rx, ry, 10, 0, Math.PI * 2);
+    g.fillStyle = full ? '#f2604f' : '#f6c344';
+    g.fill();
+    g.fillStyle = full ? '#ffffff' : '#2a2008';
+    g.font = `12px ${FONT}`;
+    g.textBaseline = 'middle';
+    g.fillText(String(count), rx, ry + 1);
   }
 
   drawHint() {
