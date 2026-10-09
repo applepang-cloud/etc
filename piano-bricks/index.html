@@ -118,6 +118,24 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
 }
 .hud button { pointer-events: auto; }
 .hud-right { display: flex; gap: calc(var(--u) * 8); }
+.help-btn {
+  position: absolute;
+  top: calc(var(--u) * 66);
+  right: calc(var(--u) * 10);
+  width: calc(var(--u) * 32);
+  height: calc(var(--u) * 32);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  border: calc(var(--u) * 1.5) solid rgba(255, 255, 255, 0.4);
+  background: rgba(20, 21, 24, 0.85);
+  color: #fff;
+  font-weight: 800;
+  font-size: calc(var(--u) * 18);
+  line-height: 1;
+}
+.help-btn[aria-pressed="true"] { background: var(--accent); color: #151515; border-color: transparent; }
 .hud .round.labeled { grid-auto-flow: row; align-content: center; gap: calc(var(--u) * 1); background: #3a3324; color: var(--accent); box-shadow: inset 0 0 0 calc(var(--u) * 1) rgba(245, 197, 24, 0.45); }
 .hud .round.labeled svg { width: 56%; height: 44%; }
 .hud .round.labeled .lbl { font-size: calc(var(--u) * 10.5); font-weight: 800; line-height: 1; }
@@ -506,6 +524,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
       <button id="btn-close" class="round" type="button" aria-label="목록으로">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
+      <button id="btn-help" class="help-btn" type="button" aria-label="게임 방법 보기" aria-pressed="false">?</button>
       <div class="hud-right">
         <button id="btn-inst" class="round labeled" type="button" aria-label="악기 바꾸기" aria-haspopup="dialog">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M8.5 13v6M12 13v6M15.5 13v6"/><path d="M7 5h3v8H7zM14 5h3v8h-3z" style="fill: currentColor; stroke: none"/></svg>
@@ -2224,7 +2243,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
 
   // ---------- saved progress ----------
   const STORE_KEY = 'pianoBricks.v2'; // v2: 16-cell stages, old layouts don't carry over
-  const store = { stars: {}, left: {}, best: {}, muted: false, instrument: 'piano' };
+  const store = { stars: {}, left: {}, best: {}, muted: false, instrument: 'piano', guideSeen: false };
 
   function loadStore() {
     try {
@@ -2345,7 +2364,8 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     pointer: null,
     padDrag: false,
     reaim: false, // aiming another launch while balls fly
-    paused: false, // the in-game instrument picker is open
+    paused: false, // the in-game instrument picker or the help is open
+    showHelp: false, // the ? button brought the how-to box back
     seq: null, // song melody played by block hits
     seqIdx: 0,
     play: null,
@@ -2440,6 +2460,10 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
 
   function fire() {
     if (G.mode !== 'aim' || !G.aim || !G.aim.valid) return;
+    if (!store.guideSeen) {
+      store.guideSeen = true; // the first-launch guide has done its job
+      saveStore();
+    }
     G.x = G.target;
     G.world = world();
     G.dir = { dx: G.aim.dx, dy: G.aim.dy };
@@ -3690,9 +3714,10 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
   }
 
 
-  // First-turn help, shown on the board until the player starts aiming.
+  // How-to box: shown once, before the very first launch of the game; after that only when the
+  // ? button asks for it (the game waits until the player taps to close it).
   function drawHint() {
-    if (G.mode !== 'aim' || G.turn > 0 || (G.aim && G.aim.valid)) return;
+    if (!firstGuideUp() && !G.showHelp) return;
     const x = C.ROLL_LEFT + 10, w = C.W - x - 10, h = 200, y = C.ROLL_BOTTOM - h - 24, cx = x + w / 2;
     roundRect(x, y, w, h, 16);
     ctx.fillStyle = 'rgba(8,9,10,0.82)';
@@ -3814,6 +3839,8 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     if (name) {
       $('inst-pop').classList.add('hidden');
       G.paused = false;
+      G.showHelp = false;
+      $('btn-help').setAttribute('aria-pressed', 'false');
     }
     ['title', 'menu', 'result', 'create'].forEach((n) => $('screen-' + n).classList.toggle('hidden', n !== name));
     $('hud').classList.toggle('hidden', name === 'title' || name === 'menu' || name === 'create');
@@ -3990,6 +4017,12 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     // press in the paddle area and the paddle follows the finger / mouse horizontally.
     canvas.addEventListener('pointerdown', (e) => {
       SND.unlock();
+      if (G.showHelp || firstGuideUp()) {
+        e.preventDefault();
+        if (G.showHelp) closeHelp();
+        else dismissFirstGuide();
+        return;
+      }
       const p = toLogical(e);
       if (G.mode === 'shoot') {
         G.pointer = e.pointerId;
@@ -4064,6 +4097,12 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
         if (e.key === 'Escape') closeInstPop();
         return;
       }
+      if (G.showHelp || (firstGuideUp() && (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowUp'))) {
+        if (G.showHelp) closeHelp();
+        else dismissFirstGuide();
+        e.preventDefault();
+        return;
+      }
       if (G.mode !== 'aim' && G.mode !== 'shoot') return;
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         G.keyDir = e.key === 'ArrowLeft' ? -1 : 1;
@@ -4091,6 +4130,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
       else startStage(G.st.songIdx, G.st.stageIdx, false);
     });
     $('btn-inst').addEventListener('click', () => (instPopOpen() ? closeInstPop() : openInstPop()));
+    $('btn-help').addEventListener('click', () => (G.showHelp ? closeHelp() : openHelp()));
     $('inst-pop-close').addEventListener('click', closeInstPop);
     $('inst-pop').addEventListener('click', (e) => { if (e.target === $('inst-pop')) closeInstPop(); });
     $('btn-sound').addEventListener('click', () => {
@@ -4129,9 +4169,35 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     });
   }
 
+  // The first-launch guide is up: the next tap or key only dismisses it (no aim, no launch).
+  const firstGuideUp = () => G.mode === 'aim' && G.turn === 0 && !store.guideSeen;
+  function dismissFirstGuide() {
+    store.guideSeen = true;
+    saveStore();
+  }
+
+  function openHelp() {
+    SND.unlock();
+    G.showHelp = true;
+    G.paused = G.mode === 'intro' || G.mode === 'aim' || G.mode === 'shoot';
+    G.pointer = null;
+    G.reaim = false;
+    G.padDrag = false;
+    G.keyDir = 0;
+    G.aim = null;
+    $('btn-help').setAttribute('aria-pressed', 'true');
+  }
+  function closeHelp() {
+    if (!G.showHelp) return;
+    G.showHelp = false;
+    G.paused = false;
+    $('btn-help').setAttribute('aria-pressed', 'false');
+  }
+
   const instPopOpen = () => !$('inst-pop').classList.contains('hidden');
   function openInstPop() {
     SND.unlock();
+    closeHelp();
     // Aiming and flying balls wait; a song being played back keeps going so it stays in time.
     G.paused = G.mode === 'intro' || G.mode === 'aim' || G.mode === 'shoot';
     G.pointer = null;
