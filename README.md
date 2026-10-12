@@ -83,8 +83,10 @@ HTML5 파일 하나([`piano-bricks/index.html`](piano-bricks/index.html))에 화
 - 키보드: ← → 조준 / 발판 이동, Space/Enter 발사
 
 ### 밸런스
-방해 블럭 체력(숫자)은 `index.html` 안 core 부분의 `tuning` 값으로 정해지며, 발판으로 공을 받는 확률을 65%·80%·90%로 둔 가상 플레이어 시뮬레이션으로 맞췄습니다.
-첫 곡은 누구나 ★★★, 뒤로 갈수록 어려워져 마지막 스테이지는 서툴면 GAME OVER가 나옵니다. 한 스테이지는 약 1~4분입니다.
+방해 블럭 수·체력·공 속도는 `index.html` 안 core 부분의 `tuning`과 `difficulty()`로 정해집니다.
+- 첫 곡 「작은 별」은 아주 쉽게: 방해 블럭 10~13개, 대부분 한 번에 깨지고, **공이 절반 속도**(턴 시간은 그만큼 늘려 14초)
+- 그 뒤로 스테이지마다 블럭 수·체력이 조금씩 늘고, 공 속도는 10번째 스테이지쯤 원래 속도가 됩니다.
+- 스토리 모드의 연주는 곡 순서가 아니라 장 순서로 난이도가 정해져 앞 장은 쉽습니다. PC 전용 곡은 「보통」 난이도.
 
 ### 코드 구조
 레벨 데이터를 게임 로직과 분리한 [jakesgordon/javascript-breakout](https://github.com/jakesgordon/javascript-breakout)의 구조를 참고했습니다.

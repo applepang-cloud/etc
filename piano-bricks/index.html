@@ -1009,18 +1009,23 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     return d;
   }
 
-  // Block HP is tuned with a headless bot that catches the ball with the paddle
-  // most of the time (see README): a shaky player scrapes 1–2 stars, a steady one gets 3.
-  const tuning = { noiseBase: 24, noiseStep: 1.2, hpBase: 1.85, hpStep: 0.43 };
+  // A gentle start: the first song has few one-hit blocks and a half-speed ball, so a stage is
+  // cleared quickly; blocks, their strength and the ball speed then grow stage by stage.
+  const tuning = { noiseBase: 10, noiseStep: 1.6, hpBase: 1, hpStep: 0.4 };
 
   function difficulty(d) {
     const items = ['ball', 'speed', 'paddle'];
     if (d >= 6) items.push('ball');
     if (d >= 11) items.push('paddle');
+    // Ball: half speed for the first song (stages 0–2), normal speed from stage 10 on.
+    const ballSpeed = C.BALL_SPEED * (0.5 + 0.5 * Math.max(0, Math.min(1, (d - 2) / 8)));
     return {
       noise: tuning.noiseBase + Math.round(tuning.noiseStep * d),
       items,
-      meanHp: tuning.hpBase + tuning.hpStep * d
+      meanHp: tuning.hpBase + tuning.hpStep * d,
+      ballSpeed,
+      // a slower ball gets a longer turn so it can still reach the blocks
+      turnLimit: Math.max(C.TURN_LIMIT, Math.min(14, (C.TURN_LIMIT * C.BALL_SPEED) / ballSpeed))
     };
   }
 
@@ -1082,12 +1087,15 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     return { col, row: rows.hi - midi, midi, hp, maxHp: hp, color, item: item || null, alive: true, flash: 0, passed: false };
   }
 
-  function buildStage(songIdx, stageIdx) {
+  // dOverride: a fixed difficulty step (the story mode sets one per chapter).
+  function buildStage(songIdx, stageIdx, dOverride) {
     const song = PB.SONGS[songIdx];
     const st = song.stages[stageIdx];
     const rows = songRows(song);
     // Made songs pick a level (easy / normal / hard) and ramp up within the song.
-    const d = song.custom ? [0, 5, 10][song.level || 0] + Math.min(stageIdx, 5) : stageNumber(songIdx, stageIdx);
+    const d = dOverride !== undefined ? dOverride
+      : song.custom || song.local ? [0, 5, 10][song.level || 0] + Math.min(stageIdx, 5)
+      : stageNumber(songIdx, stageIdx);
     const diff = difficulty(d);
     const melody = melodyBlocks(st.melody, rows, 0);
 
@@ -1133,6 +1141,9 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
       melody,
       noise,
       balls: 1,
+      d,
+      ballSpeed: diff.ballSpeed,
+      turnLimit: diff.turnLimit,
       chords: st.chords.split(/\s+/).map((name, i) => ({ cell: i * 2 * C.STEPS, chord: PB.parseChord(name) }))
     };
   }
@@ -2626,7 +2637,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     clearCountdown();
     SND.stopMusic();
     const prev = continueFromPrev && G.st && !G.st.form ? { st: G.st, x: G.x } : null;
-    G.st = core.buildStage(songIdx, stageIdx);
+    G.st = core.buildStage(songIdx, stageIdx, G.storyHook ? G.storyD : undefined);
     G.ghost = prev;
     G.turn = 0;
     G.score = 0;
@@ -2838,7 +2849,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
       G.items = [];
       G.toLaunch = 0;
     }
-    const dist = C.BALL_SPEED * rampMult() * G.speedMult * dt;
+    const dist = (G.st.ballSpeed || C.BALL_SPEED) * rampMult() * G.speedMult * dt;
     for (const b of G.balls) {
       if (b.active && core.stepBall(b, dist, G.world, onHit)) {
         b.active = false;
@@ -2851,7 +2862,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
       if (b.trail.length > TRAIL_LEN) b.trail.shift();
     }
     updateItems(dt);
-    if (G.turnT >= C.TURN_LIMIT && G.balls.length) {
+    if (G.turnT >= (G.st.turnLimit || C.TURN_LIMIT) && G.balls.length) {
       // Time's up: the balls still in play vanish and the turn ends.
       G.balls.forEach((b) => burst(b.x, b.y, '#ffffff'));
       G.balls = [];
@@ -3787,7 +3798,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     ctx.fillRect(0, C.ROLL_BOTTOM, C.W, 18);
     if (G.mode !== 'shoot') return;
     // Turn timer: shrinks over TURN_LIMIT seconds.
-    const left = Math.max(0, 1 - G.turnT / C.TURN_LIMIT);
+    const left = Math.max(0, 1 - G.turnT / (G.st.turnLimit || C.TURN_LIMIT));
     ctx.fillStyle = 'rgba(255,255,255,0.1)';
     ctx.fillRect(0, C.ROLL_BOTTOM, C.W, 5);
     ctx.fillStyle = left < 0.25 ? RED : 'rgba(255,255,255,0.75)';
@@ -4215,10 +4226,11 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
   }
 
   // Story mode plays one stage, then hands the outcome back ('clear', 'skip' or 'abort').
-  function playForStory(songId, stageIdx, done) {
+  function playForStory(songId, stageIdx, done, d) {
     const idx = PB.SONGS.findIndex((s) => s.id === songId);
     if (idx < 0) return done('skip');
     G.storyHook = done;
+    G.storyD = d;
     startStage(idx, stageIdx, false);
   }
   function backToStory(outcome) {
@@ -5061,6 +5073,13 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
     if (P.mode === 'end') return afterEnd();
   }
 
+  // Story performances get easier difficulty early on: two steps per chapter, one more per extra stage.
+  function storyDifficulty() {
+    const nodes = PB.STORY.chapters[P.ch].nodes;
+    const before = nodes.slice(0, P.i).filter((n) => n.play).length;
+    return P.ch * 2 + before;
+  }
+
   function startPlay(n) {
     P.mode = 'playing';
     SND().storyMode(false);
@@ -5069,7 +5088,7 @@ button:focus-visible { outline: calc(var(--u) * 3) solid var(--accent); outline-
       P.i++;
       showStory();
       run();
-    });
+    }, storyDifficulty());
   }
 
   // Skip: jump to the next performance (or the chapter end), keeping the scene up to date.
