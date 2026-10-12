@@ -52,6 +52,22 @@ def char_prompt(who):
 편집할 때는 원본 base.png를 보고 그 그림을 고쳐야 해. 다 만들면 저장한 파일 이름 6개만 답해."""
 
 
+def mouth_prompt(who):
+    shapes = [
+        ("mouth_1.png", "입술 사이가 아주 살짝만 벌어진 모습(말을 시작하기 직전, 윗니 끝이 살짝 보일 듯 말 듯)"),
+        ("mouth_2.png", "입이 조금 열린 모습(편하게 말할 때, 턱이 조금 내려감)"),
+        ("mouth_3.png", "입이 반쯤 열린 모습(또렷하게 말할 때, 턱이 더 내려가고 윗니가 보임)"),
+        ("mouth_4.png", "입을 크게 벌린 모습(「아」 소리, 턱이 크게 내려가고 혀가 살짝 보임)"),
+        ("mouth_5.png", "입을 옆으로 넓게 벌려 윗니와 아랫니가 보이는 모습(「에」·「이」 소리, 미소 짓듯 입꼬리가 옆으로)"),
+    ]
+    items = "\n".join(f"{i + 1}) {f} : {d}" for i, (f, d) in enumerate(shapes))
+    return f"""이 폴더의 base.png를 편집해서(새로 그리지 말고) 말할 때의 입 모양 5장을 만들어 저장해. 캐릭터: {CHARS[who]}
+중요: 입술을 가운데로 오므리거나 동그랗게 모으지 말 것. 입 너비는 원래 입 너비를 유지하거나 조금 넓게, 턱이 자연스럽게 내려가며 열리는 모양으로. 실제 사람이 말할 때처럼 자연스럽게.
+입과 턱 주변 말고는 아무것도 바꾸지 말 것: 눈·머리카락·옷·위치·크기·구도·색감·크로마키 초록 배경 모두 그대로, 확대나 이동도 하지 말 것. 이미지 크기 가로 1024 세로 1536 그대로.
+{items}
+편집할 때는 매번 원본 base.png를 보고 고쳐야 해. 다 만들면 저장한 파일 이름 5개만 답해."""
+
+
 def bg_prompt():
     items = "\n".join(f"{i + 1}) bg_{k}.png : {v}" for i, (k, v) in enumerate(BGS.items()))
     return f"""이미지 생성 도구로 게임 컷씬 배경 그림 {len(BGS)}장을 만들어 이 폴더에 저장해. 모두 같은 화풍이어야 해.
@@ -62,9 +78,11 @@ def bg_prompt():
 
 
 def run(job, out_dir):
-    d = os.path.join(out_dir, job if job in CHARS else "bgs")
+    # "<who>" = full character set, "mouths:<who>" = five natural mouth shapes from the existing base.png
+    who = job.split(":", 1)[1] if job.startswith("mouths:") else job
+    d = os.path.join(out_dir, who if who in CHARS else "bgs")
     os.makedirs(d, exist_ok=True)
-    prompt = char_prompt(job) if job in CHARS else bg_prompt()
+    prompt = mouth_prompt(who) if job.startswith("mouths:") else char_prompt(who) if who in CHARS else bg_prompt()
     codex = os.path.join(os.path.expanduser("~"), "bin", "codex.cmd")
     with open(os.path.join(d, "codex.jsonl"), "w") as log, open(os.path.join(d, "codex.err"), "w") as err:
         p = subprocess.run([codex, "exec", "--skip-git-repo-check", "-s", "workspace-write", "-C", d, "--json",

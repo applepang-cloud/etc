@@ -1,9 +1,9 @@
 """Turn a character's Codex pictures into animation parts for the story player.
 
 from char_parts import char_parts; char_parts(folder) -> dict for PB.STORY_ART.chars[who]
-folder holds base.png (green screen) and optional eyes_closed.png, mouth_e.png, mouth_a.png, mouth_o.png, hair_mask.png.
+folder holds base.png (green screen) and optional eyes_closed.png, mouth_1..5.png, hair_mask.png.
 - base: keyed to transparency, cropped to the figure, 760 px tall (WebP)
-- eyes / e / a / o: only the region that differs from the base (after aligning the edit to it), feathered,
+- eyes / m1..m5: only the region that differs from the base (after aligning the edit to it), feathered,
   as {src, x, y, w, h} in base pixels; an edit that changed too much is dropped
 - hair: the base picture limited to the hair mask (it sways in the game)
 """
@@ -124,7 +124,8 @@ def char_parts(folder):
     base_fit = fit(full[cy0:cy1, cx0:cx1])
     out = {'base': webp(base_fit), 'w': int(base_fit.shape[1]), 'h': int(base_fit.shape[0])}
 
-    for key, name in (('eyes', 'eyes_closed.png'), ('e', 'mouth_e.png'), ('a', 'mouth_a.png'), ('o', 'mouth_o.png')):
+    mouths = [('m%d' % i, 'mouth_%d.png' % i) for i in range(1, 6)]  # 1-4 opening steps, 5 = wide "e/i"
+    for key, name in [('eyes', 'eyes_closed.png')] + mouths:
         path = os.path.join(folder, name)
         if not os.path.exists(path):
             continue
