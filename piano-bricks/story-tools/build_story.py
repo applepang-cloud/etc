@@ -79,12 +79,22 @@ def add(group, key, val):
     return val[0]
 
 
-for f in sorted(os.listdir('chars')):
-    if f.endswith('.png') and f[:-4] in script['names']:
-        art['chars'][f[:-4]] = add('chars', f, char(os.path.join('chars', f)))
-for f in sorted(os.listdir('bgs')):
+# ART_DIR holds one folder per character (base, eyes, mouths, hair mask) and bgs/ — see art_jobs.py
+ART_DIR = os.environ.get('ART_DIR', 'art')
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from char_parts import char_parts  # noqa: E402
+for who in script['names']:
+    d = os.path.join(ART_DIR, who)
+    if os.path.exists(os.path.join(d, 'base.png')):
+        print('char', who, flush=True)
+        parts = char_parts(d)
+        art['chars'][who] = parts
+        total['chars'] = total.get('chars', 0) + len(json.dumps(parts)) * 3 // 4
+bdir = os.path.join(ART_DIR, 'bgs')
+for f in sorted(os.listdir(bdir)):
     if f.startswith('bg_') and f.endswith('.png'):
-        art['bgs'][f[3:-4]] = add('bgs', f, background(os.path.join('bgs', f)))
+        art['bgs'][f[3:-4]] = add('bgs', f, background(os.path.join(bdir, f)))
 for f in sorted(os.listdir('voice')):
     if f.endswith('.mp3'):
         snd['voice'][f[:-4]] = add('voice', f, audio(os.path.join('voice', f), 48, -16))
