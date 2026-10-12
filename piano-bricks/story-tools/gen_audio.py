@@ -18,9 +18,9 @@ VOICES = {  # who: (voice id, stability, style)
     "narr": ("jB1Cifc2UQbq1gR3wnb0", 0.55, 0.25),   # Bin - measured
     "pa": ("ZJCNdZEjYwkOElxugmW2", 0.6, 0.2),       # Hyuk (picked on the audition page)
     "haru": ("gJSDQIpSQ56NBGhorBfg", 0.45, 0.4),    # David - calm (picked)
-    "mira": ("yIiJDIlA4V9TvoOO12TS", 0.35, 0.6),    # Emily (picked)
+    "mira": ("EWFXw5fXZMIPrqQUSCND", 0.35, 0.6),    # PB 강미라 (Voice Design: 맑고 사랑스러운)
     "captain": ("UmYoqGlufKxhJ6NCx5Mv", 0.55, 0.3), # KO Jang Ho (picked)
-    "noa": ("uyVNoMrnUku1dZyVEXwD", 0.5, 0.35),     # Anna Kim (picked)
+    "noa": ("IWHVa1TFMLf6x6rHB4cH", 0.5, 0.35),     # PB 노아 박사 (Voice Design: 차분하고 지적인)
     "garon": ("UmYoqGlufKxhJ6NCx5Mv", 0.6, 0.3),    # KO Jang Ho
     "ella": ("uyVNoMrnUku1dZyVEXwD", 0.55, 0.3),    # Anna Kim
 }
