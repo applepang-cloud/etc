@@ -75,6 +75,9 @@ const SFX = {
   tick: ['Single crisp wooden metronome click, very short, dry', 0.5, 0.12],
   tock: ['Single high bright metronome bell ping accent click, very short, dry', 0.5, 0.15],
   sparkle: ['Magical sparkle chime for a mobile puzzle game reward, rising bright twinkling bells, short and pleasant', 1.5, 1.1],
+  ice: ['Crisp ice cracking and shattering for a mobile puzzle game, a thin sheet of ice breaking with glassy tinkling shards, short and satisfying', 1.0, 0.7],
+  line: ['Mobile puzzle game line clear sound, a quick bright whoosh sweep with a sparkling pop, satisfying, short', 1.0, 0.6],
+  missile: ['Cartoon mini missile launch for a mobile puzzle game, quick rising rocket whoosh with a small sparkly fizz trail, short', 1.2, 0.9],
 };
 for (const [key, [text, seconds, keep]] of Object.entries(SFX)) {
   SOUNDS.push({ name: `sfx_${key}`, group: 'sfx', key, seconds, keep, fade: Math.min(0.4, keep / 3), text });

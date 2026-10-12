@@ -10,11 +10,17 @@
 //   free  자유 작곡: 목표 노트 없이 놓은 블록이 그대로 음이 된다. 시간 제한 없음.
 //         정지(페이지 단위)와 자동 이동(계속 흘러가며 놓기) 둘 다 된다.
 //
+// 얼음 깨기 규칙(자유 작곡 말고 모든 곡): 페이지가 블록으로 꽉 차 있고 노트는 2겹 얼음에 갇혀 있다.
+//   페이지는 3×3 구역으로 나뉜다. 구역 안의 가로·세로줄을 꽉 채우면 그 줄의 블록이 지워지고,
+//   줄에 걸친 노트의 얼음이 한 겹 깨진다.
+//   얼음이 다 깨진 노트만 연주된다. 콤보로 폭탄(3×3 블록 제거) 게이지, 지운 블록 수로 미사일
+//   (곧 연주될 얼음 노트 3개의 얼음을 모두 깸) 게이지가 찬다. 진행은 늘 페이지마다 멈춤.
+//
 // 시계는 AudioContext.currentTime. 일시정지하면 컨텍스트를 멈춰 시계(제한 시간 포함)도 멈춘다.
 
-import { makeTray } from './pieces.js';
+import { makeTray, makeIceTray, PALETTE } from './pieces.js';
 import { INSTRUMENTS, melodicInst, pianoRows, vocalRows, drumRows, solfege, isBlack } from './instruments.js';
-import { drawBlock, drawBomb, rrect, shade } from './draw.js';
+import { drawBlock, drawBomb, rrect, shade, UI_IMG, uiReady } from './draw.js';
 import { KEY_ART } from './key-art.js';
 
 // 건반 질감 그림 (읽기 전에는 단색으로 그린다)
@@ -28,6 +34,7 @@ if (typeof Image !== 'undefined') {
 const keyReady = (k) => KEY_IMG[k]?.complete && KEY_IMG[k].naturalWidth > 0;
 
 export const SCENE_TIME = 30; // 정지 모드 한 페이지 제한 시간(초)
+const ICE_SCENE_TIME = 60; // 얼음 깨기 한 페이지 제한 시간(초)
 const PLAYHEAD_COLS = 1; // 재생선 왼쪽에 보이는 칸 수
 const SCHEDULE_AHEAD = 0.1; // 오디오 예약 선행 시간(초)
 const RULER_H = 18;
@@ -42,6 +49,16 @@ const POINTS_GOOD = 100;
 const POINTS_BAD = 50;
 const POINTS_CLEAR = 300;
 const POINTS_PER_SEC = 10;
+
+// 얼음 깨기 규칙
+const ICE_LAYERS = 2; // 노트를 덮은 얼음 겹 수
+const ICE_FILL = 0.5; // 페이지를 처음 채우는 블록 비율 (노트 칸 제외)
+const BOMB_NEED = 3; // 폭탄 게이지: 콤보로 채움
+const MISSILE_NEED = 30; // 미사일 게이지: 지운 블록 수로 채움
+const MISSILE_SHOTS = 3; // 미사일 한 번에 얼음을 깨는 노트 수
+const POINTS_BLOCK = 10;
+const POINTS_ICE = 40;
+const POINTS_FREE = 100; // 얼음이 다 깨진 노트 칸당
 
 const KEY = (r, c) => c * 128 + r;
 // 음정(반음 수 % 12)별 어울림: 화음 추천 점수에 쓴다
@@ -164,8 +181,16 @@ export class Game {
     }
     this.trayTop = this.rollBottom;
     // 하단: 블록 3칸 + 오른쪽 보관함
-    this.storeW = Math.round(Math.min(110, Math.max(72, W * 0.22)));
-    this.slotW = (W - this.storeW) / 3;
+    if (this.ice) {
+      // 얼음 깨기: 왼쪽 폭탄, 오른쪽 미사일, 가운데 블록 3칸
+      this.storeW = Math.round(Math.min(92, Math.max(62, W * 0.17)));
+      this.slotX0 = this.storeW;
+      this.slotW = (W - this.storeW * 2) / 3;
+    } else {
+      this.storeW = Math.round(Math.min(110, Math.max(72, W * 0.22)));
+      this.slotX0 = 0;
+      this.slotW = (W - this.storeW) / 3;
+    }
     this.hooks.layout?.({ trayTop: this.trayTop, H });
   }
 
@@ -204,7 +229,11 @@ export class Game {
     this.song = song;
     this.mode = mode;
     this.free = mode === 'free';
-    this.auto = !!opts.auto;
+    // 얼음 깨기 규칙: 자유 작곡 말고 모두. 늘 페이지마다 멈춰서 진행한다.
+    this.ice = !this.free;
+    if (this.ice && mode === 'flow') this.mode = mode = 'stop';
+    this.auto = !!opts.auto && !this.ice;
+    this.sceneTime = this.ice ? ICE_SCENE_TIME : SCENE_TIME;
     // 자유 작곡에서 반투명 추천 블록 표시
     this.hints = this.free && !!opts.hints;
     this.hintCache = null;
@@ -216,9 +245,10 @@ export class Game {
     this.parts = song.parts.map((src) => ({
       inst: src.inst === 'piano' ? melodicInst(opts.timbre) : INSTRUMENTS[src.inst],
       src,
-      notes: src.notes.map((n) => ({ ...n })),
+      notes: src.notes.map((n) => ({ ...n, ice: ICE_LAYERS })),
       rows: null,
-      occupied: new Map(),
+      occupied: new Map(), // 덮인 노트(얼음 깨기에서는 얼음이 다 깨진 노트)와 놓은 블록
+      blocks: new Map(), // 얼음 깨기: 페이지를 채운 블록과 놓은 블록
       glow: new Map(),
     }));
     this.part = this.parts[0];
@@ -249,6 +279,15 @@ export class Game {
     this.store = [];
     this.storeBump = -1;
     this.listening = false;
+    this.bombGauge = 0;
+    this.bombReady = false;
+    this.missileGauge = 0;
+    this.missileReady = false;
+    this.armed = false; // 폭탄 자리 고르는 중
+    this.hover = null;
+    this.missiles = [];
+    this.flashes = [];
+    this.pendingClear = false;
 
     this.audio.ensure();
     this.audio.resetBus();
@@ -362,9 +401,11 @@ export class Game {
       this.view = 'part';
       ph.s0 = ph.scene * ss;
       ph.s1 = Math.min(this.length, ph.s0 + ss);
-      ph.deadline = now + SCENE_TIME;
-      ph.lastSec = SCENE_TIME;
+      ph.deadline = now + this.sceneTime;
+      ph.lastSec = this.sceneTime;
       this.pos = ph.s0;
+      this.armed = false;
+      if (this.ice) this.fillPage(ph);
       this.tray = this.newTray(0.08);
     } else if (ph.type === 'hold') {
       ph.until = now + ph.dur;
@@ -398,6 +439,7 @@ export class Game {
   }
 
   newTray(bombChance) {
+    if (this.ice) return makeIceTray((p) => this.bestLines(p));
     return makeTray(this.upcomingGreen(), { fits: !this.free, bombChance: this.free ? 0.2 : bombChance });
   }
 
@@ -532,6 +574,372 @@ export class Game {
       }
     }
     g.globalAlpha = 1;
+  }
+
+  // ---------- 얼음 깨기 ----------
+
+  // 찬 칸: 블록, 얼음 노트, 얼음이 깨진 노트 모두
+  filled(part, r, c) {
+    const k = KEY(r, c);
+    return part.blocks.has(k) || part.noteAt.has(k);
+  }
+
+  // 페이지를 블록으로 채운다 (노트 칸은 얼음). 처음부터 꽉 찬 줄은 한 칸씩 비운다.
+  fillPage(ph) {
+    const part = ph.part;
+    part.filledPages ||= new Set();
+    if (part.filledPages.has(ph.scene)) return;
+    part.filledPages.add(ph.scene);
+    const R = part.rows.length;
+    const born = this.now - 1;
+    for (let c = ph.s0; c < ph.s1; c++) {
+      for (let r = 0; r < R; r++) {
+        const k = KEY(r, c);
+        if (part.noteAt.has(k) || Math.random() >= ICE_FILL) continue;
+        const color = PALETTE[Math.floor(Math.random() * PALETTE.length)];
+        part.blocks.set(k, { color, born, junk: true });
+      }
+    }
+    const open = (cells) => {
+      const list = cells.filter(([r, c]) => part.blocks.has(KEY(r, c)));
+      if (!list.length) return;
+      const [r, c] = list[Math.floor(Math.random() * list.length)];
+      part.blocks.delete(KEY(r, c));
+    };
+    for (let pass = 0; pass < 3; pass++) {
+      const { rows, cols } = this.fullLines(part, ph);
+      if (!rows.length && !cols.length) break;
+      for (const sg of rows) {
+        const cells = [];
+        for (let c = sg.c0; c < sg.c1; c++) cells.push([sg.r, c]);
+        open(cells);
+      }
+      for (const sg of cols) {
+        const cells = [];
+        for (let r = sg.r0; r < sg.r1; r++) cells.push([r, sg.c]);
+        open(cells);
+      }
+    }
+  }
+
+  // 페이지를 3×3 구역으로 나누는 경계: 열 경계 4개, 행 경계 4개
+  cuts(part, ph) {
+    if (ph.cuts && ph.cuts.part === part) return ph.cuts;
+    const w = ph.s1 - ph.s0;
+    const R = part.rows.length;
+    ph.cuts = {
+      part,
+      cols: [ph.s0, ph.s0 + Math.round(w / 3), ph.s0 + Math.round((w * 2) / 3), ph.s1],
+      rows: [0, Math.round(R / 3), Math.round((R * 2) / 3), R],
+    };
+    return ph.cuts;
+  }
+
+  // 구역 안에서 꽉 찬 가로줄 {r, c0, c1} 과 세로줄 {c, r0, r1}.
+  // extra: 이번에 놓으려는 칸, rowsAt/colsAt: 그 행·열에 걸친 줄만 본다
+  fullLines(part, ph, extra, rowsAt, colsAt) {
+    const R = part.rows.length;
+    const { cols: cc, rows: rr } = this.cuts(part, ph);
+    const has = (r, c) => (extra && extra.has(KEY(r, c))) || this.filled(part, r, c);
+    const rows = [];
+    const cols = [];
+    for (let r = 0; r < R; r++) {
+      if (rowsAt && !rowsAt.has(r)) continue;
+      for (let b = 0; b < 3; b++) {
+        const c0 = cc[b];
+        const c1 = cc[b + 1];
+        if (c1 <= c0) continue;
+        if (colsAt && ![...colsAt].some((c) => c >= c0 && c < c1)) continue;
+        let full = true;
+        for (let c = c0; c < c1 && full; c++) full = has(r, c);
+        if (full) rows.push({ r, c0, c1 });
+      }
+    }
+    for (let c = ph.s0; c < ph.s1; c++) {
+      if (colsAt && !colsAt.has(c)) continue;
+      for (let b = 0; b < 3; b++) {
+        const r0 = rr[b];
+        const r1 = rr[b + 1];
+        if (r1 <= r0) continue;
+        if (rowsAt && ![...rowsAt].some((r) => r >= r0 && r < r1)) continue;
+        let full = true;
+        for (let r = r0; r < r1 && full; r++) full = has(r, c);
+        if (full) cols.push({ c, r0, r1 });
+      }
+    }
+    return { rows, cols };
+  }
+
+  // 모양을 놓을 수 있는 자리 중 가장 많이 지우는 줄 수 (못 놓으면 -1). 트레이 만들 때 쓴다.
+  bestLines(p) {
+    const ph = this.phase;
+    const part = this.part;
+    if (!ph || ph.type !== 'place') return -1;
+    let best = -1;
+    for (let r0 = 0; r0 + p.h <= part.rows.length; r0++) {
+      for (let c0 = ph.s0; c0 + p.w <= ph.s1; c0++) {
+        if (!this.canPlace(p, r0, c0)) continue;
+        const extra = new Set();
+        const rowsAt = new Set();
+        const colsAt = new Set();
+        for (const [dr, dc] of p.cells) {
+          extra.add(KEY(r0 + dr, c0 + dc));
+          rowsAt.add(r0 + dr);
+          colsAt.add(c0 + dc);
+        }
+        const { rows, cols } = this.fullLines(part, ph, extra, rowsAt, colsAt);
+        best = Math.max(best, rows.length + cols.length);
+      }
+    }
+    return best;
+  }
+
+  placeIce(slot, piece, r0, c0) {
+    const part = this.part;
+    const ph = this.phase;
+    const now = this.now;
+    const keys = new Set();
+    const rowsAt = new Set();
+    const colsAt = new Set();
+    for (const [dr, dc] of piece.cells) {
+      const r = r0 + dr;
+      const c = c0 + dc;
+      part.blocks.set(KEY(r, c), { color: piece.color, born: now });
+      keys.add(part.rows[r].key);
+      rowsAt.add(r);
+      colsAt.add(c);
+    }
+    this.previewSound(part, [...keys], false);
+    const { rows, cols } = this.fullLines(part, ph, null, rowsAt, colsAt);
+    const lines = rows.length + cols.length;
+    let res = { removed: 0, iceHits: 0, freed: 0 };
+    if (lines) {
+      res = this.resolveLines(part, ph, rows, cols);
+      this.combo++;
+      this.maxCombo = Math.max(this.maxCombo, this.combo);
+      this.audio.lineClear();
+    } else {
+      this.combo = 0;
+    }
+    const mult = lines ? (1 + Math.min(this.combo - 1, 10) * 0.2) * (1 + (lines - 1) * 0.5) : 1;
+    const gain = Math.round((piece.cells.length * 2 + res.removed * POINTS_BLOCK + res.iceHits * POINTS_ICE + res.freed * POINTS_FREE) * mult);
+    this.score += gain;
+    this.addPageScore(part, c0, gain);
+    // 폭탄 게이지는 콤보로: 연속으로 줄을 지우면(콤보 2 이상) 지운 줄 수만큼, 한 번에 여러 줄이면 그 덤만큼
+    if (lines) this.addBomb(this.combo >= 2 ? lines : lines - 1);
+    // 미사일 게이지는 지운 블록 수로
+    if (res.removed) this.addMissile(res.removed);
+    if (lines) {
+      const big = lines >= 2 || this.combo >= 2;
+      if (big) this.perfects++;
+      const word = big ? 'FANTASTIC' : 'GOOD';
+      this.judge(word, this.combo > 1 ? `${this.combo} COMBO` : lines > 1 ? `${lines} LINES` : '');
+      this.hooks.event?.('judge', { word, combo: this.combo });
+    }
+    this.popups.push({
+      text: `+${gain}`,
+      x: this.xOf(c0) + (piece.w * this.cellW) / 2,
+      y: part.top + r0 * part.cellH,
+      age: 0,
+      life: 0.9,
+      size: lines ? 20 : 14,
+      color: lines ? '#ffe27a' : 'rgba(255,255,255,0.7)',
+    });
+    this.consume(slot);
+    if (this.sceneComplete()) {
+      this.endPlace('clear');
+      return;
+    }
+    this.ensurePlayableTray();
+  }
+
+  // 줄 지우기: 블록은 지우고, 줄에 걸친 얼음 노트는 한 겹씩 깬다 (한 번에 노트당 한 겹)
+  resolveLines(part, ph, rows, cols) {
+    const cells = new Map();
+    for (const sg of rows) for (let c = sg.c0; c < sg.c1; c++) cells.set(KEY(sg.r, c), [sg.r, c]);
+    for (const sg of cols) for (let r = sg.r0; r < sg.r1; r++) cells.set(KEY(r, sg.c), [r, sg.c]);
+    let removed = 0;
+    const hit = new Set();
+    for (const [k, [r, c]] of cells) {
+      if (part.blocks.delete(k)) {
+        removed++;
+        this.burst(part, r, c, ['#ffffff', '#ffe27a', '#cfe9ff'], 3);
+      } else {
+        const n = part.noteAt.get(k);
+        if (n && n.ice > 0) hit.add(n);
+      }
+    }
+    let freed = 0;
+    for (const n of hit) {
+      n.ice--;
+      if (n.ice <= 0) freed += this.freeNote(part, n);
+      else this.iceBurst(part, n);
+    }
+    this.flashes.push({ part, rows, cols, s0: ph.s0, s1: ph.s1, age: 0, life: 0.35 });
+    return { removed, iceHits: hit.size, freed };
+  }
+
+  // 얼음이 다 깨진 노트는 연주될 칸(하얀 블록)이 된다
+  freeNote(part, n) {
+    n.ice = 0;
+    const now = this.now;
+    for (let c = n.start; c < n.start + n.len; c++) {
+      part.occupied.set(KEY(n.row, c), { color: WHITE, good: true, born: now, hitAt: 0 });
+    }
+    this.goodCells += n.len;
+    this.iceBurst(part, n);
+    this.previewSound(part, [n.key], false);
+    return n.len;
+  }
+
+  burst(part, r, c, colors, count) {
+    const x = this.xOf(c) + this.cellW / 2;
+    const y = part.top + (r + 0.5) * part.cellH;
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 50 + Math.random() * 170;
+      this.particles.push({
+        x,
+        y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp - 50,
+        life: 0.45 + Math.random() * 0.25,
+        age: 0,
+        size: 2 + Math.random() * 3,
+        color: colors[i % colors.length],
+      });
+    }
+  }
+
+  iceBurst(part, n) {
+    for (let c = n.start; c < n.start + n.len; c++) this.burst(part, n.row, c, ['#e6f7ff', '#ffffff', '#9fd8ff'], 7);
+    this.audio.iceCrack();
+  }
+
+  addBomb(n) {
+    if (this.bombReady || n <= 0) return;
+    this.bombGauge = Math.min(BOMB_NEED, this.bombGauge + n);
+    if (this.bombGauge >= BOMB_NEED) {
+      this.bombReady = true;
+      this.itemPopup('폭탄 준비!', this.storeW / 2, '#ffb347');
+    }
+  }
+
+  addMissile(n) {
+    if (this.missileReady || n <= 0) return;
+    this.missileGauge = Math.min(MISSILE_NEED, this.missileGauge + n);
+    if (this.missileGauge >= MISSILE_NEED) {
+      this.missileReady = true;
+      this.itemPopup('미사일 준비!', this.W - this.storeW / 2, '#7fdcff');
+    }
+  }
+
+  itemPopup(text, x, color) {
+    this.popups.push({ text, x: Math.max(50, Math.min(this.W - 50, x)), y: this.trayTop - 6, age: 0, life: 1.3, size: 15, color });
+  }
+
+  // 남은 트레이 블록이 하나도 놓일 데가 없으면 새로 준다
+  ensurePlayableTray() {
+    if (!this.tray || this.phase?.type !== 'place') return;
+    const left = this.tray.filter(Boolean);
+    if (left.length && left.every((p) => this.bestLines(p) < 0)) this.tray = this.newTray(0);
+  }
+
+  // 화면 좌표 → 이번 페이지의 칸
+  cellAt(x, y) {
+    const ph = this.phase;
+    const part = this.part;
+    if (!ph || ph.type !== 'place') return null;
+    const c = Math.floor((x - this.phX) / this.cellW + this.pos);
+    const r = Math.floor((y - part.top) / part.cellH);
+    if (r < 0 || r >= part.rows.length || c < ph.s0 || c >= ph.s1) return null;
+    return { r, c };
+  }
+
+  // 폭탄 버튼: 준비됐으면 자리 고르기 시작/취소
+  toggleBomb() {
+    if (!this.bombReady || this.phase?.type !== 'place') return;
+    this.armed = !this.armed;
+    this.audio.tick(this.now, this.armed);
+  }
+
+  // 폭탄: 고른 칸 중심 3×3 의 블록만 지운다 (얼음·노트는 그대로)
+  detonateIce(r, c) {
+    const part = this.part;
+    const ph = this.phase;
+    let removed = 0;
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        const rr = r + dr;
+        const cc = c + dc;
+        if (rr < 0 || rr >= part.rows.length || cc < ph.s0 || cc >= ph.s1) continue;
+        this.burst(part, rr, cc, ['#ffd34d', '#ff7a2e', '#ffffff', '#f2463a'], 8);
+        if (part.blocks.delete(KEY(rr, cc))) removed++;
+      }
+    }
+    const cx = this.xOf(c) + this.cellW / 2;
+    const cy = part.top + (r + 0.5) * part.cellH;
+    this.rings.push({ x: cx, y: cy, age: 0, life: 0.45, r: this.cellW * 2 });
+    this.shake = 0.7;
+    this.audio.boom();
+    this.hooks.event?.('bomb');
+    this.bombReady = false;
+    this.bombGauge = 0;
+    this.armed = false;
+    const gain = removed * POINTS_BLOCK;
+    this.score += gain;
+    this.addPageScore(part, c, gain);
+    this.addMissile(removed);
+    this.judge('BOOM', removed ? `${removed}칸 제거` : '');
+    this.lastPlaceAt = this.now;
+    this.ensurePlayableTray();
+  }
+
+  // 미사일: 이번 페이지에서 곧 연주될 얼음 노트부터 3개의 얼음을 모두 깬다
+  fireMissiles() {
+    const ph = this.phase;
+    const part = this.part;
+    if (!this.missileReady || ph?.type !== 'place') return;
+    const targets = part.notes
+      .filter((n) => n.ice > 0 && !n.targeted && n.start < ph.s1 && n.start + n.len > ph.s0)
+      .sort((a, b) => a.start - b.start || a.row - b.row)
+      .slice(0, MISSILE_SHOTS);
+    if (!targets.length) return;
+    this.missileReady = false;
+    this.missileGauge = 0;
+    const x0 = this.W - this.storeW / 2;
+    const y0 = this.trayTop + (this.H - this.trayTop) * 0.42;
+    targets.forEach((n, i) => {
+      n.targeted = true;
+      this.missiles.push({ part, n, scene: ph.scene, x0, y0, age: -i * 0.13, life: 0.55, bend: (i - 1) * 60 });
+    });
+    this.audio.missile();
+    this.lastPlaceAt = this.now;
+  }
+
+  // 미사일이 날아가 닿으면 얼음을 깬다 (updateFx 에서)
+  updateMissiles(dt) {
+    for (const m of this.missiles) {
+      m.age += dt;
+      if (m.age < m.life || m.done) continue;
+      m.done = true;
+      m.n.targeted = false;
+      const ph = this.phase;
+      if (ph?.type === 'place' && ph.scene === m.scene && m.n.ice > 0) {
+        const cells = this.freeNote(m.part, m.n);
+        const gain = cells * POINTS_FREE + POINTS_ICE * 2;
+        this.score += gain;
+        this.addPageScore(m.part, m.n.start, gain);
+        this.rings.push({ ...this.missileTarget(m), age: 0, life: 0.35, r: this.cellW * 1.2 });
+        this.pendingClear = true;
+      }
+    }
+    this.missiles = this.missiles.filter((m) => !m.done);
+  }
+
+  missileTarget(m) {
+    const { part, n } = m;
+    return { x: this.xOf(n.start) + (n.len * this.cellW) / 2, y: part.top + (n.row + 0.5) * part.cellH };
   }
 
   // ---------- 페이지 점수 ----------
@@ -744,6 +1152,10 @@ export class Game {
         this.updateFlow(now, ph);
       }
     }
+    if (this.pendingClear) {
+      this.pendingClear = false;
+      if (this.phase?.type === 'place' && this.sceneComplete()) this.endPlace('clear');
+    }
     if (this.drag) this.computeSnap();
     while (this.events.length && this.events[0].t <= now) this.fire(this.events.shift());
     this.emitHud();
@@ -759,7 +1171,7 @@ export class Game {
       score: this.score,
       combo: this.combo,
       timer: placing && !this.free ? Math.max(0, ph.deadline - this.now) : null,
-      timerTotal: SCENE_TIME,
+      timerTotal: this.sceneTime,
       placing,
       part: this.view === 'lanes' ? null : this.part?.inst,
       scene,
@@ -795,6 +1207,15 @@ export class Game {
       this.sceneClears++;
       this.judge('ALL CLEAR', `+${POINTS_CLEAR}`);
       this.audio.sparkle();
+    }
+    if (this.ice && !ph.finale && ph.scene != null) {
+      const ss = this.song.sceneSteps;
+      for (const p of ph.parts) {
+        for (const k of [...p.blocks.keys()]) {
+          const c = Math.floor(k / 128);
+          if (c >= ph.scene * ss && c < (ph.scene + 1) * ss) p.blocks.delete(k);
+        }
+      }
     }
     // 정지 모드 / 합주의 악기 페이지가 다 흘러갔으면 그 페이지 결과
     if (!ph.live || ph.page) {
@@ -933,6 +1354,11 @@ export class Game {
     this.popups = this.popups.filter((p) => p.age < p.life);
     for (const r of this.rings) r.age += dt;
     this.rings = this.rings.filter((r) => r.age < r.life);
+    if (this.flashes) {
+      for (const f of this.flashes) f.age += dt;
+      this.flashes = this.flashes.filter((f) => f.age < f.life);
+    }
+    if (this.missiles?.length) this.updateMissiles(dt);
     this.shake = Math.max(0, this.shake - dt * 3);
   }
 
@@ -946,7 +1372,9 @@ export class Game {
       const r = r0 + dr;
       const c = c0 + dc;
       if (r < 0 || r >= part.rows.length || c < range[0] || c > range[1]) return false;
-      if (!piece.bomb && part.occupied.has(KEY(r, c))) return false;
+      if (this.ice) {
+        if (part.blocks.has(KEY(r, c)) || part.noteAt.has(KEY(r, c))) return false;
+      } else if (!piece.bomb && part.occupied.has(KEY(r, c))) return false;
     }
     return true;
   }
@@ -979,6 +1407,10 @@ export class Game {
     const part = this.part;
     const now = this.now;
     this.lastPlaceAt = now;
+    if (this.ice) {
+      this.placeIce(slot, piece, r0, c0);
+      return;
+    }
     if (piece.bomb) {
       this.detonate(piece, r0, c0);
     } else {
@@ -1020,7 +1452,7 @@ export class Game {
   }
 
   overStore(x, y) {
-    return y >= this.trayTop && x >= this.W - this.storeW;
+    return !this.ice && y >= this.trayTop && x >= this.W - this.storeW;
   }
 
   // 안 쓰는 블록을 보관함에 쌓는다. 트레이에서는 쓴 것으로 친다.
@@ -1173,8 +1605,18 @@ export class Game {
   onDown(e) {
     if (this.drag || !this.placeRange() || !this.tray) return;
     const { x, y } = this.point(e);
+    if (this.ice) {
+      if (y >= this.trayTop && x < this.storeW) return this.toggleBomb();
+      if (y >= this.trayTop && x >= this.W - this.storeW) return this.fireMissiles();
+      if (this.armed && y < this.trayTop) {
+        const cell = this.cellAt(x, y);
+        if (cell) this.detonateIce(cell.r, cell.c);
+        else this.armed = false;
+        return;
+      }
+    }
     if (y < this.trayTop) return;
-    const slot = x >= this.W - this.storeW ? STORE_SLOT : Math.min(2, Math.floor(x / this.slotW));
+    const slot = x >= this.W - this.storeW ? STORE_SLOT : Math.max(0, Math.min(2, Math.floor((x - this.slotX0) / this.slotW)));
     const piece = this.pieceAt(slot);
     if (!piece) return;
     e.preventDefault();
@@ -1189,6 +1631,7 @@ export class Game {
 
   onMove(e) {
     const d = this.drag;
+    if (!d && this.armed) this.hover = this.point(e);
     if (!d || e.pointerId !== d.id) return;
     const { x, y } = this.point(e);
     d.x = x;
@@ -1232,6 +1675,7 @@ export class Game {
     g.restore();
 
     this.drawTray();
+    if (this.ice) this.drawMissiles();
     this.drawHint();
     this.drawDrag();
     this.drawPopups();
@@ -1344,6 +1788,8 @@ export class Game {
       }
     }
 
+    if (this.ice) this.drawIceLayer(part);
+
     // 놓은 블록
     for (const [k, o] of part.occupied) {
       const c = Math.floor(k / 128);
@@ -1378,9 +1824,323 @@ export class Game {
     this.drawSidePanel(part);
   }
 
+  // ---------- 얼음 깨기 그리기 ----------
+
+  // 노트를 덮은 얼음. layers = 2(두꺼움) / 1(금 간 얇은 얼음)
+  drawIce(x, y, w, h, layers) {
+    const g = this.g;
+    g.save();
+    rrect(g, x + 1, y + 1, w - 2, h - 2, Math.min(5, h / 3));
+    const grad = g.createLinearGradient(x, y, x, y + h);
+    if (layers >= 2) {
+      grad.addColorStop(0, 'rgba(236,250,255,0.93)');
+      grad.addColorStop(1, 'rgba(160,214,245,0.88)');
+    } else {
+      grad.addColorStop(0, 'rgba(225,246,255,0.62)');
+      grad.addColorStop(1, 'rgba(150,205,240,0.5)');
+    }
+    g.fillStyle = grad;
+    g.fill();
+    g.lineWidth = layers >= 2 ? 2 : 1.2;
+    g.strokeStyle = 'rgba(255,255,255,0.95)';
+    g.stroke();
+    g.clip();
+    // 비스듬한 반사광
+    g.fillStyle = 'rgba(255,255,255,0.5)';
+    const sw = Math.min(w, h) * 0.45;
+    for (let sx = x - h; sx < x + w; sx += Math.max(sw * 4, 26)) {
+      g.beginPath();
+      g.moveTo(sx, y + h);
+      g.lineTo(sx + sw * 0.6, y + h);
+      g.lineTo(sx + sw * 0.6 + h, y);
+      g.lineTo(sx + h, y);
+      g.closePath();
+      g.fill();
+    }
+    if (layers < 2) {
+      // 한 겹 깨진 얼음: 금
+      g.strokeStyle = 'rgba(70,130,175,0.85)';
+      g.lineWidth = 1.2;
+      const cx = x + w * 0.42;
+      const cy = y + h * 0.55;
+      g.beginPath();
+      g.moveTo(cx, cy);
+      g.lineTo(cx - w * 0.25, y + 2);
+      g.moveTo(cx, cy);
+      g.lineTo(cx + w * 0.3, y + h * 0.15);
+      g.moveTo(cx, cy);
+      g.lineTo(cx + w * 0.18, y + h - 1);
+      g.moveTo(cx, cy);
+      g.lineTo(cx - w * 0.32, y + h * 0.8);
+      g.stroke();
+    }
+    g.restore();
+  }
+
+  drawIceLayer(part) {
+    const g = this.g;
+    const { W, kbW, cellW } = this;
+    const ch = part.cellH;
+    const top = part.top;
+    const now = this.now;
+    // 블록 (페이지를 채운 블록은 어둡게, 놓은 블록은 원래 색)
+    for (const [k, o] of part.blocks) {
+      const c = Math.floor(k / 128);
+      const r = k % 128;
+      const x = this.xOf(c);
+      if (x + cellW < kbW || x > W) continue;
+      const y = top + r * ch;
+      const age = now - o.born;
+      const sc = age < 0.14 ? 0.6 + 0.4 * (age / 0.14) : 1;
+      const bx = x + (cellW * (1 - sc)) / 2;
+      const by = y + (ch * (1 - sc)) / 2;
+      drawBlock(g, bx, by, cellW * sc, ch * sc, o.color);
+      if (o.junk) {
+        // 처음부터 있던 블록은 어둡게 눌러 놓은 블록과 구분
+        rrect(g, bx + 1, by + 1, cellW * sc - 2, ch * sc - 2, Math.min(6, ch / 4));
+        g.fillStyle = 'rgba(8,10,20,0.5)';
+        g.fill();
+      }
+    }
+    // 얼음에 갇힌 노트
+    for (const n of part.notes) {
+      if (!(n.ice > 0)) continue;
+      const x0 = this.xOf(n.start);
+      const x1 = this.xOf(n.start + n.len);
+      if (x1 < kbW || x0 > W) continue;
+      const img = n.ice >= 2 ? 'ice2' : 'ice1';
+      if (uiReady(img)) {
+        g.globalAlpha = n.ice >= 2 ? 0.97 : 0.88;
+        for (let c = n.start; c < n.start + n.len; c++) g.drawImage(UI_IMG[img], this.xOf(c), top + n.row * ch, cellW, ch);
+        g.globalAlpha = 1;
+      } else {
+        this.drawIce(x0, top + n.row * ch, x1 - x0, ch, n.ice);
+      }
+    }
+    // 3×3 구역 경계
+    const ph = this.phase;
+    if (ph?.type === 'place' && ph.part === part) {
+      const { cols: cc, rows: rr } = this.cuts(part, ph);
+      g.fillStyle = 'rgba(255,214,120,0.75)';
+      for (const c of cc.slice(1, 3)) g.fillRect(Math.round(this.xOf(c)) - 1, top, 2, part.rows.length * ch);
+      for (const r of rr.slice(1, 3)) g.fillRect(this.xOf(ph.s0), top + r * ch - 1, (ph.s1 - ph.s0) * cellW, 2);
+    }
+    // 줄 지우기 번쩍임
+    for (const f of this.flashes || []) {
+      if (f.part !== part) continue;
+      const a = 0.75 * (1 - f.age / f.life);
+      g.fillStyle = `rgba(255,250,220,${a})`;
+      for (const sg of f.rows) g.fillRect(this.xOf(sg.c0), top + sg.r * ch, (sg.c1 - sg.c0) * cellW, ch);
+      for (const sg of f.cols) g.fillRect(this.xOf(sg.c), top + sg.r0 * ch, cellW, (sg.r1 - sg.r0) * ch);
+    }
+    // 폭탄 자리 고르는 중: 3×3 범위
+    if (this.armed && this.hover) {
+      const cell = this.cellAt(this.hover.x, this.hover.y);
+      if (cell) {
+        const ph = this.phase;
+        const r0 = Math.max(0, cell.r - 1);
+        const r1 = Math.min(part.rows.length - 1, cell.r + 1);
+        const c0 = Math.max(ph.s0, cell.c - 1);
+        const c1 = Math.min(ph.s1 - 1, cell.c + 1);
+        const x = this.xOf(c0);
+        const y = top + r0 * ch;
+        const w = (c1 - c0 + 1) * cellW;
+        const h = (r1 - r0 + 1) * ch;
+        g.fillStyle = `rgba(255,140,50,${0.28 + 0.1 * Math.sin(now * 8)})`;
+        g.fillRect(x, y, w, h);
+        g.setLineDash([6, 4]);
+        g.lineWidth = 2;
+        g.strokeStyle = '#ffb347';
+        g.strokeRect(x + 1, y + 1, w - 2, h - 2);
+        g.setLineDash([]);
+      }
+    }
+  }
+
+  // 끌고 있는 블록의 자리 + 그 자리에 놓으면 지워질 줄을 미리 보여 준다
+  drawGhostIce(part, d) {
+    const g = this.g;
+    const ch = part.cellH;
+    const cw = this.cellW;
+    const ph = this.phase;
+    const extra = new Set();
+    const rowsAt = new Set();
+    const colsAt = new Set();
+    for (const [dr, dc] of d.piece.cells) {
+      const r = d.snap.r0 + dr;
+      const c = d.snap.c0 + dc;
+      extra.add(KEY(r, c));
+      rowsAt.add(r);
+      colsAt.add(c);
+    }
+    const { rows, cols } = this.fullLines(part, ph, extra, rowsAt, colsAt);
+    if (rows.length || cols.length) {
+      g.fillStyle = `rgba(255,226,122,${0.22 + 0.08 * Math.sin(this.now * 10)})`;
+      for (const sg of rows) g.fillRect(this.xOf(sg.c0), part.top + sg.r * ch, (sg.c1 - sg.c0) * cw, ch);
+      for (const sg of cols) g.fillRect(this.xOf(sg.c), part.top + sg.r0 * ch, cw, (sg.r1 - sg.r0) * ch);
+    }
+    for (const [dr, dc] of d.piece.cells) {
+      const x = this.xOf(d.snap.c0 + dc);
+      const y = part.top + (d.snap.r0 + dr) * ch;
+      g.globalAlpha = 0.6;
+      drawBlock(g, x, y, cw, ch, d.piece.color);
+      g.globalAlpha = 1;
+      g.lineWidth = 2;
+      g.strokeStyle = '#ffffff';
+      g.strokeRect(x + 1, y + 1, cw - 2, ch - 2);
+    }
+  }
+
+  // 하단 왼쪽 폭탄, 오른쪽 미사일 버튼 (게이지 원)
+  drawItems() {
+    const g = this.g;
+    const { W, H, trayTop } = this;
+    const trayH = H - trayTop;
+    const w = this.storeW;
+    const now = this.now;
+    const ph = this.phase;
+    const placing = ph?.type === 'place' && this.state === 'playing';
+    const frozenLeft = placing && this.part.notes.some((n) => n.ice > 0 && n.start < ph.s1 && n.start + n.len > ph.s0);
+    const item = (x0, name, fill, ready, color, status, drawIcon) => {
+      g.fillStyle = 'rgba(0,0,0,0.22)';
+      g.fillRect(x0, trayTop + 2, w, trayH - 2);
+      const cx = x0 + w / 2;
+      const R = Math.min(w * 0.33, trayH * 0.24);
+      const cy = trayTop + 14 + R + 6;
+      g.textAlign = 'center';
+      g.textBaseline = 'top';
+      g.font = `12px ${FONT}`;
+      g.fillStyle = ready ? color : 'rgba(255,255,255,0.7)';
+      g.fillText(name, cx, trayTop + 6);
+      if (ready) {
+        g.fillStyle = color;
+        g.globalAlpha = 0.25 + 0.15 * Math.sin(now * 6);
+        g.beginPath();
+        g.arc(cx, cy, R + 6, 0, Math.PI * 2);
+        g.fill();
+        g.globalAlpha = 1;
+      }
+      g.lineWidth = 5;
+      g.strokeStyle = 'rgba(255,255,255,0.12)';
+      g.beginPath();
+      g.arc(cx, cy, R, 0, Math.PI * 2);
+      g.stroke();
+      if (fill > 0) {
+        g.strokeStyle = color;
+        g.beginPath();
+        g.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, fill));
+        g.stroke();
+      }
+      g.globalAlpha = ready ? 1 : 0.55;
+      drawIcon(cx, cy, R * 0.68);
+      g.globalAlpha = 1;
+      g.textBaseline = 'bottom';
+      g.font = `11px ${FONT}`;
+      g.fillStyle = ready ? '#ffffff' : 'rgba(255,255,255,0.55)';
+      g.fillText(status, cx, H - 6);
+    };
+    item(
+      0,
+      '폭탄',
+      this.bombReady ? 1 : this.bombGauge / BOMB_NEED,
+      this.bombReady,
+      '#ff9a3c',
+      this.armed ? '누르면 취소' : this.bombReady ? '눌러서 사용' : `콤보 ${this.bombGauge}/${BOMB_NEED}`,
+      (cx, cy, s) => (uiReady('bomb') ? g.drawImage(UI_IMG.bomb, cx - s * 1.3, cy - s * 1.3, s * 2.6, s * 2.6) : drawBomb(g, cx - s, cy - s, s * 2, s * 2, true, now)),
+    );
+    item(
+      W - w,
+      '미사일',
+      this.missileReady ? 1 : this.missileGauge / MISSILE_NEED,
+      this.missileReady && frozenLeft,
+      '#5ad1ff',
+      this.missileReady ? (frozenLeft ? '눌러서 발사' : '얼음 없음') : `${this.missileGauge}/${MISSILE_NEED}칸`,
+      (cx, cy, s) => this.drawRocket(cx, cy, s, -Math.PI / 4),
+    );
+  }
+
+  drawRocket(x, y, s, angle) {
+    const g = this.g;
+    if (uiReady('missile')) {
+      g.save();
+      g.translate(x, y);
+      g.rotate(angle + Math.PI / 4);
+      g.drawImage(UI_IMG.missile, -s * 1.3, -s * 1.3, s * 2.6, s * 2.6);
+      g.restore();
+      return;
+    }
+    g.save();
+    g.translate(x, y);
+    g.rotate(angle);
+    // 불꽃
+    g.fillStyle = '#ffb347';
+    g.beginPath();
+    g.moveTo(-s * 0.95, 0);
+    g.lineTo(-s * 0.55, -s * 0.2);
+    g.lineTo(-s * 0.55, s * 0.2);
+    g.closePath();
+    g.fill();
+    // 날개
+    g.fillStyle = '#f2463a';
+    g.beginPath();
+    g.moveTo(-s * 0.55, -s * 0.22);
+    g.lineTo(-s * 0.7, -s * 0.5);
+    g.lineTo(-s * 0.2, -s * 0.22);
+    g.moveTo(-s * 0.55, s * 0.22);
+    g.lineTo(-s * 0.7, s * 0.5);
+    g.lineTo(-s * 0.2, s * 0.22);
+    g.fill();
+    // 몸통
+    g.fillStyle = '#eef3f7';
+    rrect(g, -s * 0.6, -s * 0.22, s * 1.1, s * 0.44, s * 0.2);
+    g.fill();
+    // 머리
+    g.fillStyle = '#f2463a';
+    g.beginPath();
+    g.moveTo(s * 0.5, -s * 0.22);
+    g.quadraticCurveTo(s * 0.95, 0, s * 0.5, s * 0.22);
+    g.closePath();
+    g.fill();
+    // 창
+    g.fillStyle = '#5ad1ff';
+    g.beginPath();
+    g.arc(s * 0.15, 0, s * 0.11, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+  }
+
+  // 날아가는 미사일 (곡선, 연기 꼬리)
+  drawMissiles() {
+    const g = this.g;
+    const pos = (m, t) => {
+      const e = this.missileTarget(m);
+      const mx = (m.x0 + e.x) / 2 + m.bend;
+      const my = Math.min(m.y0, e.y) - 90;
+      const u = 1 - t;
+      return { x: u * u * m.x0 + 2 * u * t * mx + t * t * e.x, y: u * u * m.y0 + 2 * u * t * my + t * t * e.y };
+    };
+    for (const m of this.missiles || []) {
+      if (m.age < 0 || m.done) continue;
+      const t = Math.min(1, m.age / m.life);
+      for (let i = 1; i <= 6; i++) {
+        const tt = t - i * 0.035;
+        if (tt <= 0) break;
+        const p = pos(m, tt);
+        g.fillStyle = `rgba(255,255,255,${0.35 - i * 0.05})`;
+        g.beginPath();
+        g.arc(p.x, p.y, 4 + i * 1.2, 0, Math.PI * 2);
+        g.fill();
+      }
+      const p = pos(m, t);
+      const q = pos(m, Math.min(1, t + 0.02));
+      this.drawRocket(p.x, p.y, Math.max(9, this.cellW * 0.42), Math.atan2(q.y - p.y, q.x - p.x));
+    }
+  }
+
   drawGhost(part) {
     const d = this.drag;
     if (!d || !d.snap) return;
+    if (this.ice) return this.drawGhostIce(part, d);
     const g = this.g;
     const ch = part.cellH;
     const cw = this.cellW;
@@ -1659,14 +2419,24 @@ export class Game {
     const g = this.g;
     const { W, H, trayTop } = this;
     const trayH = H - trayTop;
-    const grad = g.createLinearGradient(0, trayTop, 0, H);
-    grad.addColorStop(0, COL.trayTop);
-    grad.addColorStop(1, COL.trayBottom);
-    g.fillStyle = grad;
-    g.fillRect(0, trayTop, W, trayH);
+    if (uiReady('tray')) {
+      // 패널 그림을 트레이에 꽉 차게 (가운데 기준으로 잘라서)
+      const img = UI_IMG.tray;
+      const scale = Math.max(W / img.naturalWidth, trayH / img.naturalHeight);
+      const sw = W / scale;
+      const sh = trayH / scale;
+      g.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh, 0, trayTop, W, trayH);
+    } else {
+      const grad = g.createLinearGradient(0, trayTop, 0, H);
+      grad.addColorStop(0, COL.trayTop);
+      grad.addColorStop(1, COL.trayBottom);
+      g.fillStyle = grad;
+      g.fillRect(0, trayTop, W, trayH);
+    }
     g.fillStyle = 'rgba(0,0,0,0.45)';
     g.fillRect(0, trayTop, W, 2);
-    this.drawStore();
+    if (this.ice) this.drawItems();
+    else this.drawStore();
     const areaW = W - this.storeW;
 
     if (!this.placeRange() || !this.tray) {
@@ -1699,11 +2469,11 @@ export class Game {
     for (let i = 0; i < 3; i++) {
       if (i > 0) {
         g.fillStyle = 'rgba(0,0,0,0.18)';
-        g.fillRect(Math.round(slotW * i), trayTop + 12, 1, trayH - 24);
+        g.fillRect(Math.round(this.slotX0 + slotW * i), trayTop + 12, 1, trayH - 24);
       }
       const p = this.tray[i];
       if (!p || (this.drag && this.drag.slot === i)) continue;
-      const ox = slotW * (i + 0.5) - (p.w * sw) / 2;
+      const ox = this.slotX0 + slotW * (i + 0.5) - (p.w * sw) / 2;
       const oy = cy - (p.h * sh) / 2;
       p.cells.forEach(([r, c], j) => {
         if (p.bomb) drawBomb(g, ox + c * sw, oy + r * sh, sw, sh, j === 0, this.now);
@@ -1798,8 +2568,14 @@ export class Game {
     const ph = this.phase;
     if (this.state !== 'playing' || !ph) return;
     let text = '';
-    if (ph.type === 'place' && ph.scene === 0 && this.now - (ph.deadline - SCENE_TIME) < 5) {
-      text = this.free ? (this.hints ? '반투명 블록이 추천 자리예요. 그대로 놓아 보세요' : '블록을 놓으면 그 자리의 음이 연주돼요') : '아래 블록을 끌어서 초록 노트 위에 놓으세요';
+    if (this.armed && ph.type === 'place') {
+      text = '폭탄을 터뜨릴 자리를 누르세요 (3×3, 얼음은 못 깨요)';
+    } else if (ph.type === 'place' && ph.scene === 0 && this.now - (ph.deadline - this.sceneTime) < 5) {
+      text = this.free
+        ? this.hints
+          ? '반투명 블록이 추천 자리예요. 그대로 놓아 보세요'
+          : '블록을 놓으면 그 자리의 음이 연주돼요'
+        : '금색 선으로 나뉜 구역 안에서 한 줄을 채우면 터져요';
     } else if (ph.live && this.pos < (ph.startAt || 0) + this.song.stepsPerBar) {
       text = this.free ? '블록을 놓으면 재생선이 지날 때 그 음이 연주돼요' : '아래 블록을 끌어서 흘러오는 노트 위에 놓으세요';
     }

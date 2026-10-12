@@ -1,4 +1,26 @@
 // 캔버스 그리기 도우미
+import { UI_ART } from './ui-art.js';
+
+// 코덱스로 그린 UI 그림 (읽기 전에는 도형으로 그린다)
+export const UI_IMG = {};
+if (typeof Image !== 'undefined') {
+  for (const [k, data] of Object.entries(UI_ART)) {
+    UI_IMG[k] = new Image();
+    UI_IMG[k].src = `data:image/webp;base64,${data}`;
+  }
+}
+export const uiReady = (k) => UI_IMG[k]?.complete && UI_IMG[k].naturalWidth > 0;
+// 블록 색 → 타일 그림 이름 (pieces.js 의 PALETTE, 하얀 블록 = 얼음이 깨진 노트)
+const TILE = {
+  '#f6c344': 'yellow',
+  '#a35ee0': 'purple',
+  '#3cc1f0': 'cyan',
+  '#f2604f': 'red',
+  '#f39233': 'orange',
+  '#4d7cf0': 'blue',
+  '#ef5fae': 'pink',
+  '#f3f5f7': 'white',
+};
 
 const shadeCache = new Map();
 
@@ -29,6 +51,11 @@ export function rrect(g, x, y, w, h, r) {
 
 // 블록 블라스트 스타일의 입체 블록 한 칸
 export function drawBlock(g, x, y, w, h, color) {
+  const tile = TILE[color];
+  if (tile && uiReady(tile)) {
+    g.drawImage(UI_IMG[tile], x, y, w, h);
+    return;
+  }
   const b = Math.max(2, Math.round(Math.min(w, h) * 0.15));
   g.fillStyle = color;
   g.fillRect(x, y, w, h);

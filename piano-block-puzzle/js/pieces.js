@@ -124,6 +124,27 @@ export function fitShapes(green) {
   return out.sort((a, b) => a.col - b.col);
 }
 
+// 얼음 깨기 규칙의 트레이: 보드 어딘가에 놓일 수 있는 모양 3개.
+// fit(piece) → 놓을 수 있는 자리 중 가장 많은 줄을 지우는 수(놓을 데가 없으면 -1).
+// 줄을 지울 수 있는 모양을 하나는 꼭 넣고, 나머지는 놓일 수 있는 랜덤 모양.
+export function makeIceTray(fit) {
+  const colors = shuffle(PALETTE.slice());
+  const ok = [];
+  for (let i = 0; i < 40 && ok.length < 12; i++) {
+    const p = makePiece(pick(LIB), '#ffffff');
+    const lines = fit(p);
+    if (lines >= 0) ok.push({ p, lines });
+  }
+  if (!ok.length) {
+    const one = makePiece([[0, 0]], '#ffffff');
+    if (fit(one) >= 0) ok.push({ p: one, lines: 0 });
+  }
+  const best = ok.slice().sort((a, b) => b.lines - a.lines)[0];
+  const rest = shuffle(ok.filter((x) => x !== best));
+  const chosen = [best, ...rest].filter(Boolean).slice(0, 3);
+  return shuffle(chosen.map((x, i) => ({ ...x.p, color: colors[i] })));
+}
+
 // 3개 중 최대 2개는 노트에 딱 맞는 모양(fits=true일 때), 나머지는 랜덤.
 // bombChance 확률로 랜덤 블록 하나가 폭탄으로 바뀐다.
 export function makeTray(green, { fits = true, bombChance = 0 } = {}) {

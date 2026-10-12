@@ -438,4 +438,31 @@ export class PianoAudio {
       o.stop(s + 0.4);
     });
   }
+
+  // ---------- 얼음 깨기 규칙 효과음 (샘플이 없으면 비슷한 합성음) ----------
+
+  iceCrack() {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (this.playOne(this.smp?.sfx.ice, t, 0.6, this.master)) return;
+    this.noiseHit(t, { type: 'highpass', freq: 5200, gain: 0.32, decay: 0.12, dest: this.master });
+    this.toneHit(t, { type: 'triangle', from: 2600, to: 1800, gain: 0.08, decay: 0.15, dest: this.master });
+  }
+
+  lineClear() {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (this.playOne(this.smp?.sfx.line, ctx.currentTime, 0.5, this.master)) return;
+    this.sparkle();
+  }
+
+  missile() {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (this.playOne(this.smp?.sfx.missile, t, 0.55, this.master)) return;
+    this.toneHit(t, { type: 'sawtooth', from: 220, to: 1400, gain: 0.12, decay: 0.45, sweep: 0.4, dest: this.master });
+    this.noiseHit(t, { type: 'bandpass', freq: 2500, gain: 0.2, decay: 0.4, dest: this.master });
+  }
 }

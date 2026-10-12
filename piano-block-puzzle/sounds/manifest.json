@@ -553,5 +553,23 @@
     "midi": 73.99,
     "seconds": 2.2,
     "gain": 0.63
+  },
+  "sfx_ice": {
+    "group": "sfx",
+    "key": "ice",
+    "seconds": 0.7,
+    "gain": 0.54
+  },
+  "sfx_line": {
+    "group": "sfx",
+    "key": "line",
+    "seconds": 0.6,
+    "gain": 0.67
+  },
+  "sfx_missile": {
+    "group": "sfx",
+    "key": "missile",
+    "seconds": 0.9,
+    "gain": 0.62
   }
 }
