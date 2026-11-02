@@ -20,11 +20,45 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _tab = 0;
+  late final AppLifecycleListener _lifecycle;
 
   @override
   void initState() {
     super.initState();
-    widget.scope.reloadFamily();
+    final scope = widget.scope;
+    scope.reloadFamily();
+    scope.checkNewPosts();
+    scope.push.onForegroundMessage = (title, body) {
+      scope.changed();
+      scope.checkNewPosts();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(body.isEmpty ? title : '$title\n$body'),
+          action: SnackBarAction(label: '보기', onPressed: () => _select(1)),
+        ),
+      );
+    };
+    scope.push.init();
+    // 앱으로 돌아오면 새 소식을 확인합니다.
+    _lifecycle = AppLifecycleListener(
+      onResume: () {
+        scope.checkNewPosts();
+        if (_tab == 1) scope.changed();
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    widget.scope.push.dispose();
+    super.dispose();
+  }
+
+  void _select(int i) {
+    setState(() => _tab = i);
+    if (i == 1) widget.scope.markActivitySeen();
   }
 
   Future<void> _add() async {
@@ -37,7 +71,7 @@ class _HomeShellState extends State<HomeShell> {
     );
     if (posted == true) {
       widget.scope.changed();
-      setState(() => _tab = 1); // 올린 소식을 근황에서 바로 보여줍니다.
+      _select(1); // 올린 소식을 근황에서 바로 보여줍니다.
     }
   }
 
@@ -49,7 +83,7 @@ class _HomeShellState extends State<HomeShell> {
         index: _tab,
         children: [
           AlbumTab(scope: scope),
-          ActivityTab(scope: scope, onInvite: () => setState(() => _tab = 2)),
+          ActivityTab(scope: scope, onInvite: () => _select(2)),
           FamilyTab(scope: scope, onLoggedOut: widget.onLoggedOut),
         ],
       ),
@@ -62,15 +96,23 @@ class _HomeShellState extends State<HomeShell> {
             ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: const [
-          NavigationDestination(
+        onDestinationSelected: _select,
+        destinations: [
+          const NavigationDestination(
             icon: Icon(Icons.photo_library_outlined),
             selectedIcon: Icon(Icons.photo_library),
             label: '앨범',
           ),
-          NavigationDestination(icon: Icon(Icons.forum_outlined), selectedIcon: Icon(Icons.forum), label: '근황'),
-          NavigationDestination(icon: Icon(Icons.people_outline), selectedIcon: Icon(Icons.people), label: '가족'),
+          NavigationDestination(
+            icon: ValueListenableBuilder(
+              valueListenable: scope.newPosts,
+              builder: (_, n, _) =>
+                  Badge(isLabelVisible: n > 0, label: Text('$n'), child: const Icon(Icons.forum_outlined)),
+            ),
+            selectedIcon: const Icon(Icons.forum),
+            label: '근황',
+          ),
+          const NavigationDestination(icon: Icon(Icons.people_outline), selectedIcon: Icon(Icons.people), label: '가족'),
         ],
       ),
     );

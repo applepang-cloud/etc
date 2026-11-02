@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "./env";
 import { type AppEnv, fail, parseCursor, placeholders, readBody, str } from "./http";
 import { deleteMediaRows, type MediaRow, mediaJson } from "./media";
+import { clip, notifyLater } from "./push";
 
 const MAX_MEDIA_PER_POST = 50;
 const MAX_BODY = 2000;
@@ -130,6 +131,14 @@ posts.post("/", async (c) => {
     ...mediaIds.map((mid, i) => c.env.DB.prepare("UPDATE media SET post_id = ?, position = ? WHERE id = ?").bind(id, i, mid)),
   ]);
   const [post] = await postsJson(c.env, user.id, [await loadPost(c.env, id)], false);
+
+  const { results: others } = await c.env.DB.prepare("SELECT id FROM users WHERE id != ?").bind(user.id).all<{ id: number }>();
+  const what = mediaIds.length > 0 ? `사진·동영상 ${mediaIds.length}개를 올렸어요` : "새 소식을 남겼어요";
+  notifyLater(c, "posts", others.map((o) => o.id), {
+    title: `${user.display_name} 님이 ${what}`,
+    body: body ? clip(body, 80) : "눌러서 확인해 보세요",
+    postId: id,
+  });
   return c.json({ post });
 });
 
@@ -210,9 +219,17 @@ posts.delete("/:id/media/:mediaId", async (c) => {
 
 posts.put("/:id/like", async (c) => {
   const p = await loadPost(c.env, c.req.param("id"));
-  await c.env.DB.prepare("INSERT OR IGNORE INTO likes (post_id, user_id, created_at) VALUES (?, ?, ?)")
-    .bind(p.id, c.get("user").id, Date.now())
+  const user = c.get("user");
+  const r = await c.env.DB.prepare("INSERT OR IGNORE INTO likes (post_id, user_id, created_at) VALUES (?, ?, ?)")
+    .bind(p.id, user.id, Date.now())
     .run();
+  if (r.meta.changes > 0 && p.user_id !== user.id) {
+    notifyLater(c, "likes", [p.user_id], {
+      title: `${user.display_name} 님이 좋아요를 눌렀어요 ❤️`,
+      body: p.body ? clip(p.body, 60) : "내가 올린 사진",
+      postId: p.id,
+    });
+  }
   return c.json({ ok: true });
 });
 
@@ -231,6 +248,13 @@ posts.post("/:id/comments", async (c) => {
   )
     .bind(p.id, user.id, body, Date.now())
     .first<{ id: number; created_at: number }>();
+
+  // 소식을 올린 사람 + 이 소식에 댓글을 단 사람들에게 (본인 제외)
+  const { results: commenters } = await c.env.DB.prepare("SELECT DISTINCT user_id FROM comments WHERE post_id = ?")
+    .bind(p.id)
+    .all<{ user_id: number }>();
+  const to = [p.user_id, ...commenters.map((r) => r.user_id)].filter((id) => id !== user.id);
+  notifyLater(c, "comments", to, { title: `${user.display_name} 님의 댓글`, body: clip(body, 100), postId: p.id });
   return c.json({
     comment: { id: row!.id, body, createdAt: row!.created_at, author: { id: user.id, displayName: user.display_name } },
   });

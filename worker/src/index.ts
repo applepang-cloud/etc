@@ -7,6 +7,7 @@ import { family } from "./family";
 import { type AppEnv, fail, readBody as body } from "./http";
 import { deleteMediaRows, type MediaRow, media } from "./media";
 import { posts } from "./posts";
+import { push, pushPublic } from "./push";
 
 const SESSION_DAYS = 180;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -75,6 +76,8 @@ app.post("/auth/login", async (c) => {
   return c.json({ token: await createSession(c.env, row.id), user: publicUser(row) });
 });
 
+app.route("/", pushPublic);
+
 // 아래 경로는 모두 로그인 필요
 app.use("*", async (c, next) => {
   const header = c.req.header("Authorization") ?? "";
@@ -117,6 +120,7 @@ app.post("/me/password", async (c) => {
 app.route("/media", media);
 app.route("/posts", posts);
 app.route("/", family);
+app.route("/", push);
 
 app.all("*", (c) => c.json({ error: "Not found" }, 404));
 

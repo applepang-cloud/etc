@@ -6,6 +6,7 @@ import '../api.dart';
 import '../app_scope.dart';
 import '../config.dart';
 import '../format.dart';
+import '../push.dart';
 import 'widgets.dart';
 
 /// 가족 설정: 초대, 가족 이름, 아이, 구성원, 내 계정
@@ -80,6 +81,8 @@ class FamilyTab extends StatelessWidget {
                     leading: Avatar(user: m, size: 36),
                     title: Text(m.id == scope.myId ? '${m.displayName} (나)' : m.displayName),
                   ),
+                _Section('알림'),
+                _NotifySection(scope: scope),
                 _Section('내 계정'),
                 ListTile(
                   leading: const Icon(Icons.badge_outlined),
@@ -97,7 +100,7 @@ class FamilyTab extends StatelessWidget {
                   title: const Text('로그아웃'),
                   onTap: () async {
                     if (!await confirm(context, '로그아웃', '로그아웃할까요?', ok: '로그아웃')) return;
-                    await scope.api.logout();
+                    await scope.logout();
                     onLoggedOut();
                   },
                 ),
@@ -330,6 +333,115 @@ class _InviteCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 알림 설정: 이 기기에서 받기 + 종류별 켜기/끄기
+class _NotifySection extends StatefulWidget {
+  const _NotifySection({required this.scope});
+
+  final AppScope scope;
+
+  @override
+  State<_NotifySection> createState() => _NotifySectionState();
+}
+
+class _NotifySectionState extends State<_NotifySection> {
+  ({bool posts, bool comments, bool likes})? _kinds;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.scope.api
+        .notifySettings()
+        .then((k) {
+          if (mounted) setState(() => _kinds = k);
+        })
+        .catchError((_) {});
+  }
+
+  Future<void> _toggleDevice(bool on) async {
+    setState(() => _busy = true);
+    try {
+      final push = widget.scope.push;
+      if (on) {
+        final s = await push.enable();
+        if (!mounted) return;
+        if (s == PushStatus.denied) toast(context, '알림이 차단되어 있어요. 휴대폰 설정에서 이 앱의 알림을 허용해 주세요.');
+        if (s == PushStatus.on) toast(context, '이제 새 사진이 올라오면 알려드릴게요!');
+      } else {
+        await push.disable();
+      }
+    } catch (e) {
+      if (mounted) toast(context, '알림을 설정하지 못했어요: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _setKinds(({bool posts, bool comments, bool likes}) k) async {
+    final old = _kinds;
+    setState(() => _kinds = k);
+    try {
+      await widget.scope.api.setNotifySettings(posts: k.posts, comments: k.comments, likes: k.likes);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _kinds = old);
+      toast(context, e.message);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder(
+      valueListenable: widget.scope.push.status,
+      builder: (context, status, _) {
+        final hint = switch (status) {
+          PushStatus.notConfigured => '알림 서버가 아직 설정되지 않았어요. (설치 안내 README의 "알림 설정" 참고)',
+          PushStatus.unsupported => '이 브라우저에서는 알림을 받을 수 없어요.',
+          PushStatus.error => '알림을 준비하지 못했어요. 인터넷 연결을 확인하고 앱을 다시 열어 주세요.',
+          PushStatus.needsHomeScreen =>
+            '아이폰은 Safari 공유 버튼 → "홈 화면에 추가"로 설치한 뒤, 홈 화면 아이콘으로 열어야 알림을 받을 수 있어요. (iOS 16.4 이상)',
+          PushStatus.denied => '알림이 차단되어 있어요. 휴대폰 설정에서 이 앱(또는 웹사이트)의 알림을 허용해 주세요.',
+          _ => null,
+        };
+        final available = status == PushStatus.on || status == PushStatus.off;
+        final k = _kinds;
+        return Column(
+          children: [
+            SwitchListTile(
+              secondary: const Icon(Icons.notifications_active_outlined),
+              title: const Text('이 기기에서 알림 받기'),
+              subtitle: hint == null ? null : Text(hint),
+              value: status == PushStatus.on,
+              onChanged: available && !_busy ? _toggleDevice : null,
+            ),
+            if (k != null) ...[
+              CheckboxListTile(
+                contentPadding: const EdgeInsets.only(left: 72, right: 16),
+                title: const Text('새 사진 · 소식'),
+                value: k.posts,
+                onChanged: (v) => _setKinds((posts: v!, comments: k.comments, likes: k.likes)),
+              ),
+              CheckboxListTile(
+                contentPadding: const EdgeInsets.only(left: 72, right: 16),
+                title: const Text('댓글'),
+                subtitle: const Text('내 소식 또는 내가 댓글 단 소식'),
+                value: k.comments,
+                onChanged: (v) => _setKinds((posts: k.posts, comments: v!, likes: k.likes)),
+              ),
+              CheckboxListTile(
+                contentPadding: const EdgeInsets.only(left: 72, right: 16),
+                title: const Text('좋아요'),
+                value: k.likes,
+                onChanged: (v) => _setKinds((posts: k.posts, comments: k.comments, likes: v!)),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 }

@@ -96,6 +96,7 @@ class Post {
     required this.id,
     required this.body,
     required this.postedAt,
+    required this.createdAt,
     required this.author,
     required this.media,
     required this.mediaCount,
@@ -108,6 +109,7 @@ class Post {
     id: j['id'] as String,
     body: j['body'] as String,
     postedAt: DateTime.fromMillisecondsSinceEpoch(j['postedAt'] as int),
+    createdAt: DateTime.fromMillisecondsSinceEpoch(j['createdAt'] as int),
     author: UserRef.fromJson(j['author'] as Map<String, dynamic>),
     media: (j['media'] as List).map((e) => MediaItem.fromJson(e as Map<String, dynamic>)).toList(),
     mediaCount: j['mediaCount'] as int,
@@ -119,6 +121,7 @@ class Post {
   final String id;
   String body;
   DateTime postedAt;
+  final DateTime createdAt;
   final UserRef author;
   List<MediaItem> media;
   int mediaCount;
@@ -217,6 +220,8 @@ class Api {
   static const _userKey = 'auth_user';
 
   final SharedPreferences _prefs;
+
+  SharedPreferences get prefs => _prefs;
   final http.Client _http = http.Client();
   String? _token;
   UserInfo? _user;
@@ -417,6 +422,38 @@ class Api {
   }
 
   Future<void> deleteChild(int id) => _send('DELETE', '/children/$id');
+
+  // ---------- 알림 ----------
+
+  /// 서버에 Firebase 설정이 있으면 그 값, 없으면 null
+  Future<Map<String, dynamic>?> pushConfig() async {
+    final d = await _send('GET', '/push/config');
+    return d['enabled'] == true ? d['firebase'] as Map<String, dynamic>? : null;
+  }
+
+  Future<void> registerPushToken(String token, String platform) =>
+      _send('POST', '/push/tokens', body: {'token': token, 'platform': platform});
+
+  Future<void> unregisterPushToken(String token) => _send('DELETE', '/push/tokens', body: {'token': token});
+
+  Future<({bool posts, bool comments, bool likes})> notifySettings() async {
+    final d = await _send('GET', '/me/notifications');
+    return (posts: d['posts'] == true, comments: d['comments'] == true, likes: d['likes'] == true);
+  }
+
+  Future<void> setNotifySettings({required bool posts, required bool comments, required bool likes}) =>
+      _send('PUT', '/me/notifications', body: {'posts': posts, 'comments': comments, 'likes': likes});
+
+  /// 근황 탭을 마지막으로 본 시각 (새 소식 배지용, 기기에 저장)
+  DateTime get lastSeenActivity {
+    final v = _prefs.getInt('last_seen_activity');
+    if (v != null) return DateTime.fromMillisecondsSinceEpoch(v);
+    final now = DateTime.now();
+    lastSeenActivity = now;
+    return now;
+  }
+
+  set lastSeenActivity(DateTime t) => _prefs.setInt('last_seen_activity', t.millisecondsSinceEpoch);
 
   /// 나이를 표시할 아이 (기기에 저장)
   int? get selectedChildId => _prefs.getInt('selected_child');
