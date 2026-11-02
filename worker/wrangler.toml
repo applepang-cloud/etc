@@ -1,0 +1,33 @@
+name = "family-photos"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+# Flutter 웹 빌드 결과물을 같은 주소에서 제공합니다 (아이폰은 이 웹앱을 사용).
+# 배포 전에 app/ 에서 `flutter build web --release` 를 먼저 실행하세요.
+[assets]
+directory = "../app/build/web"
+run_worker_first = ["/api/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "family-photos"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "family-photos"
+
+[vars]
+R2_BUCKET_NAME = "family-photos"
+# R2_ACCOUNT_ID 는 Cloudflare 계정 ID (대시보드 오른쪽 사이드바에서 확인)
+R2_ACCOUNT_ID = "REPLACE_WITH_YOUR_ACCOUNT_ID"
+
+# 업로드만 하고 완료되지 않은 파일을 매일 정리합니다.
+[triggers]
+crons = ["17 3 * * *"]
+
+# 비밀값은 아래 명령으로 등록합니다 (코드/저장소에 넣지 마세요).
+#   npx wrangler secret put INVITE_CODE           # 가족 가입용 초대 코드
+#   npx wrangler secret put R2_ACCESS_KEY_ID      # R2 API 토큰의 Access Key ID
+#   npx wrangler secret put R2_SECRET_ACCESS_KEY  # R2 API 토큰의 Secret Access Key
