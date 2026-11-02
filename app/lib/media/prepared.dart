@@ -8,6 +8,7 @@ class PreparedMedia {
     required this.length,
     required this.openRead,
     this.thumbnail,
+    this.preview,
     this.durationMs,
     this.cleanup,
   });
@@ -16,10 +17,15 @@ class PreparedMedia {
   final String contentType;
   final int length;
   final Stream<List<int>> Function() openRead;
-  final Uint8List? thumbnail; // JPEG
+  final Uint8List? thumbnail; // JPEG, 목록용 (짧은 변 400px)
+  final Uint8List? preview; // JPEG, 화면 크기용 (짧은 변 960px)
   final int? durationMs;
   final Future<void> Function()? cleanup;
 }
+
+const thumbShortSide = 400;
+const previewShortSide = 960;
+const previewMaxLongSide = 2560;
 
 typedef StatusCallback = void Function(String status, double? progress);
 

@@ -3,16 +3,28 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../api.dart';
+import '../app_scope.dart';
 import '../format.dart';
+import 'post_detail_screen.dart';
+import 'widgets.dart';
 
 /// 사진/영상을 크게 보는 화면. 좌우로 넘기면 다음 항목을 봅니다.
-/// 닫을 때 삭제한 항목 id 목록을 돌려줍니다.
+/// 무언가를 삭제했으면 true 를 돌려줍니다.
 class ViewerScreen extends StatefulWidget {
-  const ViewerScreen({super.key, required this.api, required this.items, required this.initialIndex});
+  const ViewerScreen({
+    super.key,
+    required this.scope,
+    required this.items,
+    required this.initialIndex,
+    this.fromPost = false,
+  });
 
-  final Api api;
+  final AppScope scope;
   final List<MediaItem> items;
   final int initialIndex;
+
+  /// 소식 화면에서 열었으면 "소식 보기" 버튼을 숨깁니다.
+  final bool fromPost;
 
   @override
   State<ViewerScreen> createState() => _ViewerScreenState();
@@ -21,7 +33,7 @@ class ViewerScreen extends StatefulWidget {
 class _ViewerScreenState extends State<ViewerScreen> {
   late final PageController _pages = PageController(initialPage: widget.initialIndex);
   late int _index = widget.initialIndex;
-  final _deleted = <String>{};
+  bool _changed = false;
 
   MediaItem get _current => widget.items[_index];
 
@@ -33,56 +45,67 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   Future<void> _delete() async {
     final item = _current;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('삭제할까요?'),
-        content: const Text('삭제하면 가족 모두의 앨범에서 사라지고 되돌릴 수 없습니다.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('삭제')),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
+    if (!await confirm(context, '삭제할까요?', '가족 모두의 앨범에서 사라지고 되돌릴 수 없습니다.', ok: '삭제')) return;
+    if (!mounted) return;
     final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
     try {
-      await widget.api.deleteMedia(item.id);
-      _deleted.add(item.id);
+      await widget.scope.api.deletePostMedia(item.postId!, item.id);
+      _changed = true;
       setState(() => widget.items.removeAt(_index));
       if (widget.items.isEmpty) {
-        navigator.pop(_deleted);
+        navigator.pop(true);
       } else if (_index >= widget.items.length) {
         setState(() => _index = widget.items.length - 1);
       }
     } on ApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) toast(context, e.message);
     }
+  }
+
+  Future<void> _openPost() async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => PostDetailScreen(scope: widget.scope, postId: _current.postId!),
+      ),
+    );
+    if (changed == true && mounted) Navigator.of(context).pop(true);
   }
 
   @override
   Widget build(BuildContext context) {
     final item = _current;
-    final isMine = item.ownerId == widget.api.user?.id;
+    final isMine = item.ownerId != null && item.ownerId == widget.scope.myId;
+    final date = item.sortAt ?? item.postedAt;
+    final kid = widget.scope.child;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) Navigator.of(context).pop(_deleted);
+        if (!didPop) Navigator.of(context).pop(_changed);
       },
       child: Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
           backgroundColor: Colors.black,
           foregroundColor: Colors.white,
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(item.ownerName, style: const TextStyle(fontSize: 16)),
-              Text(formatDateTime(item.createdAt), style: const TextStyle(fontSize: 12, color: Colors.white70)),
-            ],
-          ),
-          actions: [if (isMine) IconButton(onPressed: _delete, icon: const Icon(Icons.delete_outline), tooltip: '삭제')],
+          title: date == null
+              ? null
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(formatDay(date), style: const TextStyle(fontSize: 16)),
+                    if (kid != null)
+                      Text(
+                        '${kid.name} ${ageLong(kid.birthDate, date)}',
+                        style: const TextStyle(fontSize: 12, color: Colors.white70),
+                      ),
+                  ],
+                ),
+          actions: [
+            if (!widget.fromPost && item.postId != null)
+              IconButton(onPressed: _openPost, icon: const Icon(Icons.chat_bubble_outline_rounded), tooltip: '소식 · 댓글'),
+            if (isMine && item.postId != null)
+              IconButton(onPressed: _delete, icon: const Icon(Icons.delete_outline), tooltip: '삭제'),
+          ],
         ),
         body: PageView.builder(
           controller: _pages,
@@ -91,8 +114,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
           itemBuilder: (_, i) {
             final it = widget.items[i];
             return it.isVideo
-                ? _VideoPage(key: ValueKey(it.id), api: widget.api, item: it, active: i == _index)
-                : _PhotoPage(key: ValueKey(it.id), api: widget.api, item: it);
+                ? _VideoPage(key: ValueKey(it.id), api: widget.scope.api, item: it, active: i == _index)
+                : _PhotoPage(key: ValueKey(it.id), api: widget.scope.api, item: it);
           },
         ),
       ),
@@ -115,10 +138,10 @@ class _PhotoPageState extends State<_PhotoPage> {
 
   @override
   Widget build(BuildContext context) {
-    final thumbUrl = widget.item.thumbUrl;
-    final thumb = thumbUrl == null
+    final previewUrl = widget.item.previewUrl;
+    final thumb = previewUrl == null
         ? const Center(child: CircularProgressIndicator())
-        : CachedNetworkImage(imageUrl: thumbUrl, cacheKey: 'thumb_${widget.item.id}', fit: BoxFit.contain);
+        : NetImage(url: previewUrl, cacheKey: 'p_${widget.item.id}', fit: BoxFit.contain);
     return FutureBuilder(
       future: _url,
       builder: (context, snap) {

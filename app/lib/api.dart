@@ -28,55 +28,177 @@ class UserInfo {
   Map<String, dynamic> toJson() => {'id': id, 'username': username, 'displayName': displayName};
 }
 
+class UserRef {
+  UserRef(this.id, this.displayName);
+
+  factory UserRef.fromJson(Map<String, dynamic> j) => UserRef(j['id'] as int, j['displayName'] as String);
+
+  final int id;
+  final String displayName;
+}
+
 class MediaItem {
   MediaItem({
     required this.id,
     required this.kind,
     required this.contentType,
-    required this.createdAt,
-    required this.ownerId,
-    required this.ownerName,
+    this.postId,
+    this.ownerId,
     this.thumbUrl,
+    this.previewUrl,
+    this.width,
+    this.height,
     this.durationMs,
+    this.postedAt,
+    this.sortAt,
   });
 
-  factory MediaItem.fromJson(Map<String, dynamic> j) {
-    final owner = j['owner'] as Map<String, dynamic>;
-    return MediaItem(
-      id: j['id'] as String,
-      kind: j['kind'] as String,
-      contentType: j['contentType'] as String,
-      createdAt: DateTime.fromMillisecondsSinceEpoch(j['createdAt'] as int),
-      ownerId: owner['id'] as int,
-      ownerName: owner['displayName'] as String,
-      thumbUrl: j['thumbUrl'] as String?,
-      durationMs: j['durationMs'] as int?,
-    );
-  }
+  factory MediaItem.fromJson(Map<String, dynamic> j) => MediaItem(
+    id: j['id'] as String,
+    postId: j['postId'] as String?,
+    ownerId: j['ownerId'] as int?,
+    kind: j['kind'] as String,
+    contentType: j['contentType'] as String,
+    thumbUrl: j['thumbUrl'] as String?,
+    previewUrl: j['previewUrl'] as String?,
+    width: j['width'] as int?,
+    height: j['height'] as int?,
+    durationMs: j['durationMs'] as int?,
+    postedAt: _date(j['postedAt']),
+    sortAt: _date(j['sortAt']),
+  );
+
+  static DateTime? _date(Object? v) => v == null ? null : DateTime.fromMillisecondsSinceEpoch(v as int);
 
   final String id;
+  final String? postId;
+  final int? ownerId;
   final String kind;
   final String contentType;
-  final DateTime createdAt;
-  final int ownerId;
-  final String ownerName;
   final String? thumbUrl;
+  final String? previewUrl;
+  final int? width;
+  final int? height;
   final int? durationMs;
+  final DateTime? postedAt;
+
+  /// 앨범 정렬 기준 날짜 (찍은 날짜, 없으면 게시 날짜)
+  final DateTime? sortAt;
 
   bool get isVideo => kind == 'video';
+
+  /// 가로/세로 비율 (모르면 4:3)
+  double get aspectRatio => (width ?? 0) > 0 && (height ?? 0) > 0 ? width! / height! : 4 / 3;
 }
 
-class MediaPage {
-  MediaPage(this.items, this.nextCursor);
-  final List<MediaItem> items;
+class Post {
+  Post({
+    required this.id,
+    required this.body,
+    required this.postedAt,
+    required this.author,
+    required this.media,
+    required this.mediaCount,
+    required this.likeCount,
+    required this.likedByMe,
+    required this.commentCount,
+  });
+
+  factory Post.fromJson(Map<String, dynamic> j) => Post(
+    id: j['id'] as String,
+    body: j['body'] as String,
+    postedAt: DateTime.fromMillisecondsSinceEpoch(j['postedAt'] as int),
+    author: UserRef.fromJson(j['author'] as Map<String, dynamic>),
+    media: (j['media'] as List).map((e) => MediaItem.fromJson(e as Map<String, dynamic>)).toList(),
+    mediaCount: j['mediaCount'] as int,
+    likeCount: j['likeCount'] as int,
+    likedByMe: j['likedByMe'] as bool,
+    commentCount: j['commentCount'] as int,
+  );
+
+  final String id;
+  String body;
+  DateTime postedAt;
+  final UserRef author;
+  List<MediaItem> media;
+  int mediaCount;
+  int likeCount;
+  bool likedByMe;
+  int commentCount;
+}
+
+class Comment {
+  Comment({required this.id, required this.body, required this.createdAt, required this.author});
+
+  factory Comment.fromJson(Map<String, dynamic> j) => Comment(
+    id: j['id'] as int,
+    body: j['body'] as String,
+    createdAt: DateTime.fromMillisecondsSinceEpoch(j['createdAt'] as int),
+    author: UserRef.fromJson(j['author'] as Map<String, dynamic>),
+  );
+
+  final int id;
+  final String body;
+  final DateTime createdAt;
+  final UserRef author;
+}
+
+class PostDetail {
+  PostDetail(this.post, this.comments, this.likers);
+  final Post post;
+  final List<Comment> comments;
+  final List<UserRef> likers;
+}
+
+class Child {
+  Child({required this.id, required this.name, required this.birthDate});
+
+  factory Child.fromJson(Map<String, dynamic> j) =>
+      Child(id: j['id'] as int, name: j['name'] as String, birthDate: DateTime.parse(j['birthDate'] as String));
+
+  final int id;
+  final String name;
+  final DateTime birthDate;
+}
+
+class FamilyInfo {
+  FamilyInfo({required this.name, required this.inviteCode, required this.members, required this.children});
+
+  factory FamilyInfo.fromJson(Map<String, dynamic> j) => FamilyInfo(
+    name: j['name'] as String,
+    inviteCode: j['inviteCode'] as String? ?? '',
+    members: (j['members'] as List).map((e) => UserRef.fromJson(e as Map<String, dynamic>)).toList(),
+    children: (j['children'] as List).map((e) => Child.fromJson(e as Map<String, dynamic>)).toList(),
+  );
+
+  final String name;
+  final String inviteCode;
+  final List<UserRef> members;
+  final List<Child> children;
+}
+
+class Page<T> {
+  Page(this.items, this.nextCursor);
+  final List<T> items;
   final String? nextCursor;
 }
 
+class AlbumMonth {
+  AlbumMonth(this.year, this.month, this.count, [this.cover]);
+  final int year;
+  final int month;
+  final int count;
+  final MediaItem? cover;
+
+  String get key => '$year-${month.toString().padLeft(2, '0')}';
+}
+
 class UploadTicket {
-  UploadTicket(this.id, this.uploadUrl, this.thumbUploadUrl);
+  UploadTicket(this.id, this.uploadUrl, this.thumbUploadUrl, this.previewUploadUrl);
   final String id;
   final String uploadUrl;
   final String? thumbUploadUrl;
+  final String? previewUploadUrl;
 }
 
 /// Worker API 클라이언트. 로그인 토큰은 기기에 저장해 두고 재사용합니다.
@@ -179,25 +301,129 @@ class Api {
     await _saveSession(d['token'] as String, _user!);
   }
 
-  Future<MediaPage> listMedia({String? cursor}) async {
-    final d = await _send('GET', '/media', query: {'limit': '60', 'cursor': ?cursor});
-    final items = (d['items'] as List).map((e) => MediaItem.fromJson(e as Map<String, dynamic>)).toList();
-    return MediaPage(items, d['nextCursor'] as String?);
+  // ---------- 타임라인 / 게시물 ----------
+
+  Future<Page<Post>> listPosts({String? cursor, DateTime? before}) async {
+    final d = await _send(
+      'GET',
+      '/posts',
+      query: {'limit': '20', 'cursor': ?cursor, if (before != null) 'before': '${before.millisecondsSinceEpoch}'},
+    );
+    return Page(_list(d['items'], Post.fromJson), d['nextCursor'] as String?);
+  }
+
+  Future<PostDetail> getPost(String id) async {
+    final d = await _send('GET', '/posts/$id');
+    return PostDetail(
+      Post.fromJson(d['post'] as Map<String, dynamic>),
+      _list(d['comments'], Comment.fromJson),
+      _list(d['likers'], UserRef.fromJson),
+    );
+  }
+
+  Future<Post> createPost({required String body, required DateTime postedAt, required List<String> mediaIds}) async {
+    final d = await _send(
+      'POST',
+      '/posts',
+      body: {'body': body, 'postedAt': postedAt.millisecondsSinceEpoch, 'mediaIds': mediaIds},
+    );
+    return Post.fromJson(d['post'] as Map<String, dynamic>);
+  }
+
+  Future<Post> updatePost(String id, {required String body, required DateTime postedAt}) async {
+    final d = await _send('PATCH', '/posts/$id', body: {'body': body, 'postedAt': postedAt.millisecondsSinceEpoch});
+    return Post.fromJson(d['post'] as Map<String, dynamic>);
+  }
+
+  Future<void> deletePost(String id) => _send('DELETE', '/posts/$id');
+
+  /// 게시물에서 사진/영상 하나를 뺍니다. 게시물까지 지워졌으면 true.
+  Future<bool> deletePostMedia(String postId, String mediaId) async =>
+      (await _send('DELETE', '/posts/$postId/media/$mediaId'))['postDeleted'] == true;
+
+  Future<void> setLike(String postId, bool liked) => _send(liked ? 'PUT' : 'DELETE', '/posts/$postId/like');
+
+  Future<Comment> addComment(String postId, String body) async {
+    final d = await _send('POST', '/posts/$postId/comments', body: {'body': body});
+    return Comment.fromJson(d['comment'] as Map<String, dynamic>);
+  }
+
+  Future<void> deleteComment(String postId, int commentId) => _send('DELETE', '/posts/$postId/comments/$commentId');
+
+  // ---------- 사진 탭 / 파일 ----------
+
+  static String get _tz => '${DateTime.now().timeZoneOffset.inMinutes}';
+
+  Future<List<AlbumMonth>> listMonths() async {
+    final d = await _send('GET', '/media/months', query: {'tz': _tz});
+    return (d['months'] as List).map((e) {
+      final m = e as Map<String, dynamic>;
+      final parts = (m['month'] as String).split('-');
+      final cover = m['cover'] == null ? null : MediaItem.fromJson(m['cover'] as Map<String, dynamic>);
+      return AlbumMonth(int.parse(parts[0]), int.parse(parts[1]), m['count'] as int, cover);
+    }).toList();
+  }
+
+  Future<Page<MediaItem>> listMedia({AlbumMonth? month, String? cursor, int limit = 120}) async {
+    final d = await _send(
+      'GET',
+      '/media',
+      query: {'limit': '$limit', 'tz': _tz, if (month != null) 'month': month.key, 'cursor': ?cursor},
+    );
+    return Page(_list(d['items'], MediaItem.fromJson), d['nextCursor'] as String?);
   }
 
   Future<String> originalUrl(String id) async => (await _send('GET', '/media/$id/url'))['url'] as String;
 
-  Future<void> deleteMedia(String id) => _send('DELETE', '/media/$id');
-
-  Future<UploadTicket> createUpload({required String kind, required String contentType, required bool hasThumb}) async {
-    final d = await _send('POST', '/media', body: {'kind': kind, 'contentType': contentType, 'hasThumb': hasThumb});
-    return UploadTicket(d['id'] as String, d['uploadUrl'] as String, d['thumbUploadUrl'] as String?);
+  Future<UploadTicket> createUpload({
+    required String kind,
+    required String contentType,
+    required bool hasThumb,
+    required bool hasPreview,
+  }) async {
+    final d = await _send(
+      'POST',
+      '/media',
+      body: {'kind': kind, 'contentType': contentType, 'hasThumb': hasThumb, 'hasPreview': hasPreview},
+    );
+    return UploadTicket(
+      d['id'] as String,
+      d['uploadUrl'] as String,
+      d['thumbUploadUrl'] as String?,
+      d['previewUploadUrl'] as String?,
+    );
   }
 
-  Future<MediaItem> completeUpload(String id, {int? durationMs}) async {
-    final d = await _send('POST', '/media/$id/complete', body: {'durationMs': ?durationMs});
-    return MediaItem.fromJson(d['item'] as Map<String, dynamic>);
+  Future<void> completeUpload(String id, {int? width, int? height, int? durationMs, DateTime? takenAt}) => _send(
+    'POST',
+    '/media/$id/complete',
+    body: {
+      'width': ?width,
+      'height': ?height,
+      'durationMs': ?durationMs,
+      if (takenAt != null) 'takenAt': takenAt.millisecondsSinceEpoch,
+    },
+  );
+
+  // ---------- 가족 ----------
+
+  Future<FamilyInfo> getFamily() async => FamilyInfo.fromJson(await _send('GET', '/family'));
+
+  Future<void> setFamilyName(String name) => _send('PUT', '/family', body: {'name': name});
+
+  Future<void> saveChild({int? id, required String name, required DateTime birthDate}) {
+    final b = {'name': name, 'birthDate': birthDate.toIso8601String().substring(0, 10)};
+    return id == null ? _send('POST', '/children', body: b) : _send('PATCH', '/children/$id', body: b);
   }
+
+  Future<void> deleteChild(int id) => _send('DELETE', '/children/$id');
+
+  /// 나이를 표시할 아이 (기기에 저장)
+  int? get selectedChildId => _prefs.getInt('selected_child');
+  set selectedChildId(int? id) => id == null ? _prefs.remove('selected_child') : _prefs.setInt('selected_child', id);
+
+  static List<T> _list<T>(Object? v, T Function(Map<String, dynamic>) f) =>
+      (v as List).map((e) => f(e as Map<String, dynamic>)).toList();
 
   /// 서명된 URL로 R2에 파일을 직접 올립니다.
   Future<void> putObject(

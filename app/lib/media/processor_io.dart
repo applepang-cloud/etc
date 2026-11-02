@@ -5,8 +5,6 @@ import 'package:video_compress/video_compress.dart';
 
 import 'prepared.dart';
 
-const _thumbSize = 480;
-
 /// 안드로이드: 사진은 썸네일 생성, 영상은 1080p로 압축한 뒤 썸네일을 만듭니다.
 Future<PreparedMedia?> prepareMedia(XFile file, StatusCallback onStatus) async {
   final type = detectType(file.name, file.mimeType);
@@ -17,9 +15,15 @@ Future<PreparedMedia?> prepareMedia(XFile file, StatusCallback onStatus) async {
 Future<PreparedMedia> _preparePhoto(XFile file, String contentType) async {
   final thumb = await FlutterImageCompress.compressWithFile(
     file.path,
-    minWidth: _thumbSize,
-    minHeight: _thumbSize,
+    minWidth: thumbShortSide,
+    minHeight: thumbShortSide,
     quality: 75,
+  );
+  final preview = await FlutterImageCompress.compressWithFile(
+    file.path,
+    minWidth: previewShortSide,
+    minHeight: previewShortSide,
+    quality: 82,
   );
 
   // HEIC는 안드로이드/웹 브라우저에서 안 보일 수 있어 JPEG로 바꿔서 올립니다 (크기는 그대로).
@@ -38,6 +42,7 @@ Future<PreparedMedia> _preparePhoto(XFile file, String contentType) async {
         length: jpeg.length,
         openRead: () => Stream.value(jpeg),
         thumbnail: thumb,
+        preview: preview,
       );
     }
   }
@@ -48,6 +53,7 @@ Future<PreparedMedia> _preparePhoto(XFile file, String contentType) async {
     length: await file.length(),
     openRead: file.openRead,
     thumbnail: thumb,
+    preview: preview,
   );
 }
 
@@ -77,7 +83,20 @@ Future<PreparedMedia> _prepareVideo(XFile file, StatusCallback onStatus) async {
   final frame = await VideoCompress.getByteThumbnail(path, quality: 80);
   final thumb = frame == null
       ? null
-      : await FlutterImageCompress.compressWithList(frame, minWidth: _thumbSize, minHeight: _thumbSize, quality: 75);
+      : await FlutterImageCompress.compressWithList(
+          frame,
+          minWidth: thumbShortSide,
+          minHeight: thumbShortSide,
+          quality: 75,
+        );
+  final preview = frame == null
+      ? null
+      : await FlutterImageCompress.compressWithList(
+          frame,
+          minWidth: previewShortSide,
+          minHeight: previewShortSide,
+          quality: 82,
+        );
 
   final source = File(path);
   return PreparedMedia(
@@ -86,6 +105,7 @@ Future<PreparedMedia> _prepareVideo(XFile file, StatusCallback onStatus) async {
     length: await source.length(),
     openRead: source.openRead,
     thumbnail: thumb,
+    preview: preview,
     durationMs: duration?.round(),
     cleanup: () async {
       await VideoCompress.deleteAllCache();
